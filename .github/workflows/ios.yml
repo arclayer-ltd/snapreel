@@ -19,6 +19,11 @@ on:
         description: Only screenshot ids starting with this prefix (empty = all)
         type: string
         default: ""
+      runner:
+        description: macOS runner image
+        type: choice
+        options: [macos-26, macos-15, macos-latest]
+        default: macos-26
 
 concurrency:
   group: ios-${{ github.ref }}
@@ -26,7 +31,7 @@ concurrency:
 
 jobs:
   build:
-    runs-on: macos-26
+    runs-on: ${{ inputs.runner || 'macos-26' }}
     timeout-minutes: 100
     env:
       TEAM_ID: N3DBKUVJS5
