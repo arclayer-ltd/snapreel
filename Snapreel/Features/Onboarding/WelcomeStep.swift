@@ -6,6 +6,7 @@ struct WelcomeStep: View {
     let onStart: @MainActor () -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var typeSize
     @State private var appeared = false
 
     init(onStart: @escaping @MainActor () -> Void) {
@@ -31,7 +32,9 @@ struct WelcomeStep: View {
     /// The clip is drawn wider than the screen (its people fill the middle 70%), so they read
     /// large; the frame keeps the layout at screen width.
     private func character(in size: CGSize) -> some View {
-        let height = min(size.width * 1.22 * 0.75, size.height * 0.46)
+        // Larger text sizes get the room; the characters shrink to make it.
+        let share: CGFloat = typeSize.isAccessibilitySize ? 0.28 : 0.46
+        let height = min(size.width * 1.22 * 0.75, size.height * share)
         let width = height / 0.75
         return OnboardingCharacter(clip: .welcome, width: width)
             .frame(width: size.width, height: height)

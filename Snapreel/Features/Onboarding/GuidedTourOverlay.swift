@@ -79,6 +79,7 @@ struct GuidedTourOverlay: View {
     let onFinish: @MainActor () -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var typeSize
     @State private var step: TourStep
     @State private var isRequesting = false
     @State private var notificationsAlreadyOn = false
@@ -180,7 +181,7 @@ struct GuidedTourOverlay: View {
 
     private func card(width: CGFloat) -> some View {
         VStack(alignment: .leading, spacing: Space.m) {
-            if let clip = step.character {
+            if let clip = step.character, !typeSize.isAccessibilitySize {
                 characterPanel(clip)
             }
             if step == .intro {
@@ -209,6 +210,7 @@ struct GuidedTourOverlay: View {
         )
         .overlay(alignment: .bottomLeading) { pointer(cardWidth: width) }
         .shadow(color: Color.black.opacity(0.25), radius: 24, y: 10)
+        .dynamicTypeSize(...DynamicTypeSize.accessibility2)
         .animation(stepAnimation, value: step)
         .accessibilityElement(children: .contain)
         .accessibilityAddTraits(.isModal)

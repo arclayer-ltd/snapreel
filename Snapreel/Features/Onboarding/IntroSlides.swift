@@ -109,6 +109,7 @@ struct IntroSlidePage: View {
     let isActive: Bool
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var typeSize
 
     init(slide: IntroSlide, isActive: Bool) {
         self.slide = slide
@@ -129,7 +130,8 @@ struct IntroSlidePage: View {
     /// Square clips keep their people in the middle 72%, so the box is shorter than the clip
     /// and the faded edges spill over the page.
     private func character(in size: CGSize) -> some View {
-        let side = min(size.width * 1.06, size.height * 0.64)
+        let share: CGFloat = typeSize.isAccessibilitySize ? 0.4 : 0.64
+        let side = min(size.width * 1.06, size.height * share)
         return OnboardingCharacter(clip: slide.clip, width: side)
             .frame(width: size.width, height: side * 0.86)
             .scaleEffect(isActive || reduceMotion ? 1 : 0.92)

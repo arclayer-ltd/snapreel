@@ -162,15 +162,19 @@ struct HelpCenterView: View {
         }
     }
 
+    private func toggleExpanded(_ categoryID: String) {
+        if expanded.contains(categoryID) {
+            expanded.remove(categoryID)
+        } else {
+            expanded.insert(categoryID)
+        }
+    }
+
     private func seeAllButton(category: HelpCategory, total: Int, isExpanded: Bool) -> some View {
         Button {
             Haptics.selection()
             withAnimation(Motion.standard) {
-                if isExpanded {
-                    expanded.remove(category.id)
-                } else {
-                    expanded.insert(category.id)
-                }
+                toggleExpanded(category.id)
             }
         } label: {
             HStack(spacing: 6) {
