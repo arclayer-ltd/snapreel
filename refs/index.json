@@ -1,0 +1,965 @@
+{
+ "screens": [
+  {
+   "id": "start.splash",
+   "group": "Getting started",
+   "owner": "A",
+   "name": "Splash",
+   "states": [],
+   "references": [
+    "refs/mobbin/screens/f475b086-3ea1-40a3-869d-faf2a2e01b6c.png"
+   ],
+   "reference": null,
+   "note": ""
+  },
+  {
+   "id": "start.welcome",
+   "group": "Getting started",
+   "owner": "A",
+   "name": "Welcome (animated characters)",
+   "states": [],
+   "references": [
+    "refs/mobbin/screens/0ce2a2f6-db7a-4d81-bff1-38556944620e.png"
+   ],
+   "reference": null,
+   "note": "Loom's welcome is its carousel with Sign in / Sign up; Snapreel has no account, so one Get started button."
+  },
+  {
+   "id": "start.intro.1",
+   "group": "Getting started",
+   "owner": "A",
+   "name": "Intro slides",
+   "states": [
+    "start.intro.2",
+    "start.intro.3"
+   ],
+   "references": [
+    "refs/mobbin/screens/0ce2a2f6-db7a-4d81-bff1-38556944620e.png",
+    "refs/mobbin/screens/38ff4bf6-a5bb-4dbd-ac4f-f4b3d27533e0.png",
+    "refs/mobbin/screens/8b5b84cc-3d51-43ff-bc06-d942a9fb5cd2.png"
+   ],
+   "reference": null,
+   "note": ""
+  },
+  {
+   "id": "start.use",
+   "group": "Getting started",
+   "owner": "A",
+   "name": "What will you use it for",
+   "states": [
+    "start.use.selected"
+   ],
+   "references": [
+    "refs/mobbin/screens/3812ca86-b05b-4cf4-ade0-18fa87500f6a.png",
+    "refs/mobbin/screens/9520b8b2-a84e-48e7-950f-18c5e369a84d.png"
+   ],
+   "reference": null,
+   "note": ""
+  },
+  {
+   "id": "start.tour.intro",
+   "group": "Getting started",
+   "owner": "A",
+   "name": "Guided tour",
+   "states": [
+    "start.tour.1",
+    "start.tour.2",
+    "start.tour.3",
+    "start.tour.permission",
+    "start.tour.4"
+   ],
+   "references": [
+    "refs/mobbin/screens/19689a04-a44f-4468-a7bf-0261cb40a802.png",
+    "refs/mobbin/screens/8cf23f32-24e7-4469-b34c-5af67005e3ff.png",
+    "refs/mobbin/screens/ae0b8ff4-0863-4046-8579-f9db1dc4ce85.png",
+    "refs/mobbin/screens/6ad134c1-8f71-49bc-ad3a-f0ac8f990137.png",
+    "refs/mobbin/screens/83ffab4c-a778-4e30-bcb7-f32d483e79f8.png",
+    "refs/mobbin/screens/55a17d4d-f785-4a22-ab46-eef091d2e7b6.png"
+   ],
+   "reference": null,
+   "note": ""
+  },
+  {
+   "id": "home.filled",
+   "group": "Home",
+   "owner": "D",
+   "name": "Home",
+   "states": [
+    "home.empty"
+   ],
+   "references": [
+    "refs/appstore/appstore-01.png",
+    "refs/mobbin/screens/79dd23c0-aac0-4298-b8aa-72177f66d482.png",
+    "refs/mobbin/screens/a001ec8d-1802-4d68-b532-baac3c7f5a6e.png"
+   ],
+   "reference": null,
+   "note": ""
+  },
+  {
+   "id": "home.history",
+   "group": "Home",
+   "owner": "D",
+   "name": "Watch history",
+   "states": [
+    "home.history.empty"
+   ],
+   "references": [
+    "refs/mobbin/screens/4836687a-068d-474d-a18b-9316e54d6540.png",
+    "refs/mobbin/screens/69fec831-a5fc-4ef9-baa4-001df8f9e9d8.png"
+   ],
+   "reference": null,
+   "note": ""
+  },
+  {
+   "id": "home.later",
+   "group": "Home",
+   "owner": "D",
+   "name": "Watch later",
+   "states": [
+    "home.later.empty"
+   ],
+   "references": [
+    "refs/appstore/appstore-01.png"
+   ],
+   "reference": null,
+   "note": "Loom shows only the Watch Later row on Home; the list itself is designed fresh."
+  },
+  {
+   "id": "rec.shell",
+   "group": "Record",
+   "owner": "B",
+   "name": "Recorder shell with mode switch",
+   "states": [
+    "rec.shell.audio",
+    "rec.shell.screen"
+   ],
+   "references": [
+    "refs/appstore/appstore-02.png"
+   ],
+   "reference": null,
+   "note": ""
+  },
+  {
+   "id": "rec.primer",
+   "group": "Record",
+   "owner": "B",
+   "name": "Permission primer",
+   "states": [
+    "rec.primer.denied"
+   ],
+   "references": [
+    "refs/mobbin/screens/c0ee6731-c6db-4748-9243-05690c2f7f7d.png",
+    "refs/mobbin/screens/565c5843-e122-4c31-a094-4c10762601d2.png",
+    "refs/mobbin/screens/8c0ebeed-472f-49f5-9467-751cd4d49e5f.png"
+   ],
+   "reference": null,
+   "note": ""
+  },
+  {
+   "id": "rec.camera",
+   "group": "Record",
+   "owner": "B",
+   "name": "Camera viewfinder",
+   "states": [],
+   "references": [
+    "refs/appstore/appstore-02.png"
+   ],
+   "reference": null,
+   "note": ""
+  },
+  {
+   "id": "rec.camera.recording",
+   "group": "Record",
+   "owner": "B",
+   "name": "Camera recording",
+   "states": [
+    "rec.camera.paused",
+    "rec.camera.countdown"
+   ],
+   "references": [],
+   "reference": "no reference, designed fresh",
+   "note": "designed fresh"
+  },
+  {
+   "id": "rec.audio.recording",
+   "group": "Record",
+   "owner": "B",
+   "name": "Audio recording (live waveform)",
+   "states": [],
+   "references": [],
+   "reference": "no reference, designed fresh",
+   "note": "designed fresh"
+  },
+  {
+   "id": "rec.screen.tutorial.1",
+   "group": "Record",
+   "owner": "B",
+   "name": "Screen tutorial",
+   "states": [
+    "rec.screen.tutorial.2",
+    "rec.screen.tutorial.3"
+   ],
+   "references": [
+    "refs/mobbin/screens/8a4bd556-da04-4de0-8df3-5645d21a0d3e.png",
+    "refs/mobbin/screens/9873040f-e085-46c2-bb75-18245cfe5fa6.png",
+    "refs/mobbin/screens/9e42071f-12e2-4013-9ddb-abe928b2898b.png"
+   ],
+   "reference": null,
+   "note": ""
+  },
+  {
+   "id": "rec.broadcast",
+   "group": "Record",
+   "owner": "B",
+   "name": "Broadcast step",
+   "states": [
+    "rec.broadcast.unavailable"
+   ],
+   "references": [
+    "refs/mobbin/screens/fe567cf9-ec0b-4c18-8c42-3451a8489b26.png",
+    "refs/mobbin/screens/1245d328-76c5-4644-a925-adede64b5fa0.png"
+   ],
+   "reference": null,
+   "note": ""
+  },
+  {
+   "id": "rec.screen.recording",
+   "group": "Record",
+   "owner": "B",
+   "name": "Screen recording in progress",
+   "states": [],
+   "references": [
+    "refs/mobbin/screens/8f0f7c0f-8ef4-422e-9cfd-9cf7a9c5fc64.png",
+    "refs/mobbin/screens/15f044ca-6b96-4ffe-90b3-9b15c9454490.png",
+    "refs/mobbin/screens/3dfe7131-6a2f-4220-b86a-4267cca8f97f.png"
+   ],
+   "reference": null,
+   "note": ""
+  },
+  {
+   "id": "rec.settings",
+   "group": "Record",
+   "owner": "B",
+   "name": "Recording settings",
+   "states": [],
+   "references": [
+    "refs/appstore/appstore-02.png"
+   ],
+   "reference": null,
+   "note": "Gear on Loom's current camera screen; contents designed fresh."
+  },
+  {
+   "id": "rec.notes",
+   "group": "Record",
+   "owner": "B",
+   "name": "Speaker notes",
+   "states": [
+    "rec.notes.overlay"
+   ],
+   "references": [
+    "refs/appstore/appstore-02.png"
+   ],
+   "reference": null,
+   "note": "Pencil-in-square on Loom's current camera screen; contents designed fresh."
+  },
+  {
+   "id": "rec.import",
+   "group": "Record",
+   "owner": "B",
+   "name": "Photo library import",
+   "states": [],
+   "references": [
+    "refs/appstore/appstore-02.png"
+   ],
+   "reference": null,
+   "note": "Photo icon on Loom's current camera screen; flow designed fresh."
+  },
+  {
+   "id": "rec.review",
+   "group": "Record",
+   "owner": "B",
+   "name": "Review after recording",
+   "states": [
+    "rec.review.delete"
+   ],
+   "references": [
+    "refs/mobbin/screens/c0702bfb-4413-49eb-bdab-9195be7469ac.png",
+    "refs/mobbin/screens/9bed6b10-2aa9-46f3-abcd-3a7d89253029.png",
+    "refs/mobbin/screens/4f5b94d4-b21d-4397-b82e-a0c6ce7ce66e.png"
+   ],
+   "reference": null,
+   "note": ""
+  },
+  {
+   "id": "rec.title",
+   "group": "Record",
+   "owner": "B",
+   "name": "Title editor",
+   "states": [],
+   "references": [
+    "refs/mobbin/screens/4f4426ef-8193-4e9b-87b7-f07b08eae248.png",
+    "refs/mobbin/screens/18dfff18-c357-4a06-9b87-000b4cd891a0.png"
+   ],
+   "reference": null,
+   "note": ""
+  },
+  {
+   "id": "rec.share",
+   "group": "Record",
+   "owner": "B",
+   "name": "Share sheet",
+   "states": [],
+   "references": [
+    "refs/mobbin/screens/96967148-c82e-4c66-b96e-632eaf1a72ca.png",
+    "refs/mobbin/screens/cafdf5de-eec1-4165-b5fb-59103ea88280.png"
+   ],
+   "reference": null,
+   "note": "Loom shares a link (server-only); Snapreel shares the file."
+  },
+  {
+   "id": "rec.saving",
+   "group": "Record",
+   "owner": "B",
+   "name": "Saving progress",
+   "states": [
+    "rec.saving.failed",
+    "rec.saving.nospace"
+   ],
+   "references": [],
+   "reference": "no reference, designed fresh",
+   "note": "designed fresh (Loom uploads)"
+  },
+  {
+   "id": "lib.videos",
+   "group": "Library",
+   "owner": "D",
+   "name": "My videos",
+   "states": [
+    "lib.videos.empty"
+   ],
+   "references": [
+    "refs/mobbin/screens/842c0ed9-22af-4123-aa0c-9d0d1706fb91.png",
+    "refs/mobbin/screens/eface933-7e7f-4eb2-a8d6-fc808cb32140.png",
+    "refs/appstore/appstore-06.png"
+   ],
+   "reference": null,
+   "note": ""
+  },
+  {
+   "id": "lib.folders",
+   "group": "Library",
+   "owner": "D",
+   "name": "Folders",
+   "states": [
+    "lib.folders.empty"
+   ],
+   "references": [
+    "refs/mobbin/screens/8815cad9-3daf-402b-9b52-25f7157d2ef8.png"
+   ],
+   "reference": null,
+   "note": ""
+  },
+  {
+   "id": "lib.folder",
+   "group": "Library",
+   "owner": "D",
+   "name": "Folder detail",
+   "states": [],
+   "references": [],
+   "reference": "no reference, designed fresh",
+   "note": "designed fresh"
+  },
+  {
+   "id": "lib.folder.editor",
+   "group": "Library",
+   "owner": "D",
+   "name": "New or rename folder",
+   "states": [],
+   "references": [],
+   "reference": "no reference, designed fresh",
+   "note": "designed fresh"
+  },
+  {
+   "id": "lib.move",
+   "group": "Library",
+   "owner": "D",
+   "name": "Move to folder",
+   "states": [],
+   "references": [],
+   "reference": "no reference, designed fresh",
+   "note": "designed fresh"
+  },
+  {
+   "id": "lib.tags",
+   "group": "Library",
+   "owner": "D",
+   "name": "Tag editor",
+   "states": [],
+   "references": [],
+   "reference": "no reference, designed fresh",
+   "note": "designed fresh"
+  },
+  {
+   "id": "lib.actions",
+   "group": "Library",
+   "owner": "D",
+   "name": "Video actions sheet",
+   "states": [],
+   "references": [
+    "refs/mobbin/screens/5c3f6863-009e-40a8-90cd-e7bd6d1ca2df.png"
+   ],
+   "reference": null,
+   "note": ""
+  },
+  {
+   "id": "video.player",
+   "group": "Video",
+   "owner": "C",
+   "name": "Player",
+   "states": [],
+   "references": [
+    "refs/mobbin/screens/333244de-fdb0-4a9a-bbfd-fae960e6f3e9.png",
+    "refs/mobbin/screens/2633dd18-38a3-4125-81a5-4e228f84f4dd.png",
+    "refs/appstore/appstore-04.png"
+   ],
+   "reference": null,
+   "note": ""
+  },
+  {
+   "id": "video.fullscreen",
+   "group": "Video",
+   "owner": "C",
+   "name": "Fullscreen player",
+   "states": [],
+   "references": [],
+   "reference": "no reference, designed fresh",
+   "note": "designed fresh"
+  },
+  {
+   "id": "video.pip",
+   "group": "Video",
+   "owner": "C",
+   "name": "Picture-in-picture state",
+   "states": [],
+   "references": [
+    "refs/mobbin/screens/307833f4-db0d-486c-ad9e-1677f367222c.png"
+   ],
+   "reference": null,
+   "note": ""
+  },
+  {
+   "id": "video.speed",
+   "group": "Video",
+   "owner": "C",
+   "name": "Speed menu",
+   "states": [],
+   "references": [
+    "refs/mobbin/screens/5bdf10e6-7420-40bc-9bed-0c3043d416ce.png",
+    "refs/mobbin/screens/7fbf9539-08e3-4018-a71c-f8878c7ae7fc.png"
+   ],
+   "reference": null,
+   "note": ""
+  },
+  {
+   "id": "video.notes",
+   "group": "Video",
+   "owner": "C",
+   "name": "Notes tab",
+   "states": [
+    "video.notes.empty"
+   ],
+   "references": [
+    "refs/mobbin/screens/08b623c3-220a-4d3b-8138-793c58e41da4.png",
+    "refs/mobbin/screens/dfc7a242-7d33-4406-af9b-db4482418ab2.png",
+    "refs/mobbin/screens/68117697-4b2f-4be8-acc9-25a7041dd31a.png"
+   ],
+   "reference": null,
+   "note": "Loom's activity is other people's comments (server-only); Snapreel shows your own notes."
+  },
+  {
+   "id": "video.transcript",
+   "group": "Video",
+   "owner": "C",
+   "name": "Transcript tab",
+   "states": [
+    "video.transcript.none"
+   ],
+   "references": [
+    "refs/mobbin/screens/1cf35f2e-f844-48f1-8da8-ca6cac258312.png"
+   ],
+   "reference": null,
+   "note": ""
+  },
+  {
+   "id": "video.details",
+   "group": "Video",
+   "owner": "C",
+   "name": "Details and summary",
+   "states": [],
+   "references": [
+    "refs/mobbin/screens/333244de-fdb0-4a9a-bbfd-fae960e6f3e9.png",
+    "refs/appstore/appstore-04.png"
+   ],
+   "reference": null,
+   "note": ""
+  },
+  {
+   "id": "video.note.compose",
+   "group": "Video",
+   "owner": "C",
+   "name": "Note composer",
+   "states": [],
+   "references": [
+    "refs/mobbin/screens/d8cee37f-787a-4912-bf6e-6e46eb89d15d.png",
+    "refs/mobbin/screens/e835b4d8-f161-44c3-9b64-5dad277df0a3.png"
+   ],
+   "reference": null,
+   "note": ""
+  },
+  {
+   "id": "video.note.edit",
+   "group": "Video",
+   "owner": "C",
+   "name": "Edit note",
+   "states": [],
+   "references": [
+    "refs/mobbin/screens/66e3bbdc-3eaa-48ff-8822-78ba1ebd1d0f.png",
+    "refs/mobbin/screens/20d71ce8-59c1-42fb-9b44-410e67227ff4.png"
+   ],
+   "reference": null,
+   "note": "Loom's reply composer is the craft reference."
+  },
+  {
+   "id": "video.reaction",
+   "group": "Video",
+   "owner": "C",
+   "name": "Reaction overlay",
+   "states": [],
+   "references": [
+    "refs/mobbin/screens/69165b4c-7a08-4932-8956-0ea238728ca1.png",
+    "refs/mobbin/screens/b670b4bf-dcca-4d92-9477-336ff5c581a6.png"
+   ],
+   "reference": null,
+   "note": ""
+  },
+  {
+   "id": "video.emoji",
+   "group": "Video",
+   "owner": "C",
+   "name": "Emoji picker",
+   "states": [],
+   "references": [],
+   "reference": "no reference, designed fresh",
+   "note": "designed fresh"
+  },
+  {
+   "id": "video.actions",
+   "group": "Video",
+   "owner": "C",
+   "name": "Video actions",
+   "states": [
+    "video.actions.delete"
+   ],
+   "references": [
+    "refs/mobbin/screens/5c3f6863-009e-40a8-90cd-e7bd6d1ca2df.png"
+   ],
+   "reference": null,
+   "note": ""
+  },
+  {
+   "id": "video.photos.permission",
+   "group": "Video",
+   "owner": "C+E",
+   "name": "Save to Photos",
+   "states": [
+    "video.photos.progress",
+    "video.photos.saved"
+   ],
+   "references": [
+    "refs/mobbin/screens/7abeda8d-a879-4090-a387-43f37980fcba.png"
+   ],
+   "reference": null,
+   "note": ""
+  },
+  {
+   "id": "video.stats",
+   "group": "Video",
+   "owner": "C",
+   "name": "Stats",
+   "states": [],
+   "references": [
+    "refs/mobbin/screens/4ebeb7dc-a2da-4a4e-8d6e-f605b10384a7.png",
+    "refs/mobbin/screens/c71f7bb9-e307-4428-b209-f34938e3a2fe.png"
+   ],
+   "reference": null,
+   "note": "Loom's insights are viewers (server-only); Snapreel's stats are on-device."
+  },
+  {
+   "id": "notif.feed",
+   "group": "Notifications",
+   "owner": "E",
+   "name": "Notifications feed",
+   "states": [
+    "notif.feed.empty"
+   ],
+   "references": [
+    "refs/mobbin/screens/baadcda8-e975-4dc0-8c56-b3b9d22ffbd8.png",
+    "refs/mobbin/screens/a7678dbf-5b62-472b-a3f7-e9bf792135a7.png",
+    "refs/appstore/appstore-05.png"
+   ],
+   "reference": null,
+   "note": "Loom's items are other people's activity (server-only); Snapreel lists what the app did."
+  },
+  {
+   "id": "search.idle",
+   "group": "Search",
+   "owner": "D",
+   "name": "Search idle",
+   "states": [],
+   "references": [
+    "refs/mobbin/screens/2ba59348-81ef-4482-92f1-0d31a36afc44.png"
+   ],
+   "reference": null,
+   "note": ""
+  },
+  {
+   "id": "search.results",
+   "group": "Search",
+   "owner": "D",
+   "name": "Search results",
+   "states": [
+    "search.typing",
+    "search.none"
+   ],
+   "references": [
+    "refs/mobbin/screens/dc34fe74-7cec-4ead-9fe4-4d3247c0f1a6.png",
+    "refs/mobbin/screens/d9ee7199-4790-424b-9175-3a5367d4d48f.png"
+   ],
+   "reference": null,
+   "note": ""
+  },
+  {
+   "id": "settings.root",
+   "group": "Settings",
+   "owner": "A",
+   "name": "Settings root",
+   "states": [],
+   "references": [
+    "refs/mobbin/screens/74aeb655-53ef-42d2-81e5-0e4f319fe27a.png"
+   ],
+   "reference": null,
+   "note": ""
+  },
+  {
+   "id": "settings.notifications",
+   "group": "Settings",
+   "owner": "E",
+   "name": "Notification settings",
+   "states": [],
+   "references": [
+    "refs/mobbin/screens/be1d5c1e-c53e-48a8-a6a5-f66356380b91.png",
+    "refs/mobbin/screens/6bf1eb6d-2654-43cd-934b-526b13b5fa1e.png"
+   ],
+   "reference": null,
+   "note": ""
+  },
+  {
+   "id": "settings.recording",
+   "group": "Settings",
+   "owner": "B",
+   "name": "Recording defaults",
+   "states": [],
+   "references": [],
+   "reference": "no reference, designed fresh",
+   "note": "designed fresh"
+  },
+  {
+   "id": "settings.storage",
+   "group": "Settings",
+   "owner": "E",
+   "name": "Storage",
+   "states": [
+    "settings.storage.confirm",
+    "settings.storage.done"
+   ],
+   "references": [
+    "refs/mobbin/screens/3792bec9-cb4f-4958-9ee8-7af5ba65eccd.png",
+    "refs/mobbin/screens/0adb4039-cd27-4da9-8f50-be60b0ab6571.png"
+   ],
+   "reference": null,
+   "note": "Loom's delete-account screens are the craft reference for delete-all-data."
+  },
+  {
+   "id": "help.home",
+   "group": "Settings",
+   "owner": "A",
+   "name": "Help centre",
+   "states": [],
+   "references": [
+    "refs/mobbin/screens/f9c3e1f6-dcd2-461e-abde-b37924193bef.png",
+    "refs/mobbin/screens/49885582-d8c0-4d34-83ae-840fb06e8df4.png",
+    "refs/mobbin/screens/92adeabb-400e-4e16-9508-4c2dcddee2e7.png"
+   ],
+   "reference": null,
+   "note": ""
+  },
+  {
+   "id": "help.article",
+   "group": "Settings",
+   "owner": "A",
+   "name": "Help article",
+   "states": [],
+   "references": [
+    "refs/mobbin/screens/5b3089b4-d147-46fe-ac96-1cd0be41c3c9.png"
+   ],
+   "reference": null,
+   "note": ""
+  },
+  {
+   "id": "help.contact",
+   "group": "Settings",
+   "owner": "A",
+   "name": "Contact support",
+   "states": [],
+   "references": [
+    "refs/mobbin/screens/f9c3e1f6-dcd2-461e-abde-b37924193bef.png"
+   ],
+   "reference": null,
+   "note": "Compose icon in Loom's help header; form designed fresh."
+  },
+  {
+   "id": "legal.menu",
+   "group": "Settings",
+   "owner": "A",
+   "name": "Legal menu",
+   "states": [],
+   "references": [
+    "refs/mobbin/screens/35a24f63-44ce-47ee-8027-4b24a4a614ec.png"
+   ],
+   "reference": null,
+   "note": ""
+  },
+  {
+   "id": "legal.terms",
+   "group": "Settings",
+   "owner": "A",
+   "name": "Terms and privacy viewer",
+   "states": [
+    "legal.privacy"
+   ],
+   "references": [
+    "refs/mobbin/screens/d2910d61-f0f1-46f6-b35a-558314f5dccf.png",
+    "refs/mobbin/screens/dc86d237-f87d-4b1f-b18d-fdc696992afe.png"
+   ],
+   "reference": null,
+   "note": ""
+  },
+  {
+   "id": "legal.ack",
+   "group": "Settings",
+   "owner": "A",
+   "name": "Acknowledgements",
+   "states": [],
+   "references": [
+    "refs/mobbin/screens/939b73c4-7925-4a2f-bf5a-a778c6f21374.png"
+   ],
+   "reference": null,
+   "note": ""
+  }
+ ],
+ "flows": {
+  "01-onboarding": {
+   "snapreel": [
+    "start.splash",
+    "start.intro.1",
+    "start.intro.2",
+    "start.intro.3",
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    "start.use",
+    "start.use.selected",
+    "start.tour.intro",
+    "start.tour.1",
+    "start.tour.2",
+    "start.tour.3",
+    "start.tour.permission",
+    "start.tour.4",
+    "home.empty"
+   ],
+   "note": "Loom steps 5-12 are account sign-up and email verification (server-only)."
+  },
+  "03-home": {
+   "snapreel": [
+    "home.empty",
+    "home.history.empty"
+   ]
+  },
+  "04-starting-a-recording": {
+   "snapreel": [
+    "home.empty",
+    "rec.primer",
+    "rec.primer",
+    "rec.primer",
+    "rec.screen.tutorial.1",
+    "rec.screen.tutorial.2",
+    "rec.screen.tutorial.3",
+    "rec.broadcast",
+    "rec.broadcast.unavailable",
+    "rec.screen.recording",
+    null,
+    "rec.screen.recording",
+    "rec.screen.recording",
+    "rec.review",
+    "rec.review",
+    "rec.title",
+    "rec.title",
+    "rec.review",
+    "rec.share",
+    null,
+    "home.filled"
+   ],
+   "note": "Step 11 is the content being recorded (another app); step 20 is Loom's link-copied toast (server-only). System permission alerts and the system broadcast sheet are iOS UI over Snapreel's primer and broadcast step."
+  },
+  "05-video-detail": {
+   "snapreel": [
+    "home.filled",
+    "video.player",
+    "video.notes",
+    "video.transcript.none"
+   ]
+  },
+  "06-responding-to-the-video": {
+   "snapreel": [
+    "video.player",
+    "video.reaction",
+    "video.reaction"
+   ]
+  },
+  "07-commenting-on-the-video": {
+   "snapreel": [
+    "video.notes",
+    "video.note.compose",
+    "video.note.compose",
+    "video.notes",
+    "home.filled"
+   ]
+  },
+  "09-setting-video-speed": {
+   "snapreel": [
+    "video.player",
+    "video.speed",
+    "video.player"
+   ]
+  },
+  "10-picture-in-picture-mode": {
+   "snapreel": [
+    "video.player",
+    "video.pip"
+   ]
+  },
+  "11-downloading-a-video": {
+   "snapreel": [
+    "video.player",
+    "video.actions",
+    "video.photos.permission",
+    "video.photos.saved"
+   ]
+  },
+  "14-library": {
+   "snapreel": [
+    "lib.videos",
+    "lib.videos",
+    "lib.folders"
+   ]
+  },
+  "15-notifications": {
+   "snapreel": [
+    "notif.feed",
+    "notif.feed"
+   ]
+  },
+  "16-search": {
+   "snapreel": [
+    "search.idle"
+   ]
+  },
+  "17-searching-for-title-folder-tag-or-person": {
+   "snapreel": [
+    "search.idle",
+    "search.typing",
+    "search.results"
+   ]
+  },
+  "18-settings": {
+   "snapreel": [
+    "notif.feed",
+    "settings.root"
+   ]
+  },
+  "19-help-and-support": {
+   "snapreel": [
+    "settings.root",
+    "help.home",
+    "help.home",
+    "help.home",
+    "help.home"
+   ]
+  },
+  "20-editing-notification-settings": {
+   "snapreel": [
+    "settings.root",
+    "settings.notifications",
+    "settings.notifications",
+    null
+   ],
+   "note": "Step 4 is a network error banner (server-only)."
+  },
+  "21-legal": {
+   "snapreel": [
+    "settings.root",
+    "legal.menu"
+   ]
+  },
+  "22-terms-and-conditions": {
+   "snapreel": [
+    "legal.menu",
+    "legal.terms"
+   ]
+  },
+  "23-privacy-policy": {
+   "snapreel": [
+    "legal.menu",
+    "legal.privacy"
+   ]
+  },
+  "24-acknowledgements": {
+   "snapreel": [
+    "legal.menu",
+    "legal.ack"
+   ]
+  },
+  "26-deleting-account": {
+   "snapreel": [
+    "settings.storage",
+    "settings.storage",
+    "settings.storage.confirm",
+    null,
+    "settings.storage.done"
+   ],
+   "note": "Snapreel has no account; delete-all-data is the counterpart. Step 4 is a server error."
+  }
+ },
+ "serverOnlyFlows": {
+  "02-logging-in": "accounts",
+  "08-replying-to-thread": "other people's comment threads",
+  "12-engagement-insights": "viewer insights (Snapreel's stats screen is compared per screen only)",
+  "13-user-stats": "per-viewer stats",
+  "25-logging-out": "accounts"
+ }
+}
