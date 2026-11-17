@@ -25,6 +25,8 @@ FoundationModels", add this to the app target's build settings (both configurati
 OTHER_LDFLAGS = $(inherited) -weak_framework FoundationModels
 ```
 
+(Same effect: add FoundationModels.framework under Link Binary With Libraries with status Optional.)
+
 ## 3. Optional: Delete all my data (E's Storage)
 
 The player keeps two small things in `UserDefaults.standard` under `player.` (why a transcript

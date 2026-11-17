@@ -24,6 +24,10 @@ struct PlayerStatsSheet: View {
                     }
                     progressCard
                     facts
+                    Text("A play counts each time you start this recording after opening it. Shares count when the share sheet finishes sending. How far through is the furthest point you've reached.")
+                        .font(.srFootnote)
+                        .foregroundStyle(Color.srOnDarkTertiary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 .padding(.horizontal, Space.gutter)
                 .padding(.top, Space.xs)

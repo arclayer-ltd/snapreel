@@ -360,7 +360,6 @@ struct PlayerScreen: View {
     }
 
     private func toggleFullscreen() {
-        Haptics.tap()
         overlay = nil
         updateRotation(animated: false)
         controlsVisible = true

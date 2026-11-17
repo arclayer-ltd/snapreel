@@ -1,4 +1,5 @@
 import AVFoundation
+import Combine
 import Foundation
 import Speech
 
@@ -26,7 +27,7 @@ final class TranscriptService: ObservableObject {
 
     /// Recognition of a single request can stop after about a minute, so longer recordings are
     /// split into pieces of this length.
-    private static let pieceLength: Double = 50
+    nonisolated private static let pieceLength: Double = 50
 
     // MARK: - Asking for transcripts
 

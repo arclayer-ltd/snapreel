@@ -74,6 +74,8 @@ final class PlaybackSession: ObservableObject {
     private var isScrubbing = false
     private var resumeAfterScrub = false
     private var routerHadPlayer = false
+    /// Start position asked for before the file was ready; applied again once it is.
+    private var pendingStart: Double?
     private var timeObserver: Any?
     private var timeControlObservation: NSKeyValueObservation?
     private var itemStatusObservation: NSKeyValueObservation?
@@ -141,7 +143,11 @@ final class PlaybackSession: ObservableObject {
         observe(item)
         player.replaceCurrentItem(with: item)
         let start = startAt ?? video.resumePosition
-        if start > 0.5 { seek(to: start) }
+        pendingStart = nil
+        if start > 0.5 {
+            pendingStart = start
+            performSeek(to: start)
+        }
         if autoplay { play() }
         updateNowPlaying()
     }
@@ -198,6 +204,12 @@ final class PlaybackSession: ObservableObject {
     }
 
     func seek(to seconds: Double, precise: Bool = true) {
+        // A seek from the person replaces any start position still waiting for the file.
+        pendingStart = nil
+        performSeek(to: seconds, precise: precise)
+    }
+
+    private func performSeek(to seconds: Double, precise: Bool = true) {
         guard player.currentItem != nil, seconds.isFinite else { return }
         let upper = duration > 0 ? duration : max(0, seconds)
         let target = max(0, min(seconds, upper))
@@ -341,6 +353,11 @@ final class PlaybackSession: ObservableObject {
         case .readyToPlay:
             if seconds.isFinite, seconds > 0 { itemDuration = seconds }
             if loadState == .loading { loadState = .ready }
+            if let start = pendingStart {
+                pendingStart = nil
+                let now = player.currentTime().seconds
+                if !isScrubbing, !now.isFinite || abs(now - start) > 0.5 { performSeek(to: start) }
+            }
             updateNowPlaying()
         case .failed:
             loadState = .failed
