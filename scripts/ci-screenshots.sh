@@ -51,7 +51,7 @@ echo "Using simulator $DEVICE"
 BOOTED=0
 for ATTEMPT in 1 2 3; do
   xcrun simctl boot "$DEVICE" 2>/dev/null || true
-  if timeout 420 xcrun simctl bootstatus "$DEVICE" -b > "$OUT/../boot-$ATTEMPT.log" 2>&1; then
+  if xcrun simctl bootstatus "$DEVICE" -b > "$OUT/../boot-$ATTEMPT.log" 2>&1; then
     BOOTED=1; break
   fi
   echo "Simulator boot attempt $ATTEMPT failed; erasing and retrying"
