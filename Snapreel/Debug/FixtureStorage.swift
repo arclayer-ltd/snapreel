@@ -9,7 +9,7 @@ final class FixtureStorage: LibraryStorage {
     private var records: [String: [String: Data]] = [:]
 
     /// Bump when the drawn fixture media changes, so cached files are regenerated.
-    private static let mediaVersion = 1
+    private static let mediaVersion = 2
 
     init(set: FixtureSet) {
         // Media is drawn once per install and reused by every later launch (screenshots launch
@@ -204,10 +204,32 @@ enum FixtureArt {
         }
     }
 
+    /// Photographic stand-ins bundled in DEBUG builds only (Release excludes `fixture-*`).
+    private static func photoName(for style: Style, portrait: Bool) -> String? {
+        switch style {
+        case .camera(let hue):
+            if portrait || hue == 1 { return "fixture-camera-portrait" }
+            return hue == 2 ? "fixture-camera-shelf" : "fixture-camera-desk"
+        case .slides: return "fixture-slides"
+        case .phoneApp, .phoneMap: return nil
+        }
+    }
+
     static func thumbnail(style: Style, portrait: Bool) -> UIImage {
         let size = portrait ? CGSize(width: 443, height: 960) : CGSize(width: 960, height: 540)
         let format = UIGraphicsImageRendererFormat()
         format.scale = 1
+        if let name = photoName(for: style, portrait: portrait),
+           let path = Bundle.main.path(forResource: name, ofType: "jpg"),
+           let photo = UIImage(contentsOfFile: path) {
+            // Aspect-fill the photo into the frame.
+            return UIGraphicsImageRenderer(size: size, format: format).image { _ in
+                let scale = max(size.width / photo.size.width, size.height / photo.size.height)
+                let drawn = CGSize(width: photo.size.width * scale, height: photo.size.height * scale)
+                photo.draw(in: CGRect(x: (size.width - drawn.width) / 2, y: (size.height - drawn.height) / 2,
+                                      width: drawn.width, height: drawn.height))
+            }
+        }
         return UIGraphicsImageRenderer(size: size, format: format).image { context in
             let cg = context.cgContext
             switch style {

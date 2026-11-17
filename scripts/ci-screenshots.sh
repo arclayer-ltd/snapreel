@@ -50,6 +50,10 @@ echo "Using simulator $DEVICE"
 xcrun simctl boot "$DEVICE" 2>/dev/null || true
 xcrun simctl bootstatus "$DEVICE" -b
 xcrun simctl ui "$DEVICE" appearance light
+# No first-use keyboard tips ("slide to type") over text fields.
+for KEY in DidShowContinuousPathIntroduction DidShowGestureKeyboardIntroduction; do
+  xcrun simctl spawn "$DEVICE" defaults write com.apple.keyboard.preferences "$KEY" -bool true || true
+done
 xcrun simctl install "$DEVICE" "$APP"
 xcrun simctl status_bar "$DEVICE" override --time "9:41" --batteryState charged --batteryLevel 100 \
   --cellularMode active --cellularBars 4 --wifiBars 3 || true
