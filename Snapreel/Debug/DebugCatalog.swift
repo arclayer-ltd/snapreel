@@ -22,10 +22,10 @@ struct DebugScreen: Identifiable {
     /// Seconds the screenshot script waits after launch (animations, async loads).
     var wait: Double = 3
     /// Builds the view. For screens inside the tab shell use `DebugScreen.shell`.
-    let content: () -> AnyView
+    let content: @MainActor () -> AnyView
 
     init<Content: View>(_ id: String, _ title: String, fixture: FixtureSet = .filled, wait: Double = 3,
-                        @ViewBuilder content: @escaping () -> Content) {
+                        @ViewBuilder content: @escaping @MainActor () -> Content) {
         self.id = id
         self.title = title
         self.fixture = fixture
@@ -36,7 +36,7 @@ struct DebugScreen: Identifiable {
     /// The real tab shell on `tab`, after `configure` has set up the router (push routes,
     /// open the player, show a sheet...). The library already holds the fixture data.
     static func shell(_ id: String, _ title: String, tab: AppTab, fixture: FixtureSet = .filled,
-                      wait: Double = 3, configure: ((AppRouter, Library) -> Void)? = nil) -> DebugScreen {
+                      wait: Double = 3, configure: (@MainActor (AppRouter, Library) -> Void)? = nil) -> DebugScreen {
         DebugScreen(id, title, fixture: fixture, wait: wait) {
             DebugShellHost(tab: tab, configure: configure)
         }
@@ -92,7 +92,7 @@ struct DebugHost: View {
 /// The tab shell, configured once before it first appears.
 struct DebugShellHost: View {
     let tab: AppTab
-    let configure: ((AppRouter, Library) -> Void)?
+    let configure: (@MainActor (AppRouter, Library) -> Void)?
     @EnvironmentObject private var router: AppRouter
     @EnvironmentObject private var library: Library
     @State private var configured = false
