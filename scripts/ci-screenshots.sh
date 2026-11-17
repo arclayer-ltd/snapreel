@@ -47,8 +47,18 @@ if [ -z "$DEVICE" ]; then
   exit 1
 fi
 echo "Using simulator $DEVICE"
-xcrun simctl boot "$DEVICE" 2>/dev/null || true
-xcrun simctl bootstatus "$DEVICE" -b
+# Intel runners sometimes fail a first boot ("Waiting on System App"); erase and retry.
+BOOTED=0
+for ATTEMPT in 1 2 3; do
+  xcrun simctl boot "$DEVICE" 2>/dev/null || true
+  if timeout 420 xcrun simctl bootstatus "$DEVICE" -b > "$OUT/../boot-$ATTEMPT.log" 2>&1; then
+    BOOTED=1; break
+  fi
+  echo "Simulator boot attempt $ATTEMPT failed; erasing and retrying"
+  xcrun simctl shutdown "$DEVICE" 2>/dev/null || true
+  xcrun simctl erase "$DEVICE" 2>/dev/null || true
+done
+[ "$BOOTED" = "1" ] || { echo "Simulator never booted" | tee "$OUT/../screenshots-missing.txt"; exit 1; }
 xcrun simctl ui "$DEVICE" appearance light
 # No first-use keyboard tips ("slide to type") over text fields.
 for KEY in DidShowContinuousPathIntroduction DidShowGestureKeyboardIntroduction; do
@@ -58,11 +68,17 @@ xcrun simctl install "$DEVICE" "$APP"
 xcrun simctl status_bar "$DEVICE" override --time "9:41" --batteryState charged --batteryLevel 100 \
   --cellularMode active --cellularBars 4 --wifiBars 3 || true
 
-# Ask the app for its screen list.
-xcrun simctl launch "$DEVICE" "$BUNDLE" -dumpScreens > /dev/null
-sleep 5
-CONTAINER=$(xcrun simctl get_app_container "$DEVICE" "$BUNDLE" data)
-LIST="$CONTAINER/Documents/debug-screens.tsv"
+# Ask the app for its screen list (retry: the first launch after boot can be slow).
+CONTAINER=""
+LIST=""
+for ATTEMPT in 1 2 3; do
+  xcrun simctl launch "$DEVICE" "$BUNDLE" -dumpScreens > /dev/null 2>&1
+  sleep $((5 * ATTEMPT))
+  CONTAINER=$(xcrun simctl get_app_container "$DEVICE" "$BUNDLE" data 2>/dev/null)
+  LIST="$CONTAINER/Documents/debug-screens.tsv"
+  [ -f "$LIST" ] && break
+  xcrun simctl terminate "$DEVICE" "$BUNDLE" > /dev/null 2>&1 || true
+done
 if [ ! -f "$LIST" ]; then
   echo "App did not write debug-screens.tsv" | tee "$OUT/../screenshots-missing.txt"
   exit 1
