@@ -1,7 +1,7 @@
 #!/bin/bash
 # Installs the simulator build on a 375x812-point iPhone and screenshots every debug screen
 # the app lists (DebugCatalog, written on `-dumpScreens`), each launched fresh with
-# `-screen <id>`. Records screens whose launch crashed in crashes.txt.
+# `-screen <id>`. Records screens whose launch produced a crash report in crashes.txt.
 # Usage: ci-screenshots.sh <Snapreel.app> <out-dir> [id-prefix]
 set -uo pipefail
 
@@ -56,7 +56,7 @@ xcrun simctl status_bar "$DEVICE" override --time "9:41" --batteryState charged 
 
 # Ask the app for its screen list.
 xcrun simctl launch "$DEVICE" "$BUNDLE" -dumpScreens > /dev/null
-sleep 4
+sleep 5
 CONTAINER=$(xcrun simctl get_app_container "$DEVICE" "$BUNDLE" data)
 LIST="$CONTAINER/Documents/debug-screens.tsv"
 if [ ! -f "$LIST" ]; then
@@ -66,31 +66,38 @@ fi
 cp "$LIST" "$OUT/../debug-screens.tsv"
 xcrun simctl terminate "$DEVICE" "$BUNDLE" > /dev/null 2>&1 || true
 
-# Warm up once so first-launch costs don't land on the first screenshot.
+# Warm up once (draws and caches the fixture media) so first-launch costs don't land on a screenshot.
 xcrun simctl launch "$DEVICE" "$BUNDLE" -screen shell.home > /dev/null
-sleep 6
+sleep 10
 xcrun simctl terminate "$DEVICE" "$BUNDLE" > /dev/null 2>&1 || true
 
+REPORTS="$HOME/Library/Logs/DiagnosticReports"
+crash_count() { find "$REPORTS" -name "Snapreel*" 2>/dev/null | wc -l | tr -d ' '; }
+
+TAB=$'\t'
 : > "$OUT/../crashes.txt"
 COUNT=0
-while IFS=$'\t' read -r ID WAIT TITLE; do
+# "|| [ -n "$ID" ]" keeps the last line when the list has no trailing newline.
+while IFS="$TAB" read -r ID WAIT TITLE || [ -n "${ID:-}" ]; do
   [ -z "$ID" ] && continue
-  if [ -n "$ONLY" ] && [[ "$ID" != "$ONLY"* ]]; then continue; fi
+  if [ -n "$ONLY" ] && [[ "$ID" != "$ONLY"* ]]; then ID=""; continue; fi
   xcrun simctl terminate "$DEVICE" "$BUNDLE" > /dev/null 2>&1 || true
-  PID=$(xcrun simctl launch "$DEVICE" "$BUNDLE" -screen "$ID" 2>/dev/null | awk '{print $NF}')
+  BEFORE=$(crash_count)
+  xcrun simctl launch "$DEVICE" "$BUNDLE" -screen "$ID" > /dev/null 2>&1
   sleep "$WAIT"
-  if ! xcrun simctl spawn "$DEVICE" launchctl list 2>/dev/null | grep -q "UIKitApplication:$BUNDLE"; then
-    echo "$ID	$TITLE	crashed or exited (pid $PID)" >> "$OUT/../crashes.txt"
-  fi
   xcrun simctl io "$DEVICE" screenshot "$OUT/$ID.png" > /dev/null 2>&1
+  sleep 0.5
+  if [ "$(crash_count)" != "$BEFORE" ]; then
+    echo "${ID}${TAB}${TITLE}${TAB}crashed" >> "$OUT/../crashes.txt"
+  fi
   COUNT=$((COUNT + 1))
   echo "captured $ID"
+  ID=""
 done < "$OUT/../debug-screens.tsv"
 
 xcrun simctl terminate "$DEVICE" "$BUNDLE" > /dev/null 2>&1 || true
-# Simulator crash reports, if any.
 mkdir -p "$OUT/../crash-reports"
-find "$HOME/Library/Logs/DiagnosticReports" -name "Snapreel*" -newer "$OUT/../debug-screens.tsv" -exec cp {} "$OUT/../crash-reports/" \; 2>/dev/null || true
-echo "### Screenshots: $COUNT captured, $(wc -l < "$OUT/../crashes.txt") crashed" >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
+find "$REPORTS" -name "Snapreel*" -newer "$OUT/../debug-screens.tsv" -exec cp {} "$OUT/../crash-reports/" \; 2>/dev/null || true
+echo "### Screenshots: $COUNT captured, $(wc -l < "$OUT/../crashes.txt" | tr -d ' ') crashed" >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
 cat "$OUT/../crashes.txt"
 xcrun simctl shutdown "$DEVICE" || true

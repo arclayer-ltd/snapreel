@@ -8,9 +8,14 @@ final class FixtureStorage: LibraryStorage {
     let mediaRoot: URL
     private var records: [String: [String: Data]] = [:]
 
+    /// Bump when the drawn fixture media changes, so cached files are regenerated.
+    private static let mediaVersion = 1
+
     init(set: FixtureSet) {
-        mediaRoot = FileManager.default.temporaryDirectory.appendingPathComponent("SnapreelFixtures", isDirectory: true)
-        try? FileManager.default.removeItem(at: mediaRoot)
+        // Media is drawn once per install and reused by every later launch (screenshots launch
+        // the app ~100 times); records are rebuilt in memory each time.
+        let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+        mediaRoot = caches.appendingPathComponent("SnapreelFixtures-v\(Self.mediaVersion)", isDirectory: true)
         try? FileManager.default.createDirectory(at: mediaRoot, withIntermediateDirectories: true)
         if set == .filled { seed() }
     }
@@ -27,7 +32,7 @@ final class FixtureStorage: LibraryStorage {
         records[T.recordType]?[id] = nil
     }
 
-    func eraseEverything() throws { records = [:] }
+    func eraseEverything() throws { records = [:] }  // media stays cached for the next launch
 
     // MARK: - Sample data
 
@@ -97,13 +102,20 @@ final class FixtureStorage: LibraryStorage {
         ]
 
         let clipName = "fixture-sample.mp4"
-        FixtureArt.writeSampleClip(to: media.videoURL(clipName))
+        if !FileManager.default.fileExists(atPath: media.videoURL(clipName).path) {
+            FixtureArt.writeSampleClip(to: media.videoURL(clipName))
+        }
 
         for sample in samples {
             var thumbName: String?
             if sample.kind != .audio {
-                let image = FixtureArt.thumbnail(style: sample.style, portrait: sample.size.1 > sample.size.0)
-                thumbName = try? MediaInspector.writeThumbnail(image, named: sample.id.uuidString, in: media.thumbnails)
+                let name = sample.id.uuidString + ".jpg"
+                if FileManager.default.fileExists(atPath: media.thumbnailURL(name).path) {
+                    thumbName = name
+                } else {
+                    let image = FixtureArt.thumbnail(style: sample.style, portrait: sample.size.1 > sample.size.0)
+                    thumbName = try? MediaInspector.writeThumbnail(image, named: sample.id.uuidString, in: media.thumbnails)
+                }
             }
             let video = Video(id: sample.id, title: sample.title, createdAt: ago(sample.minutesAgo), kind: sample.kind,
                               fileName: clipName, thumbnailFileName: thumbName, duration: sample.duration,
