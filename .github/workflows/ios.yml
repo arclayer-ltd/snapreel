@@ -1,0 +1,185 @@
+name: iOS build
+
+# One job per run: compile everything (both targets, every error reported), screenshot every
+# debug screen at 375x812 points, and optionally archive, sign and upload to TestFlight.
+# Runs only when started by hand:
+#   gh workflow run ios.yml [-f testflight=true] [-f screenshots=false] [-f only=<id prefix>]
+on:
+  workflow_dispatch:
+    inputs:
+      testflight:
+        description: Archive, sign and upload to TestFlight
+        type: boolean
+        default: false
+      screenshots:
+        description: Screenshot every debug screen
+        type: boolean
+        default: true
+      only:
+        description: Only screenshot ids starting with this prefix (empty = all)
+        type: string
+        default: ""
+
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: macos-26
+    timeout-minutes: 100
+    env:
+      TEAM_ID: N3DBKUVJS5
+      BUNDLE_ID: co.arclayer.snapreel
+      BROADCAST_BUNDLE_ID: co.arclayer.snapreel.broadcast
+      APP_PROFILE: Snapreel App Store
+      BROADCAST_PROFILE: Snapreel Broadcast App Store
+      BUILD_NUMBER: ${{ github.run_number }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select newest Xcode
+        run: |
+          XCODE=$(ls -d /Applications/Xcode_*.app | grep -v -i beta | sort -V | tail -1)
+          sudo xcode-select -s "$XCODE"
+          xcodebuild -version
+          xcrun simctl list runtimes | grep iOS || true
+
+      # Whole-module compilation type-checks every file in one pass, so one run lists every
+      # error instead of stopping at the first failing file.
+      - name: Build for simulator (Debug)
+        id: sim
+        run: |
+          mkdir -p ci-out
+          set +e
+          xcodebuild -project Snapreel.xcodeproj -scheme Snapreel -configuration Debug \
+            -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath build CODE_SIGNING_ALLOWED=NO ONLY_ACTIVE_ARCH=YES ARCHS=arm64 \
+            SWIFT_COMPILATION_MODE=wholemodule \
+            -IDEBuildingContinueBuildingAfterErrors=YES build > ci-out/build-sim.log 2>&1
+          STATUS=$?
+          set -e
+          grep -E "(error|fatal error):" ci-out/build-sim.log | sed -E 's#^/Users/runner/work/[^/]+/[^/]+/##' | sort -u > ci-out/errors.txt || true
+          grep -E "warning:" ci-out/build-sim.log | sed -E 's#^/Users/runner/work/[^/]+/[^/]+/##' | grep -v -E "appintents|deprecated" | sort -u > ci-out/warnings.txt || true
+          echo "### Simulator build: exit $STATUS, $(wc -l < ci-out/errors.txt) errors, $(wc -l < ci-out/warnings.txt) warnings" >> "$GITHUB_STEP_SUMMARY"
+          if [ "$STATUS" != "0" ]; then
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            head -150 ci-out/errors.txt >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            cat ci-out/errors.txt
+            tail -40 ci-out/build-sim.log
+            exit 1
+          fi
+          ls build/Build/Products/Debug-iphonesimulator/Snapreel.app/PlugIns/
+
+      - name: Simulator screenshots
+        if: ${{ inputs.screenshots }}
+        run: bash scripts/ci-screenshots.sh build/Build/Products/Debug-iphonesimulator/Snapreel.app ci-out/screenshots "${{ inputs.only }}"
+
+      # Reuses the team's existing distribution certificate and two App Store profiles made
+      # through the App Store Connect API, so a run never creates or revokes anything.
+      - name: Install signing certificate, profiles and API key
+        if: ${{ inputs.testflight }}
+        env:
+          DIST_CERT_P12_BASE64: ${{ secrets.DIST_CERT_P12_BASE64 }}
+          DIST_CERT_PASSWORD: ${{ secrets.DIST_CERT_PASSWORD }}
+          APPSTORE_PROFILE_BASE64: ${{ secrets.APPSTORE_PROFILE_BASE64 }}
+          BROADCAST_PROFILE_BASE64: ${{ secrets.BROADCAST_PROFILE_BASE64 }}
+          ASC_KEY_P8_BASE64: ${{ secrets.ASC_KEY_P8_BASE64 }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+        run: |
+          KEYCHAIN="$RUNNER_TEMP/signing.keychain-db"
+          KEYCHAIN_PASSWORD=$(uuidgen)
+          echo "$DIST_CERT_P12_BASE64" | base64 --decode > "$RUNNER_TEMP/dist.p12"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 3600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security import "$RUNNER_TEMP/dist.p12" -k "$KEYCHAIN" -P "$DIST_CERT_PASSWORD" -A -t cert -f pkcs12
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN" > /dev/null
+          security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | tr -d '"')
+          rm "$RUNNER_TEMP/dist.p12"
+          security find-identity -v -p codesigning "$KEYCHAIN"
+          for PAIR in "APPSTORE_PROFILE_BASE64" "BROADCAST_PROFILE_BASE64"; do
+            echo "${!PAIR}" | base64 --decode > "$RUNNER_TEMP/profile.mobileprovision"
+            security cms -D -i "$RUNNER_TEMP/profile.mobileprovision" > "$RUNNER_TEMP/profile.plist"
+            UUID=$(/usr/libexec/PlistBuddy -c "Print :UUID" "$RUNNER_TEMP/profile.plist")
+            NAME=$(/usr/libexec/PlistBuddy -c "Print :Name" "$RUNNER_TEMP/profile.plist")
+            echo "Installing profile $NAME ($UUID)"
+            /usr/libexec/PlistBuddy -c "Print :Entitlements" "$RUNNER_TEMP/profile.plist" | grep -A3 application-groups || true
+            for DIR in "$HOME/Library/MobileDevice/Provisioning Profiles" "$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles"; do
+              mkdir -p "$DIR"
+              cp "$RUNNER_TEMP/profile.mobileprovision" "$DIR/$UUID.mobileprovision"
+            done
+          done
+          echo "$ASC_KEY_P8_BASE64" | base64 --decode > "$RUNNER_TEMP/AuthKey_$ASC_KEY_ID.p8"
+          echo "KEYCHAIN=$KEYCHAIN" >> "$GITHUB_ENV"
+
+      - name: Archive (Release, distribution-signed)
+        if: ${{ inputs.testflight }}
+        run: |
+          set +e
+          xcodebuild -project Snapreel.xcodeproj -scheme Snapreel -configuration Release \
+            -destination 'generic/platform=iOS' -archivePath build/Snapreel.xcarchive \
+            OTHER_CODE_SIGN_FLAGS="--keychain $KEYCHAIN" \
+            CURRENT_PROJECT_VERSION="$BUILD_NUMBER" archive > ci-out/archive.log 2>&1
+          STATUS=$?
+          set -e
+          if [ "$STATUS" != "0" ]; then
+            grep -E "(error|fatal error):" ci-out/archive.log | sort -u | head -80
+            tail -60 ci-out/archive.log
+            exit 1
+          fi
+          codesign -d --entitlements :- build/Snapreel.xcarchive/Products/Applications/Snapreel.app 2>/dev/null | grep -A3 application-groups
+          codesign -d --entitlements :- build/Snapreel.xcarchive/Products/Applications/Snapreel.app/PlugIns/SnapreelBroadcast.appex 2>/dev/null | grep -A3 application-groups
+
+      - name: Export and upload to App Store Connect
+        if: ${{ inputs.testflight }}
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+        run: |
+          cat > "$RUNNER_TEMP/ExportOptions.plist" <<PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyLists/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key><string>app-store-connect</string>
+            <key>destination</key><string>upload</string>
+            <key>teamID</key><string>$TEAM_ID</string>
+            <key>signingStyle</key><string>manual</string>
+            <key>signingCertificate</key><string>iPhone Distribution</string>
+            <key>provisioningProfiles</key>
+            <dict>
+              <key>$BUNDLE_ID</key><string>$APP_PROFILE</string>
+              <key>$BROADCAST_BUNDLE_ID</key><string>$BROADCAST_PROFILE</string>
+            </dict>
+            <key>manageAppVersionAndBuildNumber</key><false/>
+            <key>uploadSymbols</key><true/>
+          </dict>
+          </plist>
+          PLIST
+          set +e
+          xcodebuild -exportArchive -archivePath build/Snapreel.xcarchive \
+            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" -exportPath build/export \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$RUNNER_TEMP/AuthKey_$ASC_KEY_ID.p8" \
+            -authenticationKeyID "$ASC_KEY_ID" -authenticationKeyIssuerID "$ASC_ISSUER_ID" > ci-out/export.log 2>&1
+          STATUS=$?
+          set -e
+          tail -30 ci-out/export.log
+          [ "$STATUS" = "0" ] || exit 1
+          echo "Uploaded build $BUILD_NUMBER of $BUNDLE_ID" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Remove signing material
+        if: always()
+        run: |
+          [ -n "${KEYCHAIN:-}" ] && security delete-keychain "$KEYCHAIN" || true
+          rm -f "$RUNNER_TEMP"/AuthKey_*.p8 "$RUNNER_TEMP"/profile.*
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: snapreel-ci
+          retention-days: 7
+          path: ci-out
+          if-no-files-found: ignore

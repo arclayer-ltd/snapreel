@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyLists/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
+	<key>NSCameraUsageDescription</key>
+	<string>Snapreel uses the camera only while you record a camera video. Recordings stay on this iPhone.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Snapreel uses the microphone to record your voice with camera, screen and audio recordings. Recordings stay on this iPhone.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Snapreel saves the recordings you choose to your Photos library.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Snapreel opens your library only when you choose a video to import.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Snapreel turns the speech in your recordings into a transcript on this iPhone, so you can search it and jump to any line.</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>audio</string>
+	</array>
+	<key>UIDesignRequiresCompatibility</key>
+	<true/>
+	<key>UILaunchScreen</key>
+	<dict>
+		<key>UIColorName</key>
+		<string>LaunchBackground</string>
+	</dict>
+	<key>UIStatusBarStyle</key>
+	<string>UIStatusBarStyleDefault</string>
+</dict>
+</plist>

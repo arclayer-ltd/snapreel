@@ -1,0 +1,21 @@
+# Xcode
+build/
+build-*/
+DerivedData/
+*.xcuserstate
+xcuserdata/
+*.xcscmblueprint
+# Secrets
+.env*
+*.p8
+*.p12
+*.mobileprovision
+# Reference material from other products stays local (public repo)
+refs/mobbin/
+refs/appstore/
+refs/compare/
+refs/frames/
+# CI downloads
+ci-out/
+.DS_Store
+Thumbs.db
