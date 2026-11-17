@@ -118,6 +118,8 @@ final class Library: ObservableObject {
             $0.title = trimmed
             $0.needsTitle = false
         }
+        // The recorder schedules a "still needs a title" reminder after each save.
+        Notifier.shared.cancelScheduled(key: "needs-title-\(id.uuidString)")
     }
 
     /// Deletes the video, its files, notes, reactions, transcript and feed rows that point at it.
@@ -137,6 +139,7 @@ final class Library: ObservableObject {
 
         videos.removeAll { $0.id == id }
         remove(Video.self, id: id.uuidString)
+        Notifier.shared.cancelScheduled(key: "needs-title-\(id.uuidString)")
     }
 
     func toggleWatchLater(_ id: UUID) {

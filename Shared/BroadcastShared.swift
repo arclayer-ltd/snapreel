@@ -51,7 +51,7 @@ public enum BroadcastStateStore {
 }
 
 /// A finished screen recording waiting in the inbox. Written next to the movie as
-/// `<id>.json`; the movie is `<id>.mp4`.
+/// `<id>.json`; the movie is named by `movieFileName` (the extension writes a fragmented `.mov`).
 public struct InboxRecording: Codable, Equatable {
     public var id: UUID
     public var movieFileName: String
