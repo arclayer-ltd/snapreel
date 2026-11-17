@@ -1,27 +1,619 @@
 import SwiftUI
+import UIKit
 
-/// Session C owns this file. Full-screen dark player with details, notes, transcript and
-/// reactions, presented by the shell while `router.player` is set and not minimised.
+/// Full-screen dark player, presented by the shell while `router.player` is set and not
+/// minimised. Video with its controls at the top; date, title and details below; the Notes /
+/// Transcript switch; reactions and the add-note button docked at the bottom. Playback lives in
+/// `PlaybackSession.shared`, so it carries on when the player is minimised.
 struct PlayerScreen: View {
     let presentation: PlayerPresentation
+    let initial: PlayerInitialState
+
     @EnvironmentObject private var library: Library
     @EnvironmentObject private var router: AppRouter
+    @EnvironmentObject private var settings: AppSettings
+    @ObservedObject private var session: PlaybackSession = .shared
+    @ObservedObject private var transcripts: TranscriptService = .shared
+
+    @State private var panel: PlayerPanel
+    @State private var showsDetails: Bool
+    @State private var isFullscreen: Bool
+    @State private var overlay: PlayerOverlay?
+    @State private var sheet: PlayerSheet?
+    @State private var followUp: PlayerFollowUp?
+    @State private var controlsVisible = true
+    @State private var controlsNudge = 0
+    @State private var bursts: [ReactionBurst]
+    @State private var showsPiPPlaceholder: Bool
+    @State private var showsResume = false
+    @State private var toast: ToastMessage?
+    @State private var shareTarget: Video?
+    @State private var photosTarget: Video?
+    @State private var hasStarted = false
+    @State private var fullscreenRotation: Double = 90
+
+    init(presentation: PlayerPresentation) {
+        self.init(presentation: presentation, initial: PlayerInitialState())
+    }
+
+    init(presentation: PlayerPresentation, initial: PlayerInitialState) {
+        self.presentation = presentation
+        self.initial = initial
+        _panel = State(initialValue: initial.panel)
+        _showsDetails = State(initialValue: initial.showsDetails)
+        _isFullscreen = State(initialValue: initial.isFullscreen)
+        _overlay = State(initialValue: initial.overlay)
+        _sheet = State(initialValue: initial.sheet)
+        _showsPiPPlaceholder = State(initialValue: initial.showsPictureInPicturePlaceholder)
+        let pinned: [ReactionBurst] = initial.pinnedBurst.map { [ReactionBurst(emoji: $0, isPinned: true)] } ?? []
+        _bursts = State(initialValue: pinned)
+    }
+
+    private var currentVideo: Video? { library.video(presentation.videoID) }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Space.m) {
+        ZStack {
+            Color.srInk.ignoresSafeArea()
+            if let video = currentVideo {
+                if isFullscreen {
+                    fullscreenLayout(video)
+                        .transition(.opacity)
+                } else {
+                    standardLayout(video)
+                        .transition(.opacity)
+                }
+            } else {
+                PlayerMissingView(onClose: { closePlayer() })
+            }
+        }
+        .preferredColorScheme(.dark)
+        .statusBar(hidden: isFullscreen)
+        .toast($toast, bottomInset: 120)
+        .sheet(item: $sheet, onDismiss: { runFollowUp() }) { item in
+            sheetContent(item)
+                .environmentObject(library)
+                .environmentObject(settings)
+                .environmentObject(router)
+                .preferredColorScheme(.dark)
+                .presentationDragIndicator(.visible)
+        }
+        .shareVideo($shareTarget)
+        .saveToPhotos($photosTarget, initialStage: initial.photosStage)
+        .onAppear { startIfNeeded() }
+        .onChange(of: presentation.token) { _ in restart() }
+        .onChange(of: currentVideo?.state.isReady ?? false) { ready in
+            if ready { start() }
+        }
+        .onChange(of: session.isPlaying) { playing in
+            if playing { withAnimation(Motion.quick) { showsResume = false } }
+        }
+        .task(id: autoHideKey) { await autoHideControls() }
+    }
+
+    // MARK: - Layouts
+
+    private func standardLayout(_ video: Video) -> some View {
+        GeometryReader { proxy in
+            VStack(spacing: 0) {
+                videoArea(video, fullscreen: false, insets: EdgeInsets())
+                    .frame(height: PlayerLayout.videoHeight(for: video, width: proxy.size.width,
+                                                            available: proxy.size.height))
+                    .background(Color.srInkDeep.ignoresSafeArea(edges: .top))
+                    .zIndex(1)
+                belowVideo(video)
+                ReactionDock(onReact: { react($0) },
+                             onMore: { openEmojiPicker() },
+                             onAddNote: { openComposer() })
+            }
+        }
+    }
+
+    private func fullscreenLayout(_ video: Video) -> some View {
+        GeometryReader { proxy in
+            let rotates = video.pixelWidth > video.pixelHeight
+            let width = rotates ? proxy.size.height : proxy.size.width
+            let height = rotates ? proxy.size.width : proxy.size.height
+            videoArea(video, fullscreen: true, insets: PlayerLayout.fullscreenInsets(rotated: rotates))
+                .frame(width: width, height: height)
+                .rotationEffect(.degrees(rotates ? fullscreenRotation : 0))
+                .position(x: proxy.size.width / 2, y: proxy.size.height / 2)
+        }
+        .ignoresSafeArea()
+        .background(Color.black.ignoresSafeArea())
+        .persistentSystemOverlays(.hidden)
+        .onAppear { UIDevice.current.beginGeneratingDeviceOrientationNotifications() }
+        .onDisappear { UIDevice.current.endGeneratingDeviceOrientationNotifications() }
+        .onReceive(NotificationCenter.default.publisher(for: UIDevice.orientationDidChangeNotification)) { _ in
+            updateRotation(animated: true)
+        }
+    }
+
+    private func videoArea(_ video: Video, fullscreen: Bool, insets: EdgeInsets) -> some View {
+        PlayerVideoArea(video: video,
+                        session: session,
+                        reactions: library.reactions(for: video.id),
+                        isFullscreen: fullscreen,
+                        controlInsets: insets,
+                        controlsVisible: $controlsVisible,
+                        overlay: $overlay,
+                        bursts: bursts,
+                        showsPictureInPicturePlaceholder: showsPiPPlaceholder || session.isPictureInPictureActive,
+                        rate: settings.playbackRate,
+                        actions: videoActions)
+    }
+
+    private func belowVideo(_ video: Video) -> some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                VStack(alignment: .leading, spacing: Space.l) {
+                    details(video)
+                    panelHeader
+                        .id(Self.panelAnchor)
+                    panelBody(video)
+                }
+                .padding(.horizontal, Space.gutter)
+                .padding(.top, Space.m)
+                .padding(.bottom, Space.xxxl)
+            }
+            .onAppear {
+                guard initial.scrollsToPanel else { return }
+                Task { @MainActor in
+                    try? await Task.sleep(nanoseconds: 300_000_000)
+                    proxy.scrollTo(Self.panelAnchor, anchor: .top)
+                }
+            }
+        }
+        .overlay(alignment: .bottom) { resumePill }
+    }
+
+    private static let panelAnchor = "player.panel"
+
+    private func details(_ video: Video) -> some View {
+        PlayerDetailsSection(video: video,
+                             folderName: video.folderID.flatMap { library.folder($0)?.name },
+                             noteCount: library.notes(for: video.id).count,
+                             reactionCount: library.reactions(for: video.id).count,
+                             transcript: library.transcript(for: video.id),
+                             isSummarizing: transcripts.summarizingIDs.contains(video.id),
+                             isExpanded: $showsDetails,
+                             onShare: { shareTarget = video },
+                             onMore: { sheet = .actions(confirmingDelete: false) },
+                             onEditTitle: { sheet = .title },
+                             onStats: { sheet = .stats })
+    }
+
+    private var panelHeader: some View {
+        HStack {
+            PillSwitch(options: PlayerPanel.allCases, selection: $panel, title: { $0.title })
+            Spacer(minLength: Space.xs)
+            if panel == .notes {
+                Button {
+                    openComposer()
+                } label: {
+                    Label("Add note", systemImage: "plus")
+                        .font(.srSubheadlineStrong)
+                        .foregroundStyle(Color.srRedGlow)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func panelBody(_ video: Video) -> some View {
+        switch panel {
+        case .notes:
+            NotesPanel(notes: library.notes(for: video.id),
+                       reactions: library.reactions(for: video.id),
+                       onSeek: { seekAndPlay($0) },
+                       onEdit: { sheet = .editNote($0.id) },
+                       onDelete: { deleteNote($0) },
+                       onDeleteReaction: { deleteReaction($0) },
+                       onAddNote: { openComposer() })
+        case .transcript:
+            TranscriptPanel(video: video,
+                            transcript: library.transcript(for: video.id),
+                            clock: session.clock,
+                            service: transcripts,
+                            phaseOverride: initial.transcriptPhase,
+                            onSeek: { seekAndPlay($0) },
+                            onRequest: { requestTranscript(video.id) },
+                            onCopy: { copyTranscript(video.id) })
+        }
+    }
+
+    @ViewBuilder private var resumePill: some View {
+        if showsResume {
+            HStack(spacing: 0) {
+                Button {
+                    Haptics.tap()
+                    session.play()
+                    withAnimation(Motion.quick) { showsResume = false }
+                } label: {
+                    Label("Keep watching", systemImage: "play.fill")
+                        .font(.srSubheadlineStrong)
+                        .foregroundStyle(Color.white)
+                        .padding(.leading, Space.m)
+                        .padding(.trailing, Space.s)
+                        .frame(height: 42)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                Rectangle().fill(Color.white.opacity(0.35)).frame(width: 1, height: 22)
+                Button {
+                    withAnimation(Motion.quick) { showsResume = false }
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(Color.white)
+                        .frame(width: 42, height: 42)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Stay paused")
+            }
+            .background(Capsule().fill(Color.srRed))
+            .shadow(color: Color.black.opacity(0.35), radius: 12, y: 4)
+            .padding(.bottom, Space.m)
+            .transition(.move(edge: .bottom).combined(with: .opacity))
+        }
+    }
+
+    // MARK: - Sheets
+
+    @ViewBuilder
+    private func sheetContent(_ item: PlayerSheet) -> some View {
+        switch item {
+        case .compose(let time):
+            NoteComposerSheet(mode: .new(time: time),
+                              onSave: { saveNewNote($0, at: time) },
+                              onCancel: { sheet = nil })
+                .presentationDetents([.height(210)])
+        case .editNote(let id):
+            if let note = library.notes.first(where: { $0.id == id }) {
+                NoteComposerSheet(mode: .edit(note),
+                                  onSave: { updateNote(id, text: $0) },
+                                  onDelete: { deleteNoteFromSheet(note) },
+                                  onCancel: { sheet = nil })
+                    .presentationDetents([.height(260)])
+            }
+        case .emoji:
+            EmojiPickerSheet(onPick: { pickEmoji($0) }, onClose: { sheet = nil })
+                .presentationDetents([.medium, .large])
+        case .actions(let confirming):
+            if let video = currentVideo {
+                PlayerActionsSheet(video: video, startsConfirmingDelete: confirming,
+                                  onChoose: { chooseAction($0) },
+                                  onClose: { sheet = nil })
+                    .presentationDetents([.height(560), .large])
+            }
+        case .title:
+            if let video = currentVideo {
+                TitleEditorSheet(initialTitle: video.title, heading: "Edit title", onDark: true,
+                                 onSave: { saveTitle($0) },
+                                 onCancel: { sheet = nil })
+                    .presentationDetents([.height(220)])
+            }
+        case .stats:
+            if let video = currentVideo {
+                PlayerStatsSheet(video: video, onClose: { sheet = nil })
+                    .presentationDetents([.large])
+            }
+        }
+    }
+
+    // MARK: - Starting
+
+    private func startIfNeeded() {
+        guard !hasStarted else { return }
+        hasStarted = true
+        start()
+        updateRotation(animated: false)
+        if initial.photosStage != nil, let video = currentVideo {
+            photosTarget = video
+        }
+    }
+
+    /// A new request arrived while the player is open (another video, or a time to jump to).
+    private func restart() {
+        overlay = nil
+        showsResume = false
+        controlsVisible = true
+        if isFullscreen { isFullscreen = false }
+        start()
+    }
+
+    private func start() {
+        guard let video = currentVideo else { return }
+        session.open(video, library: library,
+                     startAt: initial.position ?? presentation.startAt,
+                     token: presentation.token,
+                     autoplay: initial.autoplay,
+                     rate: settings.playbackRate)
+        TranscriptService.shared.reconcile(videoID: video.id, library: library)
+        TranscriptService.shared.summarizeIfPossible(videoID: video.id, library: library)
+    }
+
+    // MARK: - Video area
+
+    private var videoActions: PlayerVideoActions {
+        PlayerVideoActions(minimise: { minimise() },
+                           toggleFullscreen: { toggleFullscreen() },
+                           interacted: { controlsNudge += 1 },
+                           react: { react($0) },
+                           moreReactions: { openEmojiPicker() },
+                           chooseSpeed: { chooseSpeed($0) },
+                           pictureInPicture: { startPictureInPicture() },
+                           restoreFromPictureInPicture: { restoreFromPictureInPicture() },
+                           retrySave: { PendingImports.resumeInterruptedSaves(in: library) },
+                           deleteRecording: { sheet = .actions(confirmingDelete: true) })
+    }
+
+    private func minimise() {
+        overlay = nil
+        router.minimizePlayer()
+    }
+
+    private func closePlayer() {
+        session.close()
+        router.closePlayer()
+    }
+
+    private func toggleFullscreen() {
+        Haptics.tap()
+        overlay = nil
+        updateRotation(animated: false)
+        controlsVisible = true
+        withAnimation(Motion.standard) { isFullscreen.toggle() }
+    }
+
+    /// Landscape videos in full screen turn to match how the iPhone is held (the app itself
+    /// stays portrait).
+    private func updateRotation(animated: Bool) {
+        let next: Double
+        switch UIDevice.current.orientation {
+        case .landscapeLeft: next = 90
+        case .landscapeRight: next = -90
+        default: return
+        }
+        guard next != fullscreenRotation else { return }
+        if animated {
+            withAnimation(Motion.standard) { fullscreenRotation = next }
+        } else {
+            fullscreenRotation = next
+        }
+    }
+
+    private func chooseSpeed(_ rate: Double) {
+        Haptics.selection()
+        settings.playbackRate = rate
+        session.setRate(rate)
+        withAnimation(Motion.quick) { overlay = nil }
+        controlsNudge += 1
+    }
+
+    private func startPictureInPicture() {
+        overlay = nil
+        if !session.isPlaying { session.play() }
+        if !session.startPictureInPicture() {
+            toast = ToastMessage(text: "Picture in picture isn't available right now", systemImage: "pip")
+        }
+    }
+
+    private func restoreFromPictureInPicture() {
+        if session.isPictureInPictureActive { session.stopPictureInPicture() }
+        withAnimation(Motion.standard) { showsPiPPlaceholder = false }
+    }
+
+    private func seekAndPlay(_ time: Double) {
+        Haptics.tap()
+        session.seek(to: time)
+        session.play()
+        withAnimation(Motion.standard) { controlsVisible = true }
+        controlsNudge += 1
+    }
+
+    // MARK: - Auto-hiding controls
+
+    private struct AutoHideKey: Equatable {
+        var visible: Bool
+        var playing: Bool
+        var nudge: Int
+        var overlayOpen: Bool
+    }
+
+    private var autoHideKey: AutoHideKey {
+        AutoHideKey(visible: controlsVisible, playing: session.isPlaying, nudge: controlsNudge, overlayOpen: overlay != nil)
+    }
+
+    /// Controls fade three seconds after the last touch while playing (never with VoiceOver on).
+    private func autoHideControls() async {
+        guard controlsVisible, session.isPlaying, overlay == nil, !UIAccessibility.isVoiceOverRunning else { return }
+        try? await Task.sleep(nanoseconds: 3_000_000_000)
+        guard !Task.isCancelled, session.isPlaying, overlay == nil else { return }
+        withAnimation(Motion.standard) { controlsVisible = false }
+    }
+
+    // MARK: - Reactions
+
+    private func react(_ emoji: String) {
+        guard let video = currentVideo else { return }
+        let time = session.videoID == video.id ? session.clock.time : 0
+        library.addReaction(emoji, to: video.id, at: time)
+        EmojiRecents.record(emoji)
+        Haptics.firm()
+        let burst = ReactionBurst(emoji: emoji)
+        bursts.append(burst)
+        UIAccessibility.post(notification: .announcement,
+                             argument: "Reacted with \(EmojiCatalog.name(for: emoji)) at \(Format.stamp(time))")
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 1_600_000_000)
+            bursts.removeAll { $0.id == burst.id }
+        }
+    }
+
+    private func openEmojiPicker() {
+        overlay = nil
+        sheet = .emoji
+    }
+
+    private func pickEmoji(_ emoji: String) {
+        followUp = .react(emoji)
+        sheet = nil
+    }
+
+    private func deleteReaction(_ reaction: VideoReaction) {
+        library.deleteReaction(reaction.id)
+        Haptics.success()
+        toast = ToastMessage(text: "Reaction removed", systemImage: "face.dashed")
+    }
+
+    // MARK: - Notes
+
+    private func openComposer() {
+        guard currentVideo != nil else { return }
+        let wasPlaying = session.isPlaying
+        session.pause()
+        overlay = nil
+        withAnimation(Motion.quick) { showsResume = wasPlaying }
+        sheet = .compose(time: session.clock.time)
+    }
+
+    private func saveNewNote(_ text: String, at time: Double) {
+        guard let video = currentVideo else { return }
+        library.addNote(to: video.id, at: time, text: text)
+        withAnimation(Motion.standard) { panel = .notes }
+        sheet = nil
+        toast = ToastMessage(text: "Note added at \(Format.stamp(time))", systemImage: "note.text")
+    }
+
+    private func updateNote(_ id: UUID, text: String) {
+        library.updateNote(id, text: text)
+        sheet = nil
+        toast = ToastMessage(text: "Note saved", systemImage: "checkmark.circle.fill")
+    }
+
+    private func deleteNote(_ note: VideoNote) {
+        library.deleteNote(note.id)
+        Haptics.success()
+        toast = ToastMessage(text: "Note deleted", systemImage: "trash.fill")
+    }
+
+    private func deleteNoteFromSheet(_ note: VideoNote) {
+        sheet = nil
+        deleteNote(note)
+    }
+
+    // MARK: - Transcript
+
+    private func requestTranscript(_ videoID: UUID) {
+        Haptics.tap()
+        let library = self.library
+        Task { @MainActor in
+            await TranscriptService.shared.requestTranscript(videoID: videoID, library: library)
+        }
+    }
+
+    private func copyTranscript(_ videoID: UUID) {
+        guard let transcript = library.transcript(for: videoID) else { return }
+        UIPasteboard.general.string = transcript.segments.map(\.text).joined(separator: "\n")
+        Haptics.success()
+        toast = ToastMessage(text: "Transcript copied", systemImage: "doc.on.doc.fill")
+    }
+
+    // MARK: - Actions sheet
+
+    private func chooseAction(_ action: PlayerActionsSheet.Action) {
+        guard let video = currentVideo else { return }
+        switch action {
+        case .editTitle: followUp = .editTitle
+        case .saveToPhotos: followUp = .saveToPhotos
+        case .share: followUp = .share
+        case .stats: followUp = .stats
+        case .delete: followUp = .delete
+        case .toggleWatchLater:
+            library.toggleWatchLater(video.id)
+            let added = library.video(video.id)?.isInWatchLater ?? false
+            Haptics.success()
+            toast = ToastMessage(text: added ? "Added to Watch later" : "Removed from Watch later",
+                                 systemImage: added ? "clock.fill" : "clock")
+        }
+        sheet = nil
+    }
+
+    private func saveTitle(_ title: String) {
+        guard let video = currentVideo else { return }
+        library.rename(video.id, to: title)
+        sheet = nil
+        toast = ToastMessage(text: "Title saved", systemImage: "checkmark.circle.fill")
+    }
+
+    /// Runs what was chosen in a sheet once the sheet has gone.
+    private func runFollowUp() {
+        guard let action = followUp else { return }
+        followUp = nil
+        guard let video = currentVideo else { return }
+        switch action {
+        case .share: shareTarget = video
+        case .saveToPhotos: photosTarget = video
+        case .editTitle: present(.title)
+        case .stats: present(.stats)
+        case .delete: deleteRecording(video)
+        case .react(let emoji): react(emoji)
+        }
+    }
+
+    private func present(_ next: PlayerSheet) {
+        Task { @MainActor in sheet = next }
+    }
+
+    private func deleteRecording(_ video: Video) {
+        Haptics.success()
+        session.close()
+        router.closePlayer()
+        library.delete(video.id)
+        router.showToast("Recording deleted", systemImage: "trash.fill")
+    }
+}
+
+/// Sizes for the player layouts.
+enum PlayerLayout {
+    /// Landscape videos fill the width; portrait ones get a taller area (centred on a blurred
+    /// fill) capped so the details stay in view; audio gets a waveform panel.
+    static func videoHeight(for video: Video, width: CGFloat, available: CGFloat) -> CGFloat {
+        let maxHeight = max(200, available * 0.46)
+        if video.isAudioOnly { return min(width * 0.62, maxHeight) }
+        let aspect = CGFloat(video.pixelWidth) / CGFloat(max(1, video.pixelHeight))
+        let natural = width / max(aspect, 0.1)
+        return min(max(natural, width * 9 / 16), maxHeight)
+    }
+
+    /// Keeps controls clear of the notch and home indicator in full screen.
+    static func fullscreenInsets(rotated: Bool) -> EdgeInsets {
+        rotated
+            ? EdgeInsets(top: Space.xs, leading: 44, bottom: Space.s, trailing: 44)
+            : EdgeInsets(top: 50, leading: 0, bottom: 30, trailing: 0)
+    }
+}
+
+/// The video was deleted while the player was open.
+struct PlayerMissingView: View {
+    let onClose: @MainActor () -> Void
+
+    var body: some View {
+        VStack {
             HStack {
-                CircleIconButton(systemName: "chevron.down", label: "Minimise", tone: .dark) { router.minimizePlayer() }
+                CircleIconButton(systemName: "chevron.down", label: "Close player", tone: .dark) { onClose() }
                 Spacer()
-                CircleIconButton(systemName: "xmark", label: "Close", tone: .dark) { router.closePlayer() }
             }
-            if let video = library.video(presentation.videoID) {
-                VideoThumbnail(video: video)
-                Text(video.title).font(.srTitle3).foregroundStyle(Color.srOnDark)
-            }
+            .padding(.horizontal, Space.gutter)
+            .padding(.top, Space.xs)
+            Spacer()
+            EmptyStateView(systemImage: "film",
+                           title: "This recording isn't here any more",
+                           message: "It may have been deleted from your library.",
+                           onDark: true)
             Spacer()
         }
-        .padding(Space.gutter)
-        .background(Color.srInk.ignoresSafeArea())
-        .preferredColorScheme(.dark)
     }
 }
