@@ -33,6 +33,12 @@ There is no Mac. CI compiles only when the lead starts a run, after merging. So:
 - `ObservableObject` + `@Published`, `@StateObject`, `@EnvironmentObject`. `Library`, `AppSettings`,
   `AppRouter`, `Notifier`, `TranscriptService` are `@MainActor`.
 - Use `onChange(of:) { newValue in }` (single parameter).
+- Main-actor isolation is enforced (the first CI run failed on exactly this): a closure stored in a
+  struct or passed as a plain function type is nonisolated, so calling `Library`, `AppRouter`,
+  `AppSettings` or `Notifier` methods inside it is an error. Make such closure types
+  `@MainActor () -> Void`, or hop with `Task { @MainActor in … }`. Delegate callbacks from
+  AVFoundation/ReplayKit/Photos arrive on background queues: hop to the main actor before touching
+  them. Debug `configure` closures are already `@MainActor`.
 - Keep view bodies small: split long bodies into computed properties or subviews so the type
   checker doesn't time out ("unable to type-check this expression in reasonable time").
 - Prefer explicit types in complex expressions; avoid long chains of `+` on mixed types.
