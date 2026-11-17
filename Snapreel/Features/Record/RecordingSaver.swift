@@ -327,11 +327,11 @@ enum RecordingAudioMixer {
         writer.startSession(atSourceTime: .zero)
 
         let total = max(duration, 0.1)
+        let job = MixJob(reader: reader, writer: writer, videoOut: videoOut, videoIn: videoIn,
+                         audioOut: audioOut, audioIn: audioIn)
         return await withCheckedContinuation { (continuation: CheckedContinuation<Bool, Never>) in
             DispatchQueue.global(qos: .userInitiated).async {
-                let succeeded = RecordingAudioMixer.copyLoop(reader: reader, writer: writer,
-                                                             videoOut: videoOut, videoIn: videoIn,
-                                                             audioOut: audioOut, audioIn: audioIn) { seconds in
+                let succeeded = RecordingAudioMixer.copyLoop(job) { seconds in
                     let fraction = min(1, seconds / total)
                     Task { @MainActor in progress(fraction) }
                 }
@@ -340,12 +340,26 @@ enum RecordingAudioMixer {
         }
     }
 
+    /// The reader, writer and their tracks. Handed once to the copy loop, which is the only
+    /// code that touches them afterwards, so passing them across queues is safe.
+    private struct MixJob: @unchecked Sendable {
+        let reader: AVAssetReader
+        let writer: AVAssetWriter
+        let videoOut: AVAssetReaderOutput
+        let videoIn: AVAssetWriterInput
+        let audioOut: AVAssetReaderOutput
+        let audioIn: AVAssetWriterInput
+    }
+
     /// Feeds both inputs in turn until both sources run out. Runs on a background queue.
     /// Gives up if the writer fails or nothing moves for 15 seconds.
-    private static func copyLoop(reader: AVAssetReader, writer: AVAssetWriter,
-                                 videoOut: AVAssetReaderOutput, videoIn: AVAssetWriterInput,
-                                 audioOut: AVAssetReaderOutput, audioIn: AVAssetWriterInput,
-                                 report: (Double) -> Void) -> Bool {
+    private static func copyLoop(_ job: MixJob, report: (Double) -> Void) -> Bool {
+        let reader = job.reader
+        let writer = job.writer
+        let videoOut = job.videoOut
+        let videoIn = job.videoIn
+        let audioOut = job.audioOut
+        let audioIn = job.audioIn
         var videoDone = false
         var audioDone = false
         var idleSpins = 0
