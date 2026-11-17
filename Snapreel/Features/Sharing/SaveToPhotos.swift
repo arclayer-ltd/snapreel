@@ -161,7 +161,7 @@ struct SaveToPhotosModifier: ViewModifier {
         }
         show(.saving)
         UIAccessibility.post(notification: .announcement, argument: "Saving to Photos")
-        let fileName = ShareFile.fileName(for: video.title, pathExtension: source.pathExtension)
+        let fileName = ShareFileLink.fileName(for: video.title, pathExtension: source.pathExtension)
         let videoID = video.id
         let store = library
         Task { @MainActor in

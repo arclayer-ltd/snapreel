@@ -5,6 +5,7 @@ import UIKit
 // MARK: - .shareVideo
 
 /// `.shareVideo($video)`: presents the system share sheet with the recording's file.
+@MainActor
 struct ShareVideoModifier: ViewModifier {
     @Binding var video: Video?
 
@@ -32,7 +33,7 @@ struct ShareVideoModifier: ViewModifier {
             return
         }
         Haptics.tap()
-        let shared = ShareFile.prepare(source, title: current.title, root: library.media.root)
+        let shared = ShareFileLink.prepare(source, title: current.title, root: library.media.root)
         let item = ShareItemSource(fileURL: shared,
                                    title: current.title,
                                    thumbnailURL: library.thumbnailURL(for: current),
@@ -73,10 +74,11 @@ enum ShareSheetPresenter {
                         onDismiss: @escaping @MainActor () -> Void) {
         let controller = UIActivityViewController(activityItems: [item], applicationActivities: nil)
         controller.excludedActivityTypes = [.assignToContact, .addToReadingList, .print, .openInIBooks, .markupAsPDF]
-        let session = ShareSession(onComplete: onComplete, onDismiss: onDismiss)
+        let session = ShareSheetSession(onComplete: onComplete, onDismiss: onDismiss)
         controller.completionWithItemsHandler = { [weak controller] activity, completed, _, _ in
+            let presented: UIViewController? = controller
             Task { @MainActor in
-                session.handle(activity: activity, completed: completed, controller: controller)
+                session.handle(activity: activity, completed: completed, controller: presented)
             }
         }
         Task { @MainActor in
@@ -87,7 +89,7 @@ enum ShareSheetPresenter {
         }
     }
 
-    private static func presentWhenReady(_ controller: UIViewController, session: ShareSession) async {
+    private static func presentWhenReady(_ controller: UIViewController, session: ShareSheetSession) async {
         for _ in 0..<25 {
             if let top = topViewController(), !top.isBeingPresented, !top.isBeingDismissed,
                top.transitionCoordinator == nil, top.viewIfLoaded?.window != nil {
@@ -128,7 +130,7 @@ enum ShareSheetPresenter {
 
 /// Tracks one share sheet from presentation to dismissal.
 @MainActor
-final class ShareSession {
+final class ShareSheetSession {
     private let onComplete: @MainActor (UIActivity.ActivityType?) -> Void
     private let onDismiss: @MainActor () -> Void
     private var isFinished = false
@@ -147,7 +149,7 @@ final class ShareSession {
             return
         }
         // After an activity the sheet either closes by itself or stays open (AirDrop).
-        Task { @MainActor [weak controller] in
+        Task { @MainActor in
             try? await Task.sleep(nanoseconds: 700_000_000)
             if controller?.presentingViewController == nil { self.finish() }
         }
@@ -207,7 +209,7 @@ final class ShareItemSource: NSObject, UIActivityItemSource {
 /// Recordings are stored as "<id>.mp4". Before sharing, Snapreel makes a hard link named after
 /// the title ("Checkout flow walkthrough.mp4"), so whoever receives it sees a real name. A hard
 /// link takes no extra space and leaves the original untouched.
-enum ShareFile {
+enum ShareFileLink {
     static func directory(root: URL) -> URL {
         root.appendingPathComponent("Sharing", isDirectory: true)
     }

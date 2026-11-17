@@ -17,6 +17,7 @@ extension View {
     /// Presents the system share sheet with the recording's file (named after its title).
     /// A completed share calls `library.recordShare`; "Save Video" from the sheet calls
     /// `library.recordSavedToPhotos` instead.
+    @MainActor
     func shareVideo(_ video: Binding<Video?>) -> some View {
         modifier(ShareVideoModifier(video: video))
     }
@@ -24,6 +25,7 @@ extension View {
     /// Saves the recording to the Photos library: explains the add-only permission before the
     /// system prompt, shows progress, then "Saved to Photos" with Open Photos. Audio recordings
     /// get a clear message with "Share instead". Calls `library.recordSavedToPhotos` on success.
+    @MainActor
     func saveToPhotos(_ video: Binding<Video?>) -> some View {
         modifier(SaveToPhotosModifier(video: video, initialStage: nil))
     }
@@ -35,6 +37,7 @@ extension View {
     ///     .onAppear { if initialPhotosStage != nil { videoToSave = library.video(id) } }
     ///
     /// Passing nil behaves exactly like `saveToPhotos(_:)`.
+    @MainActor
     func saveToPhotos(_ video: Binding<Video?>, initialStage: PhotosSaveStage?) -> some View {
         modifier(SaveToPhotosModifier(video: video, initialStage: initialStage))
     }

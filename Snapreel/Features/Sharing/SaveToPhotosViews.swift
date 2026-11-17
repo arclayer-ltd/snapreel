@@ -4,11 +4,12 @@ import SwiftUI
 
 /// The small sheet for the save-to-Photos stages that ask something: the permission
 /// explanation, access off, audio-only and failures. Sized to its content.
+@MainActor
 struct PhotosQuestionSheet: View {
     let stage: PhotosSaveStage
     let video: Video
-    let onPrimary: () -> Void
-    let onSecondary: () -> Void
+    let onPrimary: @MainActor () -> Void
+    let onSecondary: @MainActor () -> Void
 
     @State private var contentHeight: CGFloat = 420
     @State private var bottomSafeArea: CGFloat = 0
@@ -85,7 +86,7 @@ struct PhotosQuestionSheet: View {
             }
             .buttonStyle(.srPrimary)
             if let secondary = copy.secondary {
-                Button(secondary, action: onSecondary)
+                Button(secondary) { onSecondary() }
                     .buttonStyle(.srTertiary)
                     .frame(height: 44)
             }
@@ -177,10 +178,11 @@ struct PhotosVideoChip: View {
 
 /// Floating card along the bottom edge: "Saving to Photos…" with a spinner, then
 /// "Saved to Photos" with Open Photos. Dark so it reads over light lists and the player alike.
+@MainActor
 struct PhotosStatusCard: View {
     let video: Video
     let isSaved: Bool
-    let onOpenPhotos: () -> Void
+    let onOpenPhotos: @MainActor () -> Void
 
     var body: some View {
         HStack(spacing: Space.s) {
@@ -223,7 +225,9 @@ struct PhotosStatusCard: View {
 
     @ViewBuilder private var trailing: some View {
         if isSaved {
-            Button(action: onOpenPhotos) {
+            Button {
+                onOpenPhotos()
+            } label: {
                 Text("Open Photos")
                     .font(.srSubheadlineStrong)
                     .foregroundStyle(Color.srInk)
