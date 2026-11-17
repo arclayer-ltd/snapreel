@@ -1,0 +1,471 @@
+{
+  "categories": [
+    { "id": "start", "title": "Getting started", "systemImage": "sparkles" },
+    { "id": "recording", "title": "Recording", "systemImage": "video.fill" },
+    { "id": "screen", "title": "Screen recording", "systemImage": "rectangle.inset.filled.on.rectangle" },
+    { "id": "library", "title": "Your library", "systemImage": "folder.fill" },
+    { "id": "watching", "title": "Watching", "systemImage": "play.rectangle.fill" },
+    { "id": "notes", "title": "Notes and reactions", "systemImage": "text.bubble.fill" },
+    { "id": "sharing", "title": "Sharing and saving", "systemImage": "square.and.arrow.up.fill" },
+    { "id": "privacy", "title": "Privacy and storage", "systemImage": "lock.fill" },
+    { "id": "trouble", "title": "Troubleshooting", "systemImage": "wrench.and.screwdriver.fill" }
+  ],
+  "articles": [
+    {
+      "id": "what-is-snapreel",
+      "category": "start",
+      "title": "What Snapreel is for",
+      "summary": "Record your screen, camera or voice and send the video to anyone.",
+      "body": [
+        { "type": "paragraph", "text": "Snapreel turns a quick recording into something you can send. Show a bug instead of describing it, talk someone through a document, or leave a message in your own voice." },
+        { "type": "heading", "text": "What you can record" },
+        { "type": "bullets", "items": [
+          "**Screen** – everything on your iPhone's screen, with your voice if you like.",
+          "**Camera** – you, or whatever is in front of you, with the front or back camera.",
+          "**Audio** – just your voice, with a live waveform while you talk."
+        ] },
+        { "type": "heading", "text": "No account, nothing to sign in to" },
+        { "type": "paragraph", "text": "Your recordings, notes and transcripts are kept on this iPhone. When you want someone to see a recording, you send the video file itself, the same way you'd send a photo." }
+      ],
+      "related": ["first-recording", "find-your-way", "privacy"]
+    },
+    {
+      "id": "first-recording",
+      "category": "start",
+      "title": "Make your first recording",
+      "summary": "From the red button to a video you can send, in five steps.",
+      "useCases": ["work", "personal"],
+      "body": [
+        { "type": "steps", "items": [
+          "Tap the red **Record** button in the middle of the tab bar.",
+          "Choose **Camera**, **Screen** or **Audio** at the bottom of the recorder.",
+          "Tap the big record button. A short countdown gives you a moment to get ready.",
+          "Tap stop when you're done. Your recording plays back so you can check it.",
+          "Give it a title, then tap **Share** to send it or **Done** to keep it in your library."
+        ] },
+        { "type": "tip", "text": "Changed your mind? **Delete** on the review screen removes the recording before it goes anywhere." }
+      ],
+      "related": ["camera-recording", "screen-start", "share"]
+    },
+    {
+      "id": "find-your-way",
+      "category": "start",
+      "title": "Find your way around",
+      "summary": "What each tab does, and where Settings lives.",
+      "body": [
+        { "type": "bullets", "items": [
+          "**Home** – your newest recordings, Watch later and what you watched recently.",
+          "**Library** – every recording, plus your folders.",
+          "**Record** – the red button opens the recorder.",
+          "**Notifications** – what Snapreel has done for you, such as saving a recording or finishing a transcript.",
+          "**Search** – find recordings by title, folder, tag or the words said in them."
+        ] },
+        { "type": "paragraph", "text": "The gear at the top of each tab opens Settings, with recording defaults, notifications, storage and this help centre." },
+        { "type": "tip", "text": "Want the quick tour again? Go to **Settings › Take the tour again**." }
+      ],
+      "related": ["what-is-snapreel", "watch-later-history"]
+    },
+    {
+      "id": "camera-recording",
+      "category": "recording",
+      "title": "Record with the camera",
+      "summary": "Flip cameras, pause, start over and keep your notes in view.",
+      "useCases": ["education"],
+      "body": [
+        { "type": "paragraph", "text": "Open the recorder and choose **Camera**. You'll see yourself in the viewfinder before anything is recorded." },
+        { "type": "bullets", "items": [
+          "**Flip** – the button at the bottom right swaps between the front and back camera.",
+          "**Countdown** – recording starts after a short countdown. Change its length, or turn it off, in recording settings.",
+          "**Pause** – pause and carry on as often as you like. It all ends up in one video.",
+          "**Restart** – throws the take away and begins a fresh one, after checking with you first."
+        ] },
+        { "type": "paragraph", "text": "When you stop, you'll see the recording before it's added to your library." }
+      ],
+      "related": ["recording-settings", "speaker-notes", "audio-recording"]
+    },
+    {
+      "id": "audio-recording",
+      "category": "recording",
+      "title": "Record just your voice",
+      "summary": "Audio recordings for when a picture isn't needed.",
+      "useCases": ["personal"],
+      "body": [
+        { "type": "paragraph", "text": "Choose **Audio** in the recorder to record sound only. A waveform moves with your voice, so you can see the microphone is hearing you." },
+        { "type": "paragraph", "text": "You can pause and carry on, just like a camera recording. Audio recordings sit in your library alongside your videos and play with their own artwork." },
+        { "type": "tip", "text": "The Photos app only holds photos and videos, so audio recordings can't be saved there. Use **Share** to send them instead." }
+      ],
+      "related": ["share", "transcripts"]
+    },
+    {
+      "id": "recording-settings",
+      "category": "recording",
+      "title": "Change quality, countdown and microphone",
+      "summary": "Choose how new recordings are made.",
+      "body": [
+        { "type": "paragraph", "text": "Tap the gear in the recorder, or go to **Settings › Recording**. Both change the same settings." },
+        { "type": "bullets", "items": [
+          "**Quality** – 720p makes the smallest files (about 40 MB a minute), 1080p looks sharp on any screen (about 90 MB a minute) and 4K is for the back camera when you want every detail (about 300 MB a minute).",
+          "**Microphone** – whether new recordings start with the microphone on.",
+          "**Countdown** – off, or 3, 5 or 10 seconds before recording starts.",
+          "**Camera** – which camera the recorder opens with, and whether the front camera is mirrored."
+        ] }
+      ],
+      "related": ["camera-recording", "storage"]
+    },
+    {
+      "id": "speaker-notes",
+      "category": "recording",
+      "title": "Keep notes in view while you record",
+      "summary": "Speaker notes sit over the camera but never appear in the video.",
+      "body": [
+        { "type": "steps", "items": [
+          "In the recorder, tap the pencil button at the top.",
+          "Type or paste what you want to say.",
+          "Turn on the option to show your notes while recording."
+        ] },
+        { "type": "paragraph", "text": "Your notes scroll over the viewfinder while you record, so you can glance at them without losing your place. They're only on your screen: the recording itself doesn't include them." }
+      ],
+      "related": ["camera-recording"]
+    },
+    {
+      "id": "import-video",
+      "category": "recording",
+      "title": "Bring in a video from Photos",
+      "summary": "Add a video you already have to your library.",
+      "body": [
+        { "type": "steps", "items": [
+          "Open the recorder and tap **Import** at the bottom left.",
+          "Choose a video.",
+          "Snapreel copies it into your library and lets you know when it's done."
+        ] },
+        { "type": "paragraph", "text": "Because you pick the video yourself, Snapreel doesn't need access to the rest of your photo library. The original stays in Photos, and the copy in Snapreel can be titled, sorted, transcribed and shared like any recording." }
+      ],
+      "related": ["folders", "transcripts"]
+    },
+    {
+      "id": "screen-start",
+      "category": "screen",
+      "title": "Start a screen recording",
+      "summary": "Record anything on your screen, in any app.",
+      "useCases": ["work", "education"],
+      "body": [
+        { "type": "paragraph", "text": "Screen recordings use the recording feature built into iOS, so they keep going when you leave Snapreel." },
+        { "type": "steps", "items": [
+          "Open the recorder and choose **Screen**.",
+          "Tap the record button. A list of apps that can record appears.",
+          "Choose **Snapreel**, and turn on the microphone if you'd like your voice included.",
+          "Tap **Start Broadcast**. After a three-second countdown, everything on your screen is recorded.",
+          "Go to the app you want to show."
+        ] },
+        { "type": "tip", "text": "Notifications that arrive while you record are recorded too. Turn on a Focus such as Do Not Disturb first if you'd rather they didn't appear." }
+      ],
+      "related": ["screen-stop", "screen-what-records", "screen-wont-start"]
+    },
+    {
+      "id": "screen-stop",
+      "category": "screen",
+      "title": "Stop a screen recording and find it",
+      "summary": "Two ways to stop, and where the recording goes.",
+      "body": [
+        { "type": "paragraph", "text": "While you record, a red indicator shows at the top of the screen. To stop:" },
+        { "type": "bullets", "items": [
+          "Tap the red indicator at the top of the screen, then tap **Stop**.",
+          "Or come back to Snapreel and tap the stop button."
+        ] },
+        { "type": "paragraph", "text": "Snapreel then saves the recording to your library. If you're in another app, a notification lets you know it's ready. Tap it to give the recording a title and send it." },
+        { "type": "tip", "text": "No notification? Just open Snapreel. Finished screen recordings are added to your library as soon as the app opens." }
+      ],
+      "related": ["screen-start", "rename", "no-notifications"]
+    },
+    {
+      "id": "screen-what-records",
+      "category": "screen",
+      "title": "What a screen recording includes",
+      "summary": "Know what's captured before you send it.",
+      "body": [
+        { "type": "bullets", "items": [
+          "Everything you see on the screen, including notifications and the keyboard as you type.",
+          "Sound from the apps you use, and your voice if the microphone was on."
+        ] },
+        { "type": "paragraph", "text": "Some apps protect what they show, such as films from streaming services. Those parts appear black in the recording." },
+        { "type": "paragraph", "text": "Watch the recording back before you send it. If something private slipped in, delete it and record again." }
+      ],
+      "related": ["screen-start", "mic-not-recorded"]
+    },
+    {
+      "id": "folders",
+      "category": "library",
+      "title": "Organise recordings into folders",
+      "summary": "Create folders, move recordings and tidy up.",
+      "body": [
+        { "type": "steps", "items": [
+          "Go to **Library** and choose **Folders**.",
+          "Tap **New folder** and give it a name.",
+          "To move a recording, tap **…** on it and choose **Move to folder**."
+        ] },
+        { "type": "paragraph", "text": "A recording lives in one folder at a time, or in none. Deleting a folder doesn't delete anything inside it: its recordings go back to **My videos**." }
+      ],
+      "related": ["tags-and-search", "rename"]
+    },
+    {
+      "id": "tags-and-search",
+      "category": "library",
+      "title": "Find anything with tags and search",
+      "summary": "Tags group recordings across folders; search looks everywhere.",
+      "body": [
+        { "type": "paragraph", "text": "Tap **…** on a recording and choose **Tags** to add words like *bug*, *feedback* or *lessons*. A recording can have as many tags as you like." },
+        { "type": "paragraph", "text": "The **Search** tab looks through titles, folder names, tags and the words spoken in your recordings. Tap a line that was said and the recording plays from that moment." },
+        { "type": "tip", "text": "Spoken words can only be found once a recording has a transcript." }
+      ],
+      "related": ["transcripts", "folders"]
+    },
+    {
+      "id": "rename",
+      "category": "library",
+      "title": "Rename a recording",
+      "summary": "Give recordings names you'll recognise later.",
+      "body": [
+        { "type": "paragraph", "text": "New recordings get a title with the date and time, such as *Screen recording – 18 Nov, 09:41*. To change it:" },
+        { "type": "bullets", "items": [
+          "Tap the title on the review screen straight after recording.",
+          "In your library, tap **…** on the recording and choose **Rename**.",
+          "While watching, open the recording's actions and choose **Edit title**."
+        ] },
+        { "type": "paragraph", "text": "If a recording still has its automatic title an hour later, Snapreel can send a gentle reminder. Turn it off in **Settings › Notifications** if you'd rather not." }
+      ],
+      "related": ["folders", "no-notifications"]
+    },
+    {
+      "id": "playback",
+      "category": "watching",
+      "title": "Playback controls",
+      "summary": "Skip, change speed, go full screen or keep watching while you browse.",
+      "body": [
+        { "type": "bullets", "items": [
+          "Tap the video to show or hide the controls.",
+          "Skip back or forward 5 seconds with the arrows either side of play.",
+          "Drag along the bar to jump to any moment.",
+          "Tap the speed button to watch at anything from 1x to 2x. Snapreel remembers your choice.",
+          "Use picture in picture to keep watching over other apps, or go full screen.",
+          "Tap the chevron to shrink the player into a bar and keep watching while you look around."
+        ] },
+        { "type": "paragraph", "text": "Snapreel remembers where you stopped and picks up from there next time." }
+      ],
+      "related": ["watch-later-history", "notes"]
+    },
+    {
+      "id": "watch-later-history",
+      "category": "watching",
+      "title": "Watch later and history",
+      "summary": "Save recordings for later and see what you've watched.",
+      "body": [
+        { "type": "paragraph", "text": "Tap **…** on any recording and choose **Watch later**. Your list is on **Home**." },
+        { "type": "paragraph", "text": "**History** on Home lists what you've watched, most recent first, with a bar showing how far you got." },
+        { "type": "paragraph", "text": "Swipe left on an entry to take it off either list. The recording itself stays in your library." }
+      ],
+      "related": ["playback", "find-your-way"]
+    },
+    {
+      "id": "transcripts",
+      "category": "watching",
+      "title": "Transcripts",
+      "summary": "Read, search and jump around a recording by what was said.",
+      "useCases": ["education"],
+      "body": [
+        { "type": "paragraph", "text": "Snapreel can turn the speech in a recording into a transcript, using speech recognition on this iPhone. The audio never leaves your device." },
+        { "type": "steps", "items": [
+          "Open a recording and switch to **Transcript**.",
+          "Tap **Make a transcript**. The first time, iOS asks whether Snapreel may use speech recognition.",
+          "When it's ready, tap any line to jump to that moment."
+        ] },
+        { "type": "paragraph", "text": "If your iPhone can't recognise a language on the device, Snapreel tells you rather than sending audio anywhere. Recordings without speech won't have a transcript." },
+        { "type": "paragraph", "text": "On iPhones with Apple Intelligence, a short summary of the transcript also appears in the recording's details." },
+        { "type": "tip", "text": "Once you've allowed speech recognition, new recordings are transcribed automatically and you're told when each one is ready." }
+      ],
+      "related": ["tags-and-search", "permissions"]
+    },
+    {
+      "id": "notes",
+      "category": "notes",
+      "title": "Add notes at a moment",
+      "summary": "Pin a thought to the exact second it matters.",
+      "useCases": ["work", "education"],
+      "body": [
+        { "type": "steps", "items": [
+          "While watching, tap **Add note**. Playback pauses at that moment.",
+          "Type your note and send it.",
+          "It appears under **Notes** with its time, such as *Note at 0:14*."
+        ] },
+        { "type": "paragraph", "text": "Tap a note's time to jump straight there. To change or delete a note, swipe it or use its menu." },
+        { "type": "paragraph", "text": "Notes are just for you. They stay with the recording on this iPhone and aren't part of the video file you send." }
+      ],
+      "related": ["reactions", "playback"]
+    },
+    {
+      "id": "reactions",
+      "category": "notes",
+      "title": "React with emoji",
+      "summary": "Mark the best moments with a quick emoji.",
+      "body": [
+        { "type": "paragraph", "text": "Tap an emoji in the bar under the video. It's added at that moment and shows on the timeline, so you can spot the highlights at a glance." },
+        { "type": "paragraph", "text": "The button at the end of the bar opens every emoji, with the ones you used recently at the top." },
+        { "type": "paragraph", "text": "Like notes, reactions are yours alone and aren't included in the video file you send." }
+      ],
+      "related": ["notes"]
+    },
+    {
+      "id": "share",
+      "category": "sharing",
+      "title": "Send a recording",
+      "summary": "Send the video file with AirDrop, Messages, Mail or any app.",
+      "useCases": ["work", "personal"],
+      "body": [
+        { "type": "steps", "items": [
+          "Open the recording, or tap **…** on it in your library.",
+          "Tap **Share**.",
+          "Choose AirDrop, Messages, Mail or another app."
+        ] },
+        { "type": "paragraph", "text": "You're sending the video file itself, so whoever gets it can watch it without Snapreel." },
+        { "type": "tip", "text": "Long recordings make big files. AirDrop is quickest for those, and some email services won't accept large attachments." }
+      ],
+      "related": ["save-to-photos", "storage"]
+    },
+    {
+      "id": "save-to-photos",
+      "category": "sharing",
+      "title": "Save a recording to Photos",
+      "summary": "Keep a copy in your Photos library.",
+      "useCases": ["personal"],
+      "body": [
+        { "type": "paragraph", "text": "Tap **Save to Photos** on the review screen or in a recording's actions. The first time, iOS asks whether Snapreel may add to your photos. Snapreel can only add: it can't see the rest of your library." },
+        { "type": "paragraph", "text": "The copy in Photos is separate from the one in Snapreel, so deleting one leaves the other." },
+        { "type": "tip", "text": "Audio recordings can't be saved to Photos. Use **Share** to send them to Files or another app." }
+      ],
+      "related": ["share", "permissions"]
+    },
+    {
+      "id": "privacy",
+      "category": "privacy",
+      "title": "Where your recordings are kept",
+      "summary": "On this iPhone, and nowhere else unless you send them.",
+      "body": [
+        { "type": "paragraph", "text": "Snapreel has no account and no servers. Recordings, titles, folders, tags, notes, reactions and transcripts are kept in Snapreel's own space on this iPhone, protected by iOS." },
+        { "type": "bullets", "items": [
+          "Nothing is uploaded, and Snapreel collects no analytics.",
+          "Transcripts are made on the device.",
+          "If you back up your iPhone to iCloud or a computer, Snapreel's data is part of that backup."
+        ] },
+        { "type": "paragraph", "text": "Deleting Snapreel deletes everything in it, so save or send anything you want to keep first." }
+      ],
+      "related": ["permissions", "storage"]
+    },
+    {
+      "id": "storage",
+      "category": "privacy",
+      "title": "Free up space",
+      "summary": "See what Snapreel uses and clear out old recordings.",
+      "body": [
+        { "type": "paragraph", "text": "Go to **Settings › Storage** to see how much space your recordings use and how much is left on this iPhone. Your largest recordings are listed, so you can delete what you no longer need." },
+        { "type": "paragraph", "text": "**Delete all my data** removes every recording, folder, note, reaction, transcript and notification from Snapreel in one go. Your settings stay. This can't be undone." },
+        { "type": "tip", "text": "Lower quality makes smaller files: 720p uses less than half the space of 1080p." }
+      ],
+      "related": ["iphone-full", "recording-settings"]
+    },
+    {
+      "id": "permissions",
+      "category": "privacy",
+      "title": "Permissions Snapreel asks for",
+      "summary": "What each permission is for, and how to change it.",
+      "body": [
+        { "type": "bullets", "items": [
+          "**Camera** – for camera recordings.",
+          "**Microphone** – for your voice in any recording.",
+          "**Photos** – only to add recordings you choose to save.",
+          "**Speech recognition** – for transcripts, made on this iPhone.",
+          "**Notifications** – to tell you about your recordings."
+        ] },
+        { "type": "paragraph", "text": "Snapreel asks for each one only when you first need it. To change your mind, open the Settings app, scroll down to **Snapreel** and switch them on or off." }
+      ],
+      "related": ["privacy", "mic-not-recorded"]
+    },
+    {
+      "id": "screen-wont-start",
+      "category": "trouble",
+      "title": "Screen recording won't start",
+      "summary": "What can stop a screen recording, and what to do.",
+      "body": [
+        { "type": "bullets", "items": [
+          "**Screen Time** – if screen recording is restricted, open the Settings app and go to Screen Time › Content & Privacy Restrictions › Content Restrictions › Screen Recording, then choose Allow.",
+          "**Mirroring or AirPlay** – stop showing your screen on a TV or Mac first.",
+          "**CarPlay** – screen recording isn't available while CarPlay is connected.",
+          "**A work or school iPhone** – your organisation may have turned screen recording off.",
+          "**Not enough space** – free some up and try again."
+        ] },
+        { "type": "paragraph", "text": "If none of these apply, restart your iPhone and try once more." }
+      ],
+      "related": ["screen-start", "iphone-full"]
+    },
+    {
+      "id": "mic-not-recorded",
+      "category": "trouble",
+      "title": "My voice isn't in the recording",
+      "summary": "Check the microphone before you start.",
+      "body": [
+        { "type": "bullets", "items": [
+          "**Screen recordings** – in the list where you chose Snapreel, the microphone button must be on (red) before you tap Start Broadcast.",
+          "**Permission** – open the Settings app, tap Snapreel and make sure Microphone is on.",
+          "**Recording settings** – check the microphone setting behind the gear in the recorder.",
+          "**Calls** – during a phone or video call, iOS may keep the microphone for the call."
+        ] }
+      ],
+      "related": ["screen-start", "permissions"]
+    },
+    {
+      "id": "iphone-full",
+      "category": "trouble",
+      "title": "My iPhone is full",
+      "summary": "What happens when space runs out, and how to make room.",
+      "body": [
+        { "type": "paragraph", "text": "Recordings need free space while they're being made. When your iPhone gets close to full, Snapreel warns you before you start and can notify you when space runs low." },
+        { "type": "paragraph", "text": "If space runs out mid-recording, Snapreel stops and keeps as much as it can. A recording that couldn't be finished stays in your library with a note saying how much room it needs." },
+        { "type": "steps", "items": [
+          "In Snapreel, go to **Settings › Storage** and delete recordings you no longer need.",
+          "In the Settings app, check General › iPhone Storage for other large apps and files.",
+          "Go back to the recording and tap **Try again**."
+        ] }
+      ],
+      "related": ["storage", "save-failed"]
+    },
+    {
+      "id": "save-failed",
+      "category": "trouble",
+      "title": "A recording couldn't be saved",
+      "summary": "Try again, or find out what went wrong.",
+      "body": [
+        { "type": "paragraph", "text": "Occasionally a recording can't be finished, for example if your iPhone ran out of space while saving. It stays in your library, marked as not saved." },
+        { "type": "bullets", "items": [
+          "Tap **Try again**.",
+          "If space is the problem, free some up first.",
+          "Tap **Delete** if you don't need it."
+        ] },
+        { "type": "paragraph", "text": "Recordings still saving when Snapreel closes carry on the next time you open it." }
+      ],
+      "related": ["iphone-full", "storage"]
+    },
+    {
+      "id": "no-notifications",
+      "category": "trouble",
+      "title": "I'm not getting notifications",
+      "summary": "Check Snapreel's settings and your iPhone's.",
+      "body": [
+        { "type": "steps", "items": [
+          "In Snapreel, go to **Settings › Notifications** and switch on the kinds you want.",
+          "If Snapreel says notifications are off for the app, use the button there to turn them on.",
+          "Check whether a Focus, such as Do Not Disturb or Sleep, is silencing them."
+        ] },
+        { "type": "paragraph", "text": "Everything Snapreel tells you also appears in the **Notifications** tab, even when alerts are off." }
+      ],
+      "related": ["permissions", "screen-stop"]
+    }
+  ]
+}
