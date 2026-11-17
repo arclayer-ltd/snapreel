@@ -92,7 +92,8 @@ while IFS="$TAB" read -r ID WAIT TITLE || [ -n "${ID:-}" ]; do
     sleep 0.5
   done
   [ "$(cat "$CONTAINER/Documents/debug-ready.txt" 2>/dev/null)" = "$ID" ] || echo "${ID}${TAB}${TITLE}${TAB}not ready after 30 s" >> "$OUT/../not-ready.txt"
-  sleep "$WAIT"
+  # Never shoot before the system's launch animation has finished.
+  sleep "$(python3 -c "print(max(1.2, float('$WAIT')))")"
   xcrun simctl io "$DEVICE" screenshot "$OUT/$ID.png" > /dev/null 2>&1
   sleep 0.5
   if [ "$(crash_count)" != "$BEFORE" ]; then
