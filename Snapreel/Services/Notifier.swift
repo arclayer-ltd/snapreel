@@ -60,6 +60,13 @@ final class Notifier {
         UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: [key])
     }
 
+    /// Removes every delivered alert and every scheduled reminder (Settings › Storage › Delete all my data).
+    func removeAll() {
+        let center = UNUserNotificationCenter.current()
+        center.removeAllPendingNotificationRequests()
+        center.removeAllDeliveredNotifications()
+    }
+
     func authorizationStatus() async -> UNAuthorizationStatus {
         await UNUserNotificationCenter.current().notificationSettings().authorizationStatus
     }

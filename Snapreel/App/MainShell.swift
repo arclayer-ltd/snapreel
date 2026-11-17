@@ -58,7 +58,7 @@ struct MainShell: View {
             }
         }
         .sheet(isPresented: $router.isSettingsPresented) {
-            SettingsView()
+            SettingsView(initialPath: router.settingsPath)
                 .environmentObject(library)
                 .environmentObject(settings)
                 .environmentObject(router)
@@ -207,7 +207,7 @@ private struct SettingsToolbarModifier: ViewModifier {
             ToolbarItem(placement: .navigationBarTrailing) {
                 Button {
                     Haptics.tap()
-                    router.isSettingsPresented = true
+                    router.openSettings()
                 } label: {
                     Image(systemName: "gearshape")
                         .font(.system(size: 17, weight: .semibold))

@@ -78,6 +78,8 @@ final class AppRouter: ObservableObject {
     @Published var recorder: RecorderLaunch?
     @Published var player: PlayerPresentation?
     @Published var isSettingsPresented = false
+    /// Pages pushed when Settings opens (empty = the root). Set through `openSettings(_:)`.
+    @Published var settingsPath: [SettingsPage] = []
     @Published var toast: ToastMessage?
 
     /// Selecting the Record tab opens the recorder instead of switching tabs.
@@ -131,6 +133,13 @@ final class AppRouter: ObservableObject {
         case .search: searchPath.append(route)
         case .record: break
         }
+    }
+
+    /// Opens the Settings sheet, optionally at a page: `router.openSettings(.storage)`.
+    func openSettings(_ page: SettingsPage? = nil) {
+        recorder = nil
+        settingsPath = page.map { [$0] } ?? []
+        isSettingsPresented = true
     }
 
     func showToast(_ text: String, systemImage: String = "checkmark.circle.fill") {

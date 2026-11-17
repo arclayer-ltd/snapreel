@@ -54,11 +54,18 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         let info = response.notification.request.content.userInfo
         let videoID = (info["videoID"] as? String).flatMap(UUID.init(uuidString:))
         let notificationID = (info["notificationID"] as? String).flatMap(UUID.init(uuidString:))
+        let broadcastID = (info["broadcastID"] as? String).flatMap(UUID.init(uuidString:))
+        let kind = info["kind"] as? String
         Task { @MainActor in
             let environment = AppEnvironment.shared
             if let notificationID { environment.library.markNotificationRead(notificationID) }
-            if let videoID, environment.library.video(videoID) != nil {
+            if let broadcastID {
+                // Posted by the broadcast extension before the video exists in the library.
+                PendingImports.openReviewFromNotification(broadcastID: broadcastID, library: environment.library)
+            } else if let videoID, environment.library.video(videoID) != nil {
                 environment.router.open(videoID: videoID)
+            } else if kind == NotificationKind.storageLow.rawValue {
+                environment.router.openSettings(.storage)
             } else {
                 environment.router.select(.notifications)
             }

@@ -147,32 +147,13 @@ final class LibraryActionsModel: ObservableObject {
                          systemImage: added ? "bookmark.fill" : "bookmark.slash.fill")
     }
 
-    /// Tries a failed save again: the row goes back to saving and the recorder's resume step
-    /// finishes it if the file is complete, or marks it failed again with the reason. If nothing
-    /// picks the row up, it goes back to its failed state rather than spinning for ever.
+    /// Tries a failed save again with the recorder's saver; the card shows progress and ends
+    /// as ready or failed again with the reason.
     func retry(_ id: UUID, library: Library, router: AppRouter) {
         guard let video = library.video(id), case .failed = video.state else { return }
-        let failedState = video.state
         Haptics.tap()
-        library.update(id) { $0.state = .saving(progress: 0) }
-        PendingImports.resumeInterruptedSaves(in: library)
-        guard let updated = library.video(id) else { return }
-        switch updated.state {
-        case .ready:
-            Haptics.success()
-            router.showToast("Saved to your library")
-        case .failed:
-            Haptics.error()
-            router.showToast("Still couldn't save it", systemImage: "exclamationmark.triangle.fill")
-        case .saving:
-            Task { @MainActor in
-                try? await Task.sleep(nanoseconds: 8_000_000_000)
-                guard let current = library.video(id), case .saving(let progress) = current.state, progress == 0 else { return }
-                library.update(id) { $0.state = failedState }
-                Haptics.error()
-                router.showToast("Couldn't try again right now", systemImage: "exclamationmark.triangle.fill")
-            }
-        }
+        RecordingSaver.shared.retry(video.id, library: library)
+        router.showToast("Trying again", systemImage: "arrow.clockwise")
     }
 }
 
