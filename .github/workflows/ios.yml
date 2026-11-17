@@ -22,7 +22,7 @@ on:
       runner:
         description: macOS runner image
         type: choice
-        options: [macos-26, macos-15, macos-latest]
+        options: [macos-26, macos-15, macos-15-intel, macos-latest]
         default: macos-26
 
 concurrency:
@@ -59,7 +59,7 @@ jobs:
           set +e
           xcodebuild -project Snapreel.xcodeproj -scheme Snapreel -configuration Debug \
             -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
-            -derivedDataPath build CODE_SIGNING_ALLOWED=NO ONLY_ACTIVE_ARCH=YES ARCHS=arm64 \
+            -derivedDataPath build CODE_SIGNING_ALLOWED=NO ONLY_ACTIVE_ARCH=YES ARCHS=$(uname -m) \
             SWIFT_COMPILATION_MODE=wholemodule \
             -IDEBuildingContinueBuildingAfterErrors=YES build > ci-out/build-sim.log 2>&1
           STATUS=$?
