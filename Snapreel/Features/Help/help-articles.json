@@ -77,7 +77,7 @@
           "**Flip** – the button at the bottom right swaps between the front and back camera.",
           "**Countdown** – recording starts after a short countdown. Change its length, or turn it off, in recording settings.",
           "**Pause** – pause and carry on as often as you like. It all ends up in one video.",
-          "**Start over** – throws the take away and begins a fresh one, after checking with you first."
+          "**Restart** – throws the take away and begins a fresh one, after checking with you first."
         ] },
         { "type": "paragraph", "text": "When you stop, you'll see the recording before it's added to your library." }
       ],
@@ -134,7 +134,7 @@
       "summary": "Add a video you already have to your library.",
       "body": [
         { "type": "steps", "items": [
-          "Open the recorder and tap the photo button at the bottom left.",
+          "Open the recorder and tap **Import** at the bottom left.",
           "Choose a video.",
           "Snapreel copies it into your library and lets you know when it's done."
         ] },
@@ -170,7 +170,7 @@
         { "type": "paragraph", "text": "While you record, a red indicator shows at the top of the screen. To stop:" },
         { "type": "bullets", "items": [
           "Tap the red indicator at the top of the screen, then tap **Stop**.",
-          "Or come back to Snapreel and tap **Stop**."
+          "Or come back to Snapreel and tap the stop button."
         ] },
         { "type": "paragraph", "text": "Snapreel then saves the recording to your library. If you're in another app, a notification lets you know it's ready. Tap it to give the recording a title and send it." },
         { "type": "tip", "text": "No notification? Just open Snapreel. Finished screen recordings are added to your library as soon as the app opens." }
@@ -213,7 +213,7 @@
       "title": "Find anything with tags and search",
       "summary": "Tags group recordings across folders; search looks everywhere.",
       "body": [
-        { "type": "paragraph", "text": "Tap **…** on a recording and choose **Edit tags** to add words like *bug*, *feedback* or *lessons*. A recording can have as many tags as you like." },
+        { "type": "paragraph", "text": "Tap **…** on a recording and choose **Tags** to add words like *bug*, *feedback* or *lessons*. A recording can have as many tags as you like." },
         { "type": "paragraph", "text": "The **Search** tab looks through titles, folder names, tags and the words spoken in your recordings. Tap a line that was said and the recording plays from that moment." },
         { "type": "tip", "text": "Spoken words can only be found once a recording has a transcript." }
       ],
@@ -228,7 +228,7 @@
         { "type": "paragraph", "text": "New recordings get a title with the date and time, such as *Screen recording – 18 Nov, 09:41*. To change it:" },
         { "type": "bullets", "items": [
           "Tap the title on the review screen straight after recording.",
-          "In your library, tap **…** on the recording and choose **Edit title**.",
+          "In your library, tap **…** on the recording and choose **Rename**.",
           "While watching, open the recording's actions and choose **Edit title**."
         ] },
         { "type": "paragraph", "text": "If a recording still has its automatic title an hour later, Snapreel can send a gentle reminder. Turn it off in **Settings › Notifications** if you'd rather not." }
@@ -431,7 +431,7 @@
         { "type": "steps", "items": [
           "In Snapreel, go to **Settings › Storage** and delete recordings you no longer need.",
           "In the Settings app, check General › iPhone Storage for other large apps and files.",
-          "Go back to the recording and tap **Retry**."
+          "Go back to the recording and tap **Try again**."
         ] }
       ],
       "related": ["storage", "save-failed"]
@@ -444,7 +444,7 @@
       "body": [
         { "type": "paragraph", "text": "Occasionally a recording can't be finished, for example if your iPhone ran out of space while saving. It stays in your library, marked as not saved." },
         { "type": "bullets", "items": [
-          "Tap **Retry** to try again.",
+          "Tap **Try again**.",
           "If space is the problem, free some up first.",
           "Tap **Delete** if you don't need it."
         ] },
