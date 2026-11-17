@@ -76,6 +76,7 @@ crash_count() { find "$REPORTS" -name "Snapreel*" 2>/dev/null | wc -l | tr -d ' 
 
 TAB=$'\t'
 : > "$OUT/../crashes.txt"
+: > "$OUT/../not-ready.txt"
 COUNT=0
 # "|| [ -n "$ID" ]" keeps the last line when the list has no trailing newline.
 while IFS="$TAB" read -r ID WAIT TITLE || [ -n "${ID:-}" ]; do
@@ -83,7 +84,14 @@ while IFS="$TAB" read -r ID WAIT TITLE || [ -n "${ID:-}" ]; do
   if [ -n "$ONLY" ] && [[ "$ID" != "$ONLY"* ]]; then ID=""; continue; fi
   xcrun simctl terminate "$DEVICE" "$BUNDLE" > /dev/null 2>&1 || true
   BEFORE=$(crash_count)
+  rm -f "$CONTAINER/Documents/debug-ready.txt"
   xcrun simctl launch "$DEVICE" "$BUNDLE" -screen "$ID" > /dev/null 2>&1
+  # Wait (up to 30 s) until the app reports the screen has appeared, then the screen's own delay.
+  for _ in $(seq 1 60); do
+    [ "$(cat "$CONTAINER/Documents/debug-ready.txt" 2>/dev/null)" = "$ID" ] && break
+    sleep 0.5
+  done
+  [ "$(cat "$CONTAINER/Documents/debug-ready.txt" 2>/dev/null)" = "$ID" ] || echo "${ID}${TAB}${TITLE}${TAB}not ready after 30 s" >> "$OUT/../not-ready.txt"
   sleep "$WAIT"
   xcrun simctl io "$DEVICE" screenshot "$OUT/$ID.png" > /dev/null 2>&1
   sleep 0.5

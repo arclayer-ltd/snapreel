@@ -56,6 +56,14 @@ enum DebugCatalog {
 
     static func screen(_ id: String) -> DebugScreen? { all.first { $0.id == id } }
 
+    /// Written when the requested debug screen has appeared; the screenshot script waits for it
+    /// before its per-screen delay, so slow simulator launches don't produce blank shots.
+    static func markReady(_ id: String) {
+        let url = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("debug-ready.txt")
+        try? id.write(to: url, atomically: true, encoding: .utf8)
+    }
+
     /// Written to Documents/debug-screens.tsv on `-dumpScreens`; the screenshot script reads it.
     static func writeList() {
         let lines = all.map { "\($0.id)\t\($0.wait)\t\($0.title)" }.joined(separator: "\n")
@@ -80,6 +88,7 @@ struct DebugHost: View {
     var body: some View {
         if let screen = DebugCatalog.screen(screenID) {
             screen.content()
+                .onAppear { DebugCatalog.markReady(screenID) }
         } else {
             VStack(spacing: Space.s) {
                 Text("No debug screen").font(.srTitle)
