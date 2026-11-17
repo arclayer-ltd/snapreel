@@ -22,8 +22,8 @@ enum CharacterClip: String, CaseIterable {
     /// edges disappear. Updated to the colour sampled from the encoded files.
     var background: Color {
         switch self {
-        case .welcome, .introRecord, .introLibrary, .introSend: return Color(hex: 0x16171E)
-        case .tour, .notify, .emptyLibrary, .emptyWatch: return Color(hex: 0xF3EEE6)
+        case .welcome, .introRecord, .introLibrary, .introSend: return Color(hex: 0x15151F)
+        case .tour, .notify, .emptyLibrary, .emptyWatch: return Color(hex: 0xEFE9E2)
         }
     }
 
