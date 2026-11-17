@@ -61,6 +61,23 @@ final class RecorderCameraEngine: NSObject, AVCaptureVideoDataOutputSampleBuffer
         }
     }
 
+    /// The recorder closed: stop, and let go of the camera, microphone and delegates so the
+    /// engine can be freed.
+    func shutDown() {
+        sessionQueue.async {
+            if self.session.isRunning { self.session.stopRunning() }
+            self.session.beginConfiguration()
+            for input in self.session.inputs { self.session.removeInput(input) }
+            for output in self.session.outputs { self.session.removeOutput(output) }
+            self.session.commitConfiguration()
+            self.videoOutput.setSampleBufferDelegate(nil, queue: nil)
+            self.audioOutput.setSampleBufferDelegate(nil, queue: nil)
+            self.cameraInput = nil
+            self.microphoneInput = nil
+            self.outputsAdded = false
+        }
+    }
+
     private func applyConfiguration(side: CameraSide, quality: RecordingQuality, mirrorsFront: Bool,
                                     microphone: Bool, keepPreset: Bool) -> RecorderCameraSetup {
         let position: AVCaptureDevice.Position = side == .front ? .front : .back

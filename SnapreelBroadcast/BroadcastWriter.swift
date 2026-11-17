@@ -241,7 +241,7 @@ final class BroadcastWriter {
     static func outputSize(width: Int, height: Int, quality: String?) -> (width: Int, height: Int) {
         let shorter = Double(min(width, height))
         let target: Double
-        switch quality {
+        switch quality ?? "" {
         case "720p": target = 720
         case "4K": target = shorter
         default: target = 1080

@@ -253,7 +253,7 @@ final class RecorderModel: ObservableObject {
         clockTask?.cancel()
         screenTask?.cancel()
         if stage.isCapturing { discardCapture() }
-        camera.stopRunning()
+        camera.shutDown()
         signalObservers = []
         UIApplication.shared.isIdleTimerDisabled = false
     }

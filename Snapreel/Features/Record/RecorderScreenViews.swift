@@ -263,9 +263,15 @@ struct BroadcastStepView: View {
                                message: settings.microphoneOnByDefault
                                 ? "Check Microphone is on in the next sheet so your voice is included."
                                 : "Leave Microphone off in the next sheet to record screen and app sound only.")
-                BroadcastPoint(systemImage: "lock.fill",
-                               title: "Stays on this iPhone",
-                               message: "Nothing is uploaded. You decide who gets the file.")
+                if DiskSpace.hasRoom(for: 300_000_000) {
+                    BroadcastPoint(systemImage: "lock.fill",
+                                   title: "Stays on this iPhone",
+                                   message: "Nothing is uploaded. You decide who gets the file.")
+                } else {
+                    BroadcastPoint(systemImage: "externaldrive.fill.badge.exclamationmark",
+                                   title: "Your iPhone is almost full",
+                                   message: "\(Format.bytes(DiskSpace.available)) left. Snapreel stops a recording before the space runs out and keeps what it has.")
+                }
             }
             Spacer(minLength: 0)
             HStack {
