@@ -51,13 +51,13 @@ def main():
     results = json.load(open(out_path, encoding="utf-8")) if os.path.exists(out_path) else {"rounds": {}}
     rnd = {"screens": {}, "flows": {}, "missingScreenshots": key.get("missing", [])}
     for sid, entry in key["screens"].items():
-        path = os.path.join(base, "screens", sid.replace(".", "_"), "verdict.json")
+        path = os.path.join(key["blind"], entry["dir"], "verdict.json")
         if not os.path.exists(path):
             rnd["screens"][sid] = {"pass": False, "error": "no verdict"}
             continue
         rnd["screens"][sid] = {"reference": entry["reference"], **judge(json.load(open(path, encoding="utf-8")), entry, "image")}
     for slug, entry in key["flows"].items():
-        path = os.path.join(base, "flows", slug, "verdict.json")
+        path = os.path.join(key["blind"], entry["dir"], "verdict.json")
         if not os.path.exists(path):
             rnd["flows"][slug] = {"pass": False, "error": "no verdict"}
             continue

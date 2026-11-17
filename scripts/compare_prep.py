@@ -1,6 +1,9 @@
 """Builds blind comparison folders for one round.
 
-Usage: python -I scripts/compare_prep.py <screenshots-dir> <round-number> [--only id1,id2]
+Usage: python -I scripts/compare_prep.py <screenshots-dir> <round-number> <blind-out-dir> [--only id1,id2]
+
+Judges only ever see <blind-out-dir> (a neutral folder outside the project) with folders p-NN
+(screens) and f-NN (flows); the mapping lives in refs/compare/round-<n>/key.json.
 
 For every screen pair (Snapreel debug id <-> Loom reference) it writes
   refs/compare/round-<n>/screens/<pair>/image-1.png, image-2.png   (random order, same size)
@@ -84,10 +87,19 @@ def strip(paths, height=812):
 
 
 def main():
-    shots, round_no = sys.argv[1], sys.argv[2]
+    shots, round_no, blind = sys.argv[1], sys.argv[2], sys.argv[3]
+    sys.path.insert(0, os.path.join(ROOT, "scripts"))
+    from plan_data import SCREENS
+    names = {}
+    for sid, group, owner, name, states, refs, note in SCREENS:
+        names[sid] = name
+        for st in states:
+            names[st] = name
     only = set(sys.argv[sys.argv.index("--only") + 1].split(",")) if "--only" in sys.argv else None
     base = os.path.join(ROOT, "refs", "compare", f"round-{round_no}")
-    key = {"screens": {}, "flows": {}, "missing": []}
+    key = {"blind": blind, "screens": {}, "flows": {}, "missing": []}
+    n_screen = 0
+    n_flow = 0
     rng = random.Random(f"snapreel-{round_no}")
     for sid, ref in PAIRS.items():
         if only and sid not in only:
@@ -96,13 +108,16 @@ def main():
         if not os.path.exists(mine):
             key["missing"].append(sid)
             continue
-        folder = os.path.join(base, "screens", sid.replace(".", "_"))
+        n_screen += 1
+        pair = f"p-{n_screen:02d}"
+        folder = os.path.join(blind, pair)
         os.makedirs(folder, exist_ok=True)
         order = [("snapreel", mine), ("reference", ref_path(ref))]
         rng.shuffle(order)
         for i, (who, path) in enumerate(order, 1):
             load(path).save(os.path.join(folder, f"image-{i}.png"))
-        key["screens"][sid] = {"reference": ref, "image-1": order[0][0], "image-2": order[1][0]}
+        key["screens"][sid] = {"dir": pair, "kind": names.get(sid, sid).lower(), "reference": ref,
+                               "image-1": order[0][0], "image-2": order[1][0]}
 
     index = json.load(open(os.path.join(ROOT, "refs", "index.json"), encoding="utf-8"))
     flows = json.load(open(os.path.join(ROOT, "refs", "mobbin", "flows.json"), encoding="utf-8"))
@@ -125,14 +140,17 @@ def main():
             key["missing"].append("flow " + slug + ": " + ",".join(m for _, m in pairs if not os.path.exists(os.path.join(shots, m + ".png"))))
             continue
         ref_paths = [os.path.join(ROOT, "refs", "mobbin", "screens", r["screen_id"] + ".png") for r, _ in pairs]
-        folder = os.path.join(base, "flows", slug)
+        n_flow += 1
+        pair = f"f-{n_flow:02d}"
+        folder = os.path.join(blind, pair)
         os.makedirs(folder, exist_ok=True)
         order = [("snapreel", mine_paths), ("reference", ref_paths)]
         rng.shuffle(order)
         for i, (who, paths) in enumerate(order, 1):
             strip(paths).save(os.path.join(folder, f"strip-{i}.png"))
-        key["flows"][slug] = {"steps": len(pairs), "strip-1": order[0][0], "strip-2": order[1][0],
-                              "droppedReferenceSteps": len(ref_steps) - len(pairs)}
+        kind = slug[3:].replace("-", " ")
+        key["flows"][slug] = {"dir": pair, "kind": kind, "steps": len(pairs), "strip-1": order[0][0],
+                              "strip-2": order[1][0], "droppedReferenceSteps": len(ref_steps) - len(pairs)}
     os.makedirs(base, exist_ok=True)
     json.dump(key, open(os.path.join(base, "key.json"), "w", encoding="utf-8"), indent=1)
     print(len(key["screens"]), "screen pairs,", len(key["flows"]), "flows; missing:", key["missing"])
