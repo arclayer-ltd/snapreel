@@ -119,7 +119,7 @@ struct VideoCard: View {
             CardPillButton(title: "Try again", systemImage: "arrow.clockwise", prominent: !outOfSpace) {
                 actions.retry(video.id, library: library, router: router)
             }
-            CardPillButton(title: "Delete", systemImage: "trash", prominent: false) {
+            CardPillButton(title: "Delete", systemImage: "trash", prominent: false, showsTitle: !outOfSpace) {
                 actions.requestDelete(video.id)
             }
             Spacer(minLength: 0)
@@ -248,6 +248,8 @@ private struct CardPillButton: View {
     let title: String
     let systemImage: String
     var prominent = false
+    /// Icon only when three pills share a narrow card.
+    var showsTitle = true
     let action: @MainActor () -> Void
 
     var body: some View {
@@ -258,17 +260,21 @@ private struct CardPillButton: View {
             HStack(spacing: 4) {
                 Image(systemName: systemImage)
                     .font(.system(size: 11, weight: .bold))
-                Text(title)
-                    .lineLimit(1)
+                if showsTitle {
+                    Text(title)
+                        .lineLimit(1)
+                        .fixedSize()
+                }
             }
             .font(.srCaption)
             .foregroundStyle(prominent ? Color.white : Color.srText)
-            .padding(.horizontal, Space.s)
+            .padding(.horizontal, showsTitle ? 10 : Space.s)
             .frame(height: 30)
             .background(Capsule().fill(prominent ? Color.srRed : Color.srFill))
             .contentShape(Capsule())
         }
         .buttonStyle(PressScaleStyle(scale: 0.95))
+        .accessibilityLabel(title)
     }
 }
 

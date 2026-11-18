@@ -63,7 +63,8 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
                 // Posted by the broadcast extension before the video exists in the library.
                 PendingImports.openReviewFromNotification(broadcastID: broadcastID, library: environment.library)
             } else if let videoID, environment.library.video(videoID) != nil {
-                environment.router.open(videoID: videoID)
+                environment.router.open(videoID: videoID,
+                                        opensTranscript: kind == NotificationKind.transcriptReady.rawValue)
             } else if kind == NotificationKind.storageLow.rawValue {
                 environment.router.openSettings(.storage)
             } else {

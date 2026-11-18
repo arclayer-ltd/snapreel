@@ -19,3 +19,4 @@ refs/frames/
 ci-out/
 .DS_Store
 Thumbs.db
+__pycache__/

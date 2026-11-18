@@ -374,7 +374,7 @@ struct LibraryActionsSheet: View {
                 row("Try saving again", systemImage: "arrow.clockwise", value: nil) { onAction(.retry) }
                 Divider().padding(.leading, 44)
             }
-            row("Rename", systemImage: "pencil", value: nil) { onAction(.rename) }
+            row("Edit title", systemImage: "pencil", value: nil) { onAction(.rename) }
             Divider().padding(.leading, 44)
             row("Move to folder", systemImage: "folder", value: folderName(video)) { onAction(.move) }
             Divider().padding(.leading, 44)
@@ -508,7 +508,7 @@ struct LibraryVideoMenu: View {
         Button {
             actions.open(.rename(video.id))
         } label: {
-            Label("Rename", systemImage: "pencil")
+            Label("Edit title", systemImage: "pencil")
         }
         Button {
             actions.open(.move(video.id))

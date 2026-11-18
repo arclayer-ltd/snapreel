@@ -83,16 +83,21 @@ if [ ! -f "$LIST" ]; then
   echo "App did not write debug-screens.tsv" | tee "$OUT/../screenshots-missing.txt"
   exit 1
 fi
-# Screens that raise a real system prompt go last: iOS keeps an unanswered prompt on screen
-# across relaunches, so anything shot after it would sit under the alert.
+# Screens that raise a real system prompt go last, each on a fresh install: iOS keeps an
+# unanswered prompt on screen across relaunches, so anything shot after it would sit under it.
+# The app marks them "prompt" in the fourth column; the tour's prompt is listed here by id.
 SYSTEM_PROMPT_IDS="start.tour.permission"
 python3 - "$LIST" "$OUT/../debug-screens.tsv" "$SYSTEM_PROMPT_IDS" <<'PY'
 import sys
-src, dst, last = sys.argv[1], sys.argv[2], set(sys.argv[3].split())
-lines = [l.rstrip("\n") for l in open(src, encoding="utf-8") if l.strip()]
-first = [l for l in lines if l.split("\t")[0] not in last]
-tail = [l for l in lines if l.split("\t")[0] in last]
-open(dst, "w", encoding="utf-8").write("\n".join(first + tail) + "\n")
+src, dst, named = sys.argv[1], sys.argv[2], set(sys.argv[3].split())
+rows = [l.rstrip("\n").split("\t") for l in open(src, encoding="utf-8") if l.strip()]
+rows = [r + ["-"] * (4 - len(r)) for r in rows]
+for r in rows:
+    if r[0] in named:
+        r[3] = "prompt"
+first = [r for r in rows if r[3] != "prompt"]
+last = [r for r in rows if r[3] == "prompt"]
+open(dst, "w", encoding="utf-8").write("\n".join("\t".join(r) for r in first + last) + "\n")
 PY
 xcrun simctl terminate "$DEVICE" "$BUNDLE" > /dev/null 2>&1 || true
 
@@ -109,19 +114,33 @@ TAB=$'\t'
 : > "$OUT/../not-ready.txt"
 COUNT=0
 # "|| [ -n "$ID" ]" keeps the last line when the list has no trailing newline.
-while IFS="$TAB" read -r ID WAIT TITLE || [ -n "${ID:-}" ]; do
+is_ready() { [ "$(cat "$CONTAINER/Documents/debug-ready.txt" 2>/dev/null)" = "$1" ]; }
+wait_ready() {
+  for _ in $(seq 1 60); do is_ready "$1" && return 0; sleep 0.5; done
+  return 1
+}
+
+while IFS="$TAB" read -r ID WAIT TITLE FLAG || [ -n "${ID:-}" ]; do
   [ -z "$ID" ] && continue
   if [ -n "$ONLY" ] && [[ "$ID" != "$ONLY"* ]]; then ID=""; continue; fi
   xcrun simctl terminate "$DEVICE" "$BUNDLE" > /dev/null 2>&1 || true
+  if [ "${FLAG:-}" = "prompt" ]; then
+    # Fresh install: no earlier prompt on screen and no permission already decided.
+    xcrun simctl uninstall "$DEVICE" "$BUNDLE" > /dev/null 2>&1 || true
+    xcrun simctl install "$DEVICE" "$APP"
+    xcrun simctl privacy "$DEVICE" reset all "$BUNDLE" > /dev/null 2>&1 || true
+    CONTAINER=$(xcrun simctl get_app_container "$DEVICE" "$BUNDLE" data 2>/dev/null)
+  fi
   BEFORE=$(crash_count)
   rm -f "$CONTAINER/Documents/debug-ready.txt"
   xcrun simctl launch "$DEVICE" "$BUNDLE" -screen "$ID" > /dev/null 2>&1
-  # Wait (up to 30 s) until the app reports the screen has appeared, then the screen's own delay.
-  for _ in $(seq 1 60); do
-    [ "$(cat "$CONTAINER/Documents/debug-ready.txt" 2>/dev/null)" = "$ID" ] && break
-    sleep 0.5
-  done
-  [ "$(cat "$CONTAINER/Documents/debug-ready.txt" 2>/dev/null)" = "$ID" ] || echo "${ID}${TAB}${TITLE}${TAB}not ready after 30 s" >> "$OUT/../not-ready.txt"
+  # Wait (up to 30 s) until the app reports the screen has appeared, then the screen's own
+  # delay. A launch that never reports ready gets one more try before it is recorded.
+  if ! wait_ready "$ID"; then
+    xcrun simctl terminate "$DEVICE" "$BUNDLE" > /dev/null 2>&1 || true
+    xcrun simctl launch "$DEVICE" "$BUNDLE" -screen "$ID" > /dev/null 2>&1
+    wait_ready "$ID" || echo "${ID}${TAB}${TITLE}${TAB}not ready after two launches" >> "$OUT/../not-ready.txt"
+  fi
   # Never shoot before the system's launch animation has finished.
   sleep "$(python3 -c "print(max(1.2, float('$WAIT')))")"
   xcrun simctl io "$DEVICE" screenshot "$OUT/$ID.png" > /dev/null 2>&1

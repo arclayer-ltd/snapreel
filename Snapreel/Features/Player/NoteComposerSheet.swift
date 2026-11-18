@@ -26,7 +26,12 @@ struct NoteComposerSheet: View {
         self.onDelete = onDelete
         self.onCancel = onCancel
         switch mode {
-        case .new: _text = State(initialValue: "")
+        case .new:
+            var draft = ""
+            #if DEBUG
+            draft = NoteComposerDebug.draft ?? ""
+            #endif
+            _text = State(initialValue: draft)
         case .edit(let note): _text = State(initialValue: note.text)
         }
     }
@@ -143,3 +148,10 @@ struct NoteComposerSheet: View {
         onSave(trimmed)
     }
 }
+
+#if DEBUG
+/// Lets a debug entry open the composer with text already typed.
+enum NoteComposerDebug {
+    @MainActor static var draft: String? = nil
+}
+#endif

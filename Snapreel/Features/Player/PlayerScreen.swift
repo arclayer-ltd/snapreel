@@ -33,7 +33,13 @@ struct PlayerScreen: View {
     @State private var fullscreenRotation: Double = 90
 
     init(presentation: PlayerPresentation) {
-        self.init(presentation: presentation, initial: PlayerInitialState())
+        var initial = PlayerInitialState()
+        if presentation.opensTranscript {
+            // From a "transcript ready" notification: land on what it announced.
+            initial.panel = .transcript
+            initial.scrollsToPanel = true
+        }
+        self.init(presentation: presentation, initial: initial)
     }
 
     init(presentation: PlayerPresentation, initial: PlayerInitialState) {
@@ -179,7 +185,9 @@ struct PlayerScreen: View {
                              onShare: { shareTarget = video },
                              onMore: { sheet = .actions(confirmingDelete: false) },
                              onEditTitle: { sheet = .title },
-                             onStats: { sheet = .stats })
+                             onStats: { sheet = .stats },
+                             onSaveToPhotos: { photosTarget = video },
+                             onToggleWatchLater: { chooseAction(.toggleWatchLater) })
     }
 
     private var panelHeader: some View {

@@ -16,6 +16,14 @@ extension DebugCatalog {
                 InboxSettingsDebugHost { NotificationSettingsView(permission: .denied) }
             },
 
+            DebugScreen("settings.notifications.edited", "Notification settings [a kind switched off]") {
+                InboxSettingsDebugHost {
+                    InboxDebug.switchedOff(.importFinished) { NotificationSettingsView(permission: .granted) }
+                }
+            },
+            DebugScreen("settings.storage.end", "Storage [delete all my data]", wait: 4, settle: .scroll(1)) {
+                InboxSettingsDebugHost { StorageView() }
+            },
             DebugScreen("settings.storage", "Storage") {
                 InboxSettingsDebugHost { StorageView() }
             },
@@ -54,6 +62,16 @@ extension DebugCatalog {
 /// A Settings navigation stack with `content` already pushed, as it looks when opened from
 /// Settings (back button, inline title).
 @MainActor
+/// Builders for the inbox debug entries.
+@MainActor
+enum InboxDebug {
+    /// Switches one notification kind off first, as if the person had just flipped its toggle.
+    static func switchedOff<Content: View>(_ kind: NotificationKind, _ content: () -> Content) -> Content {
+        AppEnvironment.shared.settings.setNotification(kind, enabled: false)
+        return content()
+    }
+}
+
 struct InboxSettingsDebugHost<Content: View>: View {
     private let content: @MainActor () -> Content
     @State private var path: [Int] = [1]

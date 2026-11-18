@@ -147,7 +147,7 @@ struct LibraryView: View {
             Button {
                 folderEditor = .rename(folder.id)
             } label: {
-                Label("Rename", systemImage: "pencil")
+                Label("Edit title", systemImage: "pencil")
             }
             Button(role: .destructive) {
                 folderToDelete = folder

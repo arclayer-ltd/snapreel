@@ -58,14 +58,42 @@ struct ScreenTutorialView: View {
                 }
             }
             .tabViewStyle(.page(indexDisplayMode: .never))
-            dots
-            Button(model.tutorialPage == tutorialCards.count - 1 ? "Got it" : "Skip") {
-                model.finishTutorial()
-            }
-            .font(.srSubheadlineStrong)
-            .foregroundStyle(Color.srOnDarkSecondary)
-            .padding(.bottom, Space.m)
+            controls
         }
+    }
+
+    private var isLastCard: Bool { model.tutorialPage >= tutorialCards.count - 1 }
+
+    /// Page dots, Skip, and a labelled Next / Got it.
+    private var controls: some View {
+        HStack {
+            dots
+            Spacer()
+            if !isLastCard {
+                Button("Skip") { model.finishTutorial() }
+                    .font(.srSubheadlineStrong)
+                    .foregroundStyle(Color.srOnDarkSecondary)
+                    .padding(.trailing, Space.s)
+            }
+            Button {
+                if isLastCard {
+                    model.finishTutorial()
+                } else {
+                    Haptics.selection()
+                    withAnimation(Motion.standard) { model.tutorialPage += 1 }
+                }
+            } label: {
+                HStack(spacing: 6) {
+                    Text(isLastCard ? "Got it" : "Next")
+                    Image(systemName: isLastCard ? "checkmark" : "arrow.right")
+                        .font(.system(size: 13, weight: .bold))
+                }
+            }
+            .buttonStyle(.srPrimaryCompact)
+        }
+        .padding(.horizontal, Space.l)
+        .padding(.bottom, Space.m)
+        .animation(Motion.quick, value: isLastCard)
     }
 
     private func page(_ card: TutorialCard) -> some View {
@@ -131,14 +159,15 @@ private struct StartSketch: View {
             Image(systemName: "record.circle")
                 .font(.system(size: 26, weight: .regular))
                 .foregroundStyle(Color.white.opacity(0.85))
-            HStack(spacing: 8) {
-                Image("BrandMark").resizable().scaledToFit().frame(width: 20, height: 20)
+            HStack(spacing: 6) {
+                Image("BrandMark").resizable().scaledToFit().frame(width: 18, height: 18)
                     .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
                 Text("Snapreel").font(.system(size: 12, weight: .semibold)).foregroundStyle(.white)
-                Spacer()
+                    .lineLimit(1).fixedSize()
+                Spacer(minLength: 2)
                 Image(systemName: "checkmark").font(.system(size: 11, weight: .bold)).foregroundStyle(Color.srRed)
             }
-            .padding(.horizontal, 10)
+            .padding(.horizontal, 8)
             .frame(height: 32)
             .background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(Color.white.opacity(0.08)))
             Capsule().fill(Color.srRed).frame(height: 26)
@@ -152,8 +181,8 @@ private struct StartSketch: View {
                 Spacer()
             }
         }
-        .padding(12)
-        .frame(width: 134)
+        .padding(10)
+        .frame(width: 140)
         .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color.srInkControl))
         .padding(.top, 36)
     }

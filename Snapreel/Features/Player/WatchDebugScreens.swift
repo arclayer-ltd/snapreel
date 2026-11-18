@@ -99,6 +99,39 @@ extension DebugCatalog {
                     $0.pinnedBurst = "🔥"
                 }
             },
+            watchPreparedPlayer("video.note.compose.typed", "Note composer [typed]", checkout,
+                                prepare: { _ in
+                                    NoteComposerDebug.draft = "Apple Pay sits below the fold on smaller phones."
+                                }) { _ in
+                watchState {
+                    $0.position = 14
+                    $0.sheet = .compose(time: 14)
+                }
+            },
+            watchPreparedPlayer("video.notes.added", "Notes tab [note just added]", checkout,
+                                prepare: { library in
+                                    _ = library.addNote(to: checkout, at: 14,
+                                                        text: "Apple Pay sits below the fold on smaller phones.")
+                                }) { _ in
+                watchState {
+                    $0.position = 14
+                    $0.scrollsToPanel = true
+                }
+            },
+            watchPreparedPlayer("video.reaction.sent", "Reaction overlay [sent]", checkout,
+                                prepare: { library in _ = library.addReaction("🔥", to: checkout, at: 4) }) { _ in
+                watchState {
+                    $0.position = 4
+                    $0.pinnedBurst = "🔥"
+                }
+            },
+            watchPreparedPlayer("video.speed.changed", "Player [speed changed]", checkout,
+                                prepare: { _ in AppEnvironment.shared.settings.playbackRate = 1.5 }) { _ in
+                watchState { $0.position = 4 }
+            },
+            watchPlayer("video.photos.alert", "Save to Photos [system prompt]", checkout, wait: 4) { _ in
+                watchState { $0.position = 4 }
+            }.settling(.photosPrompt),
             watchPlayer("video.emoji", "Emoji picker", checkout) { _ in
                 watchState {
                     $0.position = 4

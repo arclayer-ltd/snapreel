@@ -126,10 +126,13 @@ struct RecordingSavingView: View {
                 Text("Snapreel needs about \(Format.bytes(needed)) free to save this recording. It's kept safe until then. Free up some space, then try again.")
                     .font(.srCallout)
                     .foregroundStyle(Color.srOnDarkSecondary)
-                Text("Free now: \(Format.bytes(DiskSpace.available))")
-                    .font(.srFootnote)
-                    .foregroundStyle(Color.srOnDarkTertiary)
-                    .padding(.top, Space.xxs)
+                // Shown when it explains the problem (always, on a phone that is really full).
+                if DiskSpace.available < needed {
+                    Text("Free now: \(Format.bytes(DiskSpace.available))")
+                        .font(.srFootnote)
+                        .foregroundStyle(Color.srOnDarkTertiary)
+                        .padding(.top, Space.xxs)
+                }
             }
             .multilineTextAlignment(.center)
             .fixedSize(horizontal: false, vertical: true)

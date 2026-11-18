@@ -25,6 +25,20 @@ extension DebugCatalog {
                     $0.microphonePermission = .notDetermined
                 }
             },
+            DebugScreen("rec.primer.mic", "Permission primer [microphone prompt]", wait: 4,
+                        settle: .microphonePrompt) {
+                RecordDebug.recorder(.camera) {
+                    $0.cameraPermission = .notDetermined
+                    $0.microphonePermission = .notDetermined
+                }
+            },
+            DebugScreen("rec.primer.camera", "Permission primer [camera prompt]", wait: 4,
+                        settle: .cameraPrompt) {
+                RecordDebug.recorder(.camera) {
+                    $0.cameraPermission = .notDetermined
+                    $0.microphonePermission = .notDetermined
+                }
+            },
             DebugScreen("rec.primer.denied", "Permission primer [denied]") {
                 RecordDebug.recorder(.camera) {
                     $0.cameraPermission = .denied
@@ -116,6 +130,10 @@ extension DebugCatalog {
             DebugScreen("rec.broadcast", "Broadcast step") {
                 RecordDebug.recorder(.screen) { $0.showsTutorial = false }
             },
+            DebugScreen("rec.broadcast.picker", "Broadcast step [system sheet]", wait: 4,
+                        settle: .broadcastPicker) {
+                RecordDebug.recorder(.screen) { $0.showsTutorial = false }
+            },
             DebugScreen("rec.broadcast.unavailable", "Broadcast step [unavailable]") {
                 RecordDebug.recorder(.screen) {
                     $0.showsTutorial = false
@@ -149,6 +167,19 @@ extension DebugCatalog {
                 RecordDebug.recorder(.screen) {
                     $0.stage = .review(id)
                     $0.reviewPanel = .title
+                }
+            },
+            DebugScreen("rec.title.typed", "Title editor [typed]", wait: 4) {
+                RecordDebug.titled(id) {
+                    RecordDebug.recorder(.screen) {
+                        $0.stage = .review(id)
+                        $0.reviewPanel = .title
+                    }
+                }
+            },
+            DebugScreen("rec.review.titled", "Review after recording [titled]") {
+                RecordDebug.titled(id) {
+                    RecordDebug.recorder(.screen) { $0.stage = .review(id) }
                 }
             },
             DebugScreen("rec.share", "Share sheet", wait: 4) {
@@ -206,6 +237,12 @@ enum RecordDebug {
         Next: test on older iPhones, then ship on Thursday.
         """
         settings.showsSpeakerNotes = true
+        return content()
+    }
+
+    /// The untitled fixture recording after its person has typed a title.
+    static func titled<Content: View>(_ id: UUID, _ content: () -> Content) -> Content {
+        AppEnvironment.shared.library.rename(id, to: "Coupon bug on the staging checkout")
         return content()
     }
 

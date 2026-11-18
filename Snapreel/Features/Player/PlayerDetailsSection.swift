@@ -14,12 +14,15 @@ struct PlayerDetailsSection: View {
     let onMore: @MainActor () -> Void
     let onEditTitle: @MainActor () -> Void
     let onStats: @MainActor () -> Void
+    var onSaveToPhotos: (@MainActor () -> Void)? = nil
+    var onToggleWatchLater: (@MainActor () -> Void)? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: Space.s) {
             dateLine
             titleRow
             if video.needsTitle { titleHint }
+            quickActions
             metaRow
             if isExpanded {
                 PlayerFactsCard(video: video, folderName: folderName, transcript: transcript,
@@ -53,6 +56,23 @@ struct PlayerDetailsSection: View {
             }
             CircleIconButton(systemName: "ellipsis", label: "More actions", tone: .dark, size: 36) {
                 onMore()
+            }
+        }
+    }
+
+    /// The everyday actions in reach without opening the menu.
+    private var quickActions: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: Space.xs) {
+                QuickActionChip(title: "Edit title", systemImage: "pencil") { onEditTitle() }
+                if let onSaveToPhotos, video.kind != .audio {
+                    QuickActionChip(title: "Save to Photos", systemImage: "square.and.arrow.down") { onSaveToPhotos() }
+                }
+                if let onToggleWatchLater {
+                    QuickActionChip(title: video.isInWatchLater ? "In Watch later" : "Watch later",
+                                    systemImage: video.isInWatchLater ? "clock.fill" : "clock",
+                                    isOn: video.isInWatchLater) { onToggleWatchLater() }
+                }
             }
         }
     }
@@ -291,5 +311,38 @@ private struct PlayerSummaryPending: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: Radius.l, style: .continuous).fill(Color.srInkRaised))
         .accessibilityElement(children: .combine)
+    }
+}
+
+/// A small rounded action under the title.
+private struct QuickActionChip: View {
+    let title: String
+    let systemImage: String
+    var isOn = false
+    let action: @MainActor () -> Void
+
+    var body: some View {
+        Button {
+            Haptics.tap()
+            action()
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(isOn ? Color.srRedGlow : Color.srOnDark)
+                Text(title)
+                    .lineLimit(1)
+                    .fixedSize()
+            }
+            .font(.srSubheadlineStrong)
+            .foregroundStyle(Color.srOnDark)
+            .padding(.horizontal, 12)
+            .frame(height: 34)
+            .background(Capsule().fill(Color.white.opacity(0.09)))
+            .overlay(Capsule().strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
+            .contentShape(Capsule())
+        }
+        .buttonStyle(PressScaleStyle(scale: 0.95))
+        .accessibilityAddTraits(isOn ? .isSelected : [])
     }
 }

@@ -39,6 +39,12 @@ extension DebugCatalog {
             DebugScreen("help.home", "Help centre") {
                 SettingsDebugHost(path: [.help], useCase: .work)
             },
+            DebugScreen("help.home.expanded", "Help centre [category opened]", wait: 4, settle: .scroll(0.2)) {
+                HelpDebug.opening(["recording"]) { SettingsDebugHost(path: [.help]) }
+            },
+            DebugScreen("help.home.end", "Help centre [end of list]", wait: 4, settle: .scroll(1)) {
+                SettingsDebugHost(path: [.help])
+            },
             DebugScreen("help.article", "Help article") {
                 SettingsDebugHost(path: [.help, .helpArticle("screen-start")])
             },
@@ -69,6 +75,15 @@ extension DebugCatalog {
             TourDebug.requestsPermission = requestsPermission
             AppEnvironment.shared.settings.hasCompletedTour = false
         }
+    }
+}
+
+/// Opens help categories for a debug entry.
+@MainActor
+enum HelpDebug {
+    static func opening<Content: View>(_ categories: Set<String>, _ content: () -> Content) -> Content {
+        HelpCenterDebug.expanded = categories
+        return content()
     }
 }
 

@@ -218,7 +218,7 @@ struct PlayerControlsOverlay: View {
             if mode == .full { speedPill }
             Spacer(minLength: Space.xs)
             if mode == .full {
-                if PlaybackSession.isPictureInPictureSupported && !isAudio {
+                if PlaybackSession.showsPictureInPictureButton && !isAudio {
                     CircleIconButton(systemName: "pip.enter", label: "Picture in picture", tone: .glass, size: 38) {
                         actions.pictureInPicture()
                     }

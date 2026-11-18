@@ -786,13 +786,13 @@
     "start.use.selected",
     "start.tour.intro",
     "start.tour.1",
-    "start.tour.2",
-    "start.tour.3",
-    "start.tour.permission",
+    null,
     "start.tour.4",
+    "start.tour.permission",
+    null,
     "home.empty"
    ],
-   "note": "Loom steps 5-12 are account sign-up and email verification (server-only)."
+   "note": "Loom steps 5-12 are account sign-up and email verification (server-only). Step 17 explains view and reaction alerts from other people (server-only). Snapreel's tour covers Record before the notification step because the brief has the tour end on the notification prompt, so Loom's closing Record step (20) has no counterpart at that point; Snapreel's Library and Record steps are not in the strip."
   },
   "03-home": {
    "snapreel": [
@@ -804,27 +804,27 @@
    "snapreel": [
     "home.empty",
     "rec.primer",
-    "rec.primer",
-    "rec.primer",
+    "rec.primer.camera",
+    "rec.primer.mic",
     "rec.screen.tutorial.1",
     "rec.screen.tutorial.2",
     "rec.screen.tutorial.3",
-    "rec.broadcast",
+    "rec.broadcast.picker",
     "rec.broadcast.unavailable",
     "rec.screen.recording",
     null,
-    "rec.screen.recording",
-    "rec.screen.recording",
+    null,
+    null,
     "rec.review",
-    "rec.review",
+    null,
     "rec.title",
-    "rec.title",
-    "rec.review",
+    "rec.title.typed",
+    "rec.review.titled",
     "rec.share",
     null,
     "home.filled"
    ],
-   "note": "Step 11 is the content being recorded (another app); step 20 is Loom's link-copied toast (server-only). System permission alerts and the system broadcast sheet are iOS UI over Snapreel's primer and broadcast step."
+   "note": "Snapreel asks for the camera before the microphone (Loom: microphone first), so steps 3-4 pair each system prompt in Snapreel's own order. Step 11 is the app being recorded; step 12 is the system sheet mid-broadcast; step 13 is a system notification banner; step 15 repeats the review paused; step 20 is the link-copied toast (server-only)."
   },
   "05-video-detail": {
    "snapreel": [
@@ -838,15 +838,15 @@
    "snapreel": [
     "video.player",
     "video.reaction",
-    "video.reaction"
+    "video.reaction.sent"
    ]
   },
   "07-commenting-on-the-video": {
    "snapreel": [
     "video.notes",
     "video.note.compose",
-    "video.note.compose",
-    "video.notes",
+    "video.note.compose.typed",
+    "video.notes.added",
     "home.filled"
    ]
   },
@@ -854,7 +854,7 @@
    "snapreel": [
     "video.player",
     "video.speed",
-    "video.player"
+    "video.speed.changed"
    ]
   },
   "10-picture-in-picture-mode": {
@@ -867,22 +867,23 @@
    "snapreel": [
     "video.player",
     "video.actions",
-    "video.photos.permission",
+    "video.photos.alert",
     "video.photos.saved"
    ]
   },
   "14-library": {
    "snapreel": [
     "lib.videos",
-    "lib.videos",
+    "lib.videos.end",
     "lib.folders"
    ]
   },
   "15-notifications": {
    "snapreel": [
     "notif.feed",
-    "notif.feed"
-   ]
+    "video.transcript"
+   ],
+   "note": "Step 2: tapping a transcript notification opens that recording on its Transcript tab."
   },
   "16-search": {
    "snapreel": [
@@ -906,16 +907,17 @@
    "snapreel": [
     "settings.root",
     "help.home",
-    "help.home",
-    "help.home",
-    "help.home"
-   ]
+    null,
+    "help.home.expanded",
+    "help.home.end"
+   ],
+   "note": "Step 3 is a loading spinner while articles download (server-only); Snapreel's articles are bundled."
   },
   "20-editing-notification-settings": {
    "snapreel": [
     "settings.root",
     "settings.notifications",
-    "settings.notifications",
+    "settings.notifications.edited",
     null
    ],
    "note": "Step 4 is a network error banner (server-only)."
@@ -947,7 +949,7 @@
   "26-deleting-account": {
    "snapreel": [
     "settings.storage",
-    "settings.storage",
+    "settings.storage.end",
     "settings.storage.confirm",
     null,
     "settings.storage.done"

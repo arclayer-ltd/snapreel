@@ -116,7 +116,7 @@ def main():
         rng.shuffle(order)
         for i, (who, path) in enumerate(order, 1):
             load(path).save(os.path.join(folder, f"image-{i}.png"))
-        key["screens"][sid] = {"dir": pair, "kind": names.get(sid, sid).lower(), "reference": ref,
+        key["screens"][sid] = {"dir": pair, "kind": names.get(sid, sid).split(" (")[0].split(" [")[0].lower(), "reference": ref,
                                "image-1": order[0][0], "image-2": order[1][0]}
 
     index = json.load(open(os.path.join(ROOT, "refs", "index.json"), encoding="utf-8"))

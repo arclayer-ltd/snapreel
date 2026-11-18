@@ -31,6 +31,9 @@ extension DebugCatalog {
             .shell("lib.videos", "My videos", tab: .library, configure: { _, _ in
                 BrowseIntent.shared.libraryTab = .videos
             }),
+            .shell("lib.videos.end", "My videos [scrolled to the end]", tab: .library, configure: { _, _ in
+                BrowseIntent.shared.libraryTab = .videos
+            }).settling(.scroll(1)),
             .shell("lib.videos.empty", "My videos [empty]", tab: .library, fixture: .empty, configure: { _, _ in
                 BrowseIntent.shared.libraryTab = .videos
             }),

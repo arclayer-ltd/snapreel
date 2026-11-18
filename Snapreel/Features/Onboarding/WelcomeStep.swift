@@ -15,10 +15,12 @@ struct WelcomeStep: View {
 
     var body: some View {
         GeometryReader { proxy in
+            // The characters and the promise read as one block; the button stays at the bottom.
             VStack(spacing: 0) {
-                character(in: proxy.size)
                 Spacer(minLength: Space.s)
+                character(in: proxy.size)
                 copy
+                    .padding(.top, Space.m)
                 Spacer(minLength: Space.l)
                 actions
             }

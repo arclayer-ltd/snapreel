@@ -118,10 +118,12 @@ struct IntroSlidePage: View {
 
     var body: some View {
         GeometryReader { proxy in
+            // Art and words sit together as one block in the middle of the page.
             VStack(spacing: 0) {
+                Spacer(minLength: 0)
                 character(in: proxy.size)
-                Spacer(minLength: Space.s)
                 text
+                    .padding(.top, Space.s)
                 Spacer(minLength: Space.m)
             }
         }
@@ -130,10 +132,10 @@ struct IntroSlidePage: View {
     /// Square clips keep their people in the middle 72%, so the box is shorter than the clip
     /// and the faded edges spill over the page.
     private func character(in size: CGSize) -> some View {
-        let share: CGFloat = typeSize.isAccessibilitySize ? 0.4 : 0.64
+        let share: CGFloat = typeSize.isAccessibilitySize ? 0.4 : 0.7
         let side = min(size.width * 1.06, size.height * share)
         return OnboardingCharacter(clip: slide.clip, width: side)
-            .frame(width: size.width, height: side * 0.86)
+            .frame(width: size.width, height: side * 0.8)
             .scaleEffect(isActive || reduceMotion ? 1 : 0.92)
             .opacity(isActive ? 1 : 0.55)
             .animation(reduceMotion ? nil : Motion.standard, value: isActive)

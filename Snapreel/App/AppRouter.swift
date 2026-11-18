@@ -62,6 +62,8 @@ struct PlayerPresentation: Equatable {
     var videoID: UUID
     var startAt: Double?
     var isMinimized = false
+    /// Opens on the Transcript tab (from a "transcript ready" notification).
+    var opensTranscript = false
     /// Changes each time `play` is called so the player can react to a new request for the same video.
     var token = UUID()
 }
@@ -105,9 +107,9 @@ final class AppRouter: ObservableObject {
         recorder = RecorderLaunch(mode: mode, startsWithImport: startsWithImport)
     }
 
-    func play(_ videoID: UUID, at time: Double? = nil) {
+    func play(_ videoID: UUID, at time: Double? = nil, opensTranscript: Bool = false) {
         withAnimation(Motion.standard) {
-            player = PlayerPresentation(videoID: videoID, startAt: time)
+            player = PlayerPresentation(videoID: videoID, startAt: time, opensTranscript: opensTranscript)
         }
     }
 
@@ -147,9 +149,9 @@ final class AppRouter: ObservableObject {
     }
 
     /// Notification tap or deep link: open the video.
-    func open(videoID: UUID) {
+    func open(videoID: UUID, opensTranscript: Bool = false) {
         recorder = nil
         isSettingsPresented = false
-        play(videoID)
+        play(videoID, opensTranscript: opensTranscript)
     }
 }

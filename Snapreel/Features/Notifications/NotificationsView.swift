@@ -261,7 +261,7 @@ struct NotificationsView: View {
         if item.kind == .needsTitle && video.needsTitle {
             titleTarget = video
         } else if video.state.isReady {
-            router.play(id)
+            router.play(id, opensTranscript: item.kind == .transcriptReady)
         } else {
             // Still saving or failed: the library shows its progress and the retry button.
             router.select(.library)

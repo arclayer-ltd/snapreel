@@ -14,7 +14,11 @@ struct HelpCenterView: View {
 
     init(initialQuery: String = "", expandedCategories: Set<String> = []) {
         _query = State(initialValue: initialQuery)
-        _expanded = State(initialValue: expandedCategories)
+        var opened = expandedCategories
+        #if DEBUG
+        if let debugOpened = HelpCenterDebug.expanded { opened = debugOpened }
+        #endif
+        _expanded = State(initialValue: opened)
     }
 
     private var trimmedQuery: String { query.trimmingCharacters(in: .whitespacesAndNewlines) }
@@ -248,6 +252,13 @@ struct HelpCenterView: View {
         }
     }
 }
+
+#if DEBUG
+/// Lets a debug entry open the help centre with categories already opened up.
+enum HelpCenterDebug {
+    @MainActor static var expanded: Set<String>? = nil
+}
+#endif
 
 /// One article in a list: title, optional category and summary, chevron.
 struct HelpArticleRow: View {

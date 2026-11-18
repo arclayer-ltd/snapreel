@@ -49,6 +49,15 @@ final class PlaybackSession: ObservableObject {
         AVPictureInPictureController.isPictureInPictureSupported()
     }
 
+    /// Whether the player shows its picture-in-picture button. The simulator has no PiP, so
+    /// debug screenshots draw the button as an iPhone does (tapping it there does nothing).
+    static var showsPictureInPictureButton: Bool {
+        #if DEBUG
+        if AppEnvironment.shared.debugScreenID != nil { return true }
+        #endif
+        return isPictureInPictureSupported
+    }
+
     let player: AVPlayer
     let surface: PlayerLayerView
     let clock: PlaybackClock

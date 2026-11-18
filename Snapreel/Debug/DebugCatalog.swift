@@ -21,16 +21,27 @@ struct DebugScreen: Identifiable {
     var fixture: FixtureSet = .filled
     /// Seconds the screenshot script waits after launch (animations, async loads).
     var wait: Double = 3
+    /// Run once the screen has settled (scroll down, raise a system prompt or sheet).
+    var settle: DebugSettle? = nil
     /// Builds the view. For screens inside the tab shell use `DebugScreen.shell`.
     let content: @MainActor () -> AnyView
 
     init<Content: View>(_ id: String, _ title: String, fixture: FixtureSet = .filled, wait: Double = 3,
+                        settle: DebugSettle? = nil,
                         @ViewBuilder content: @escaping @MainActor () -> Content) {
         self.id = id
         self.title = title
         self.fixture = fixture
         self.wait = wait
+        self.settle = settle
         self.content = { AnyView(content()) }
+    }
+
+    /// The same screen with a settle step.
+    func settling(_ step: DebugSettle) -> DebugScreen {
+        var copy = self
+        copy.settle = step
+        return copy
     }
 
     /// The real tab shell on `tab`, after `configure` has set up the router (push routes,
@@ -66,7 +77,11 @@ enum DebugCatalog {
 
     /// Written to Documents/debug-screens.tsv on `-dumpScreens`; the screenshot script reads it.
     static func writeList() {
-        let lines = all.map { "\($0.id)\t\($0.wait)\t\($0.title)" }.joined(separator: "\n")
+        // Fourth column: "prompt" for screens that raise a system prompt (shot last, fresh install).
+        let lines = all.map { screen in
+            let flag = screen.settle?.raisesSystemPrompt == true ? "prompt" : "-"
+            return "\(screen.id)\t\(screen.wait)\t\(screen.title)\t\(flag)"
+        }.joined(separator: "\n")
         let url = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("debug-screens.tsv")
         try? lines.write(to: url, atomically: true, encoding: .utf8)
@@ -88,7 +103,15 @@ struct DebugHost: View {
     var body: some View {
         if let screen = DebugCatalog.screen(screenID) {
             screen.content()
-                .onAppear { DebugCatalog.markReady(screenID) }
+                .onAppear {
+                    DebugCatalog.markReady(screenID)
+                    if let step = screen.settle {
+                        Task { @MainActor in
+                            try? await Task.sleep(nanoseconds: 1_600_000_000)
+                            step.run()
+                        }
+                    }
+                }
         } else {
             VStack(spacing: Space.s) {
                 Text("No debug screen").font(.srTitle)
