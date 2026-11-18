@@ -128,6 +128,9 @@ Install build 20 from TestFlight. Put the phone on Airplane Mode for everything 
     - Save to Photos → primer → iOS prompt (Add Photos Only) → Allow → progress → Saved → Open Photos.
     - Then turn Photos access off in iOS Settings and try again. Expect "Photos access is off" with Open Settings.
 14. **Storage:** Settings → Storage shows the real space used. Delete a large recording, then Delete all my data → confirm → everything gone, including notifications.
+15. **Light and Dark (build 22):** with the iPhone in Dark mode, the welcome screens, Home, Library, Notifications, Search, Settings and their sheets are all dark. Switch the iPhone to Light (Control Centre, or Settings → Display & Brightness) and they turn light, with the character art in rounded dark cards. Then Settings → Appearance → Light or Dark keeps that look whatever the iPhone is set to; Match iPhone hands control back. The recorder and the player stay dark in every mode.
+16. **Record button (build 22):** Record → Screen, and Record → Audio. The big record button sits in the middle of the screen, the same as in Camera mode.
+17. **Character loops (build 22):** watch the welcome screen for ten seconds. The five friends keep walking with no stutter, ghosted legs or pause when the clip restarts.
 
 ## Not verified
 
