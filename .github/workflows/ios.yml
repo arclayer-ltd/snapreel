@@ -50,7 +50,7 @@ jobs:
           # Highest released version by its own Info.plist, not by folder name: images ship
           # aliases such as Xcode_27.app (27.0) next to Xcode_27.2.app, which name sorting mis-orders.
           XCODE=$(for app in /Applications/Xcode*.app; do
-              case "$app" in *[Bb]eta*|*RC*) continue ;; esac
+              if echo "$app" | grep -qiE 'beta|_rc'; then continue; fi
               v=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app/Contents/Info.plist" 2>/dev/null) || continue
               echo "$v $app"
             done | sort -t. -k1,1n -k2,2n -k3,3n | tail -1 | cut -d' ' -f2-)
