@@ -96,11 +96,13 @@ struct FeedFilterBar: View {
     let unreadCounts: [FeedFilter: Int]
 
     var body: some View {
-        HStack(spacing: Space.xs) {
-            ForEach(FeedFilter.allCases) { option in
-                chip(option)
+        // Scrolls sideways instead of truncating a label when text is large.
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: Space.xs) {
+                ForEach(FeedFilter.allCases) { option in
+                    chip(option)
+                }
             }
-            Spacer(minLength: 0)
         }
     }
 
@@ -116,6 +118,8 @@ struct FeedFilterBar: View {
                 Text(option.title)
                     .font(.srSubheadlineStrong)
                     .foregroundStyle(selected ? Color.white : Color.srText)
+                    .lineLimit(1)
+                    .fixedSize()
                 if count > 0 {
                     Text("\(count)")
                         .font(.srTimerSmall)
@@ -125,7 +129,7 @@ struct FeedFilterBar: View {
                         .background(Capsule().fill(Color.srRed))
                 }
             }
-            .padding(.horizontal, Space.m)
+            .padding(.horizontal, 14)
             .frame(height: 36)
             .background(Capsule().fill(selected ? Color.srInk : Color.srSurface))
             .overlay(Capsule().strokeBorder(selected ? Color.clear : Color.srLine, lineWidth: 1))

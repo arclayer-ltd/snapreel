@@ -280,12 +280,14 @@ final class TranscriptService: ObservableObject {
             session.timeRange = CMTimeRange(start: CMTime(seconds: piece.start, preferredTimescale: 600),
                                             duration: CMTime(seconds: length, preferredTimescale: 600))
         }
+        // The session is only read again inside its own completion handler.
+        let box = ExportSessionBox(session: session)
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-            session.exportAsynchronously {
-                if session.status == .completed {
+            box.session.exportAsynchronously {
+                if box.session.status == .completed {
                     continuation.resume()
                 } else {
-                    continuation.resume(throwing: session.error ?? RecognitionError.failed)
+                    continuation.resume(throwing: box.session.error ?? RecognitionError.failed)
                 }
             }
         }
@@ -381,4 +383,9 @@ private final class ResumeGate {
         claimed = true
         return true
     }
+}
+
+/// Carries an export session into its own completion handler, the only other place it is read.
+private struct ExportSessionBox: @unchecked Sendable {
+    let session: AVAssetExportSession
 }

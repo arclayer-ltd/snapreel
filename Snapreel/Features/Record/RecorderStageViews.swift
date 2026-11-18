@@ -22,9 +22,14 @@ struct RecorderCameraStage: View {
         ZStack {
             Color.srInkDeep
             if let still = model.preset?.cameraStill {
-                Image(uiImage: still)
-                    .resizable()
-                    .scaledToFill()
+                // Overlay on a clear view so the filled image can't grow the stage past the screen.
+                Color.clear
+                    .overlay(
+                        Image(uiImage: still)
+                            .resizable()
+                            .scaledToFill()
+                    )
+                    .clipped()
                     .accessibilityHidden(true)
             } else {
                 switch model.cameraState {

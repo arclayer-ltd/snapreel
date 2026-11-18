@@ -83,7 +83,17 @@ if [ ! -f "$LIST" ]; then
   echo "App did not write debug-screens.tsv" | tee "$OUT/../screenshots-missing.txt"
   exit 1
 fi
-cp "$LIST" "$OUT/../debug-screens.tsv"
+# Screens that raise a real system prompt go last: iOS keeps an unanswered prompt on screen
+# across relaunches, so anything shot after it would sit under the alert.
+SYSTEM_PROMPT_IDS="start.tour.permission"
+python3 - "$LIST" "$OUT/../debug-screens.tsv" "$SYSTEM_PROMPT_IDS" <<'PY'
+import sys
+src, dst, last = sys.argv[1], sys.argv[2], set(sys.argv[3].split())
+lines = [l.rstrip("\n") for l in open(src, encoding="utf-8") if l.strip()]
+first = [l for l in lines if l.split("\t")[0] not in last]
+tail = [l for l in lines if l.split("\t")[0] in last]
+open(dst, "w", encoding="utf-8").write("\n".join(first + tail) + "\n")
+PY
 xcrun simctl terminate "$DEVICE" "$BUNDLE" > /dev/null 2>&1 || true
 
 # Warm up once (draws and caches the fixture media) so first-launch costs don't land on a screenshot.
