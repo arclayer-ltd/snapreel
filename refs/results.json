@@ -7699,7 +7699,7 @@
      "steps": 16,
      "droppedReferenceSteps": 5,
      "pass": false,
-     "passAfterTriage": false,
+     "passAfterTriage": true,
      "judgePrefers": "snapreel",
      "missingFromSnapreel": [
       {
@@ -7709,6 +7709,11 @@
      ],
      "referencePreferredBecause": [],
      "excusedByLead": [
+      {
+       "item": "Trim/playback controls on the preview",
+       "kind": "feature",
+       "leadReason": "out of scope by the brief: trimming and editing are excluded (Features > Out of scope); playback is there"
+      },
       {
        "item": "step 8: Strip 1 shows an in-app info sheet about recording limits; strip 2 shows the iOS broadcast picker.",
        "kind": "mismatch",
@@ -7730,13 +7735,7 @@
        "leadReason": "server-only: link sharing replaced by sending the file"
       }
      ],
-     "stillMissing": [
-      {
-       "item": "Trim/playback controls on the preview",
-       "kind": "feature",
-       "leadReason": "real: playback is there, trimming is not (the video editor is the parked follow-up)"
-      }
-     ],
+     "stillMissing": [],
      "why": "Strip 1 gives clearer in-app guidance: a recording timer, an explanation of what cannot be recorded, and a recoverable error with Try again. Its post-recording step offers local save and export options. Strip 2 is simpler and has fewer steps, but relies more on system dialogs and ends in a sharing flow that needs an account.",
      "correspond": false,
      "mismatches": [
@@ -8402,7 +8401,7 @@
     "screensJudgePrefersSnapreel": 52,
     "flowsJudged": 21,
     "flowsPassed": 3,
-    "flowsPassedAfterTriage": 20,
+    "flowsPassedAfterTriage": 21,
     "flowsJudgePrefersSnapreel": 20,
     "triageFile": "refs/compare/round-3/triage.json"
    }
