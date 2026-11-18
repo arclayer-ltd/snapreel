@@ -27,13 +27,16 @@ for name in want:
         print(match[-1]["udid"]); break
 ' "$name" "$@")
   if [ -z "$udid" ]; then
-    local runtime
-    runtime=$(xcrun simctl list runtimes -j | python3 -c '
+    # Newest runtime first; fall back to older ones when a newer iOS no longer supports
+    # any of the 375x812-point models.
+    local runtime type
+    for runtime in $(xcrun simctl list runtimes -j | python3 -c '
 import json, sys
 rs = [r for r in json.load(sys.stdin)["runtimes"] if r["platform"] == "iOS" and r["isAvailable"]]
-print(rs[-1]["identifier"])')
-    for type in "$@"; do
-      udid=$(xcrun simctl create "$name" "$type" "$runtime" 2>/dev/null) && break || udid=""
+print("\n".join(r["identifier"] for r in reversed(rs)))'); do
+      for type in "$@"; do
+        udid=$(xcrun simctl create "$name" "$type" "$runtime" 2>/dev/null) && break 2 || udid=""
+      done
     done
   fi
   echo "$udid"

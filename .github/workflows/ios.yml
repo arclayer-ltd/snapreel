@@ -20,10 +20,12 @@ on:
         type: string
         default: ""
       runner:
+        # xcode-27 (Apple silicon, macOS 27) builds with the iOS 27 SDK, which App Store Connect
+        # requires for uploads from April 2027 (ITMS-90725). The others build with the iOS 26 SDK.
         description: macOS runner image
         type: choice
-        options: [macos-26, macos-15, macos-15-intel, macos-latest]
-        default: macos-26
+        options: [xcode-27, macos-26, macos-15, macos-15-intel, macos-latest]
+        default: xcode-27
 
 concurrency:
   group: ios-${{ github.ref }}
@@ -31,7 +33,7 @@ concurrency:
 
 jobs:
   build:
-    runs-on: ${{ inputs.runner || 'macos-26' }}
+    runs-on: ${{ inputs.runner || 'xcode-27' }}
     timeout-minutes: 100
     env:
       TEAM_ID: N3DBKUVJS5
@@ -45,9 +47,17 @@ jobs:
 
       - name: Select newest Xcode
         run: |
-          XCODE=$(ls -d /Applications/Xcode_*.app | grep -v -i beta | sort -V | tail -1)
+          # Highest released version by its own Info.plist, not by folder name: images ship
+          # aliases such as Xcode_27.app (27.0) next to Xcode_27.2.app, which name sorting mis-orders.
+          XCODE=$(for app in /Applications/Xcode*.app; do
+              case "$app" in *[Bb]eta*|*RC*) continue ;; esac
+              v=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app/Contents/Info.plist" 2>/dev/null) || continue
+              echo "$v $app"
+            done | sort -t. -k1,1n -k2,2n -k3,3n | tail -1 | cut -d' ' -f2-)
+          echo "Selected $XCODE"
           sudo xcode-select -s "$XCODE"
           xcodebuild -version
+          xcodebuild -showsdks | grep -i iphoneos || true
           xcrun simctl list runtimes | grep iOS || true
 
       # Whole-module compilation type-checks every file in one pass, so one run lists every
