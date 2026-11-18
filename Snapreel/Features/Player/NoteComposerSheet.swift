@@ -59,6 +59,9 @@ struct NoteComposerSheet: View {
     var body: some View {
         VStack(spacing: Space.s) {
             header
+            Rectangle()
+                .fill(Color.white.opacity(0.08))
+                .frame(height: 1)
             field
             if isEditing { editActions }
             Spacer(minLength: 0)

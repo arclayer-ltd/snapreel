@@ -60,19 +60,17 @@ struct PlayerDetailsSection: View {
         }
     }
 
-    /// The everyday actions in reach without opening the menu.
+    /// The everyday actions in reach without opening the menu: equal tiles that always fit the width.
     private var quickActions: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: Space.xs) {
-                QuickActionChip(title: "Edit title", systemImage: "pencil") { onEditTitle() }
-                if let onSaveToPhotos, video.kind != .audio {
-                    QuickActionChip(title: "Save to Photos", systemImage: "square.and.arrow.down") { onSaveToPhotos() }
-                }
-                if let onToggleWatchLater {
-                    QuickActionChip(title: video.isInWatchLater ? "In Watch later" : "Watch later",
-                                    systemImage: video.isInWatchLater ? "clock.fill" : "clock",
-                                    isOn: video.isInWatchLater) { onToggleWatchLater() }
-                }
+        HStack(spacing: Space.xs) {
+            QuickActionChip(title: "Edit title", systemImage: "pencil") { onEditTitle() }
+            if let onSaveToPhotos, video.kind != .audio {
+                QuickActionChip(title: "Save to Photos", systemImage: "square.and.arrow.down") { onSaveToPhotos() }
+            }
+            if let onToggleWatchLater {
+                QuickActionChip(title: video.isInWatchLater ? "In Watch later" : "Watch later",
+                                systemImage: video.isInWatchLater ? "clock.fill" : "clock",
+                                isOn: video.isInWatchLater) { onToggleWatchLater() }
             }
         }
     }
@@ -314,7 +312,7 @@ private struct PlayerSummaryPending: View {
     }
 }
 
-/// A small rounded action under the title.
+/// One of the equal-width action tiles under the title: icon over a short label.
 private struct QuickActionChip: View {
     let title: String
     let systemImage: String
@@ -326,21 +324,22 @@ private struct QuickActionChip: View {
             Haptics.tap()
             action()
         } label: {
-            HStack(spacing: 6) {
+            VStack(spacing: 5) {
                 Image(systemName: systemImage)
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.system(size: 16, weight: .semibold))
                     .foregroundStyle(isOn ? Color.srRedGlow : Color.srOnDark)
                 Text(title)
+                    .font(.srFootnote.weight(.semibold))
                     .lineLimit(1)
-                    .fixedSize()
+                    .minimumScaleFactor(0.75)
             }
-            .font(.srSubheadlineStrong)
             .foregroundStyle(Color.srOnDark)
-            .padding(.horizontal, 12)
-            .frame(height: 34)
-            .background(Capsule().fill(Color.white.opacity(0.09)))
-            .overlay(Capsule().strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
-            .contentShape(Capsule())
+            .padding(.horizontal, 6)
+            .frame(maxWidth: .infinity, minHeight: 58)
+            .background(RoundedRectangle(cornerRadius: Radius.m, style: .continuous).fill(Color.white.opacity(0.09)))
+            .overlay(RoundedRectangle(cornerRadius: Radius.m, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
+            .contentShape(RoundedRectangle(cornerRadius: Radius.m, style: .continuous))
         }
         .buttonStyle(PressScaleStyle(scale: 0.95))
         .accessibilityAddTraits(isOn ? .isSelected : [])

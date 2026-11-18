@@ -186,7 +186,8 @@ struct GuidedTourOverlay: View {
             }
             if step == .intro {
                 HStack {
-                    Label("Takes about 20 seconds", systemImage: "clock")
+                    Label("About 20 seconds", systemImage: "clock")
+                        .lineLimit(1)
                         .font(.srCaption)
                         .foregroundStyle(Color.srTextSecondary)
                     Spacer(minLength: Space.xs)

@@ -11,7 +11,7 @@ Two results are recorded per screen and flow:
 - "pass": the judge's own tags only.
 - "passAfterTriage": also excusing items the lead triaged in refs/compare/round-<n>/triage.json
   (server-only, drawn by iOS, or the same job in another layout). Each excused item keeps its
-  reason. Items triaged "fixedNext" are real gaps and stay missing. Craft preferences for the
+  reason. Items triaged "fixedNext" or "real: ..." are real gaps and stay missing. Craft preferences for the
   reference are never excused.
 """
 import json
@@ -51,6 +51,11 @@ class Triage:
         return self.data.get("flows", {}).get(slug, {}).get("steps", {}).get(str(step))
 
 
+def excuses(why):
+    """A lead reason excuses an item unless it marks a real gap ("fixedNext" or "real: ...")."""
+    return bool(why) and why != "fixedNext" and not why.startswith("real")
+
+
 def side(key_entry, who, prefix):
     return next(k for k in (f"{prefix}-1", f"{prefix}-2") if key_entry[k] == who)
 
@@ -72,14 +77,14 @@ def judge(verdict, entry, prefix, triage, scope, key):
     excused, still_missing = [], []
     for item in missing:
         why = triage.reason(scope, key, item["item"])
-        if why and why != "fixedNext":
+        if excuses(why):
             excused.append({**item, "leadReason": why})
         else:
             still_missing.append({**item, "leadReason": why} if why else item)
     still_bad = []
     for r in bad_reasons:
         why = None if r["kind"] == "craft" else triage.reason(scope, key, r["item"])
-        if why and why != "fixedNext":
+        if excuses(why):
             excused.append({**r, "leadReason": why, "preference": True})
         else:
             still_bad.append(r)
