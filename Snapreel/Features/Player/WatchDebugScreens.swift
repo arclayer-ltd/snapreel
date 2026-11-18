@@ -116,6 +116,7 @@ extension DebugCatalog {
                 watchState {
                     $0.position = 14
                     $0.scrollsToPanel = true
+                    $0.showsResumePill = true
                 }
             },
             watchPreparedPlayer("video.reaction.sent", "Reaction overlay [sent]", checkout,

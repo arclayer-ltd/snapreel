@@ -51,6 +51,7 @@ struct PlayerScreen: View {
         _overlay = State(initialValue: initial.overlay)
         _sheet = State(initialValue: initial.sheet)
         _showsPiPPlaceholder = State(initialValue: initial.showsPictureInPicturePlaceholder)
+        _showsResume = State(initialValue: initial.showsResumePill)
         let pinned: [ReactionBurst] = initial.pinnedBurst.map { [ReactionBurst(emoji: $0, isPinned: true)] } ?? []
         _bursts = State(initialValue: pinned)
     }

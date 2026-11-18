@@ -59,9 +59,6 @@ extension DebugCatalog {
     }
 }
 
-/// A Settings navigation stack with `content` already pushed, as it looks when opened from
-/// Settings (back button, inline title).
-@MainActor
 /// Builders for the inbox debug entries.
 @MainActor
 enum InboxDebug {
@@ -72,6 +69,9 @@ enum InboxDebug {
     }
 }
 
+/// A Settings navigation stack with `content` already pushed, as it looks when opened from
+/// Settings (back button, inline title).
+@MainActor
 struct InboxSettingsDebugHost<Content: View>: View {
     private let content: @MainActor () -> Content
     @State private var path: [Int] = [1]

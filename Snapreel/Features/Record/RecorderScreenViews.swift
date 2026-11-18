@@ -149,6 +149,8 @@ private struct TutorialIllustration: View {
         }
         .frame(width: 240, height: 190, alignment: .top)
         .clipped()
+        .mask(LinearGradient(stops: [.init(color: .black, location: 0.72), .init(color: .clear, location: 1)],
+                             startPoint: .top, endPoint: .bottom))
     }
 }
 

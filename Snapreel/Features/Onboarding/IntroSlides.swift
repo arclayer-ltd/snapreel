@@ -78,7 +78,21 @@ struct IntroSlides: View {
     }
 
     private var bottomBar: some View {
-        HStack {
+        HStack(spacing: Space.s) {
+            if page > 0 {
+                Button {
+                    withAnimation(Motion.standard) { page -= 1 }
+                } label: {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundStyle(Color.srOnDark)
+                        .frame(width: 40, height: 40)
+                        .background(Circle().fill(Color.white.opacity(0.1)))
+                }
+                .buttonStyle(PressScaleStyle())
+                .accessibilityLabel("Back")
+                .transition(.opacity.combined(with: .scale(scale: 0.8)))
+            }
             OnboardingPageDots(count: slides.count, index: page)
             Spacer()
             Button {
@@ -138,6 +152,15 @@ struct IntroSlidePage: View {
             .frame(width: size.width, height: side * 0.8)
             .scaleEffect(isActive || reduceMotion ? 1 : 0.92)
             .opacity(isActive ? 1 : 0.55)
+            .overlay(alignment: IntroCallout.alignment(for: slide.index)) {
+                // A bit of the real app beside the character, so the slide shows what it means.
+                IntroCallout(index: slide.index)
+                    .padding(.horizontal, Space.gutter)
+                    .padding(.vertical, Space.l)
+                    .opacity(isActive ? 1 : 0)
+                    .offset(y: isActive || reduceMotion ? 0 : 12)
+                    .accessibilityHidden(true)
+            }
             .animation(reduceMotion ? nil : Motion.standard, value: isActive)
     }
 
@@ -164,5 +187,96 @@ struct IntroSlidePage: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, Space.gutter)
+    }
+}
+
+/// Small pieces of Snapreel's own interface floating beside each intro character: the
+/// recording pill, a folder with a tag, and the places a file can go.
+struct IntroCallout: View {
+    let index: Int
+
+    static func alignment(for index: Int) -> Alignment {
+        switch index {
+        case 0: return .topTrailing
+        case 1: return .bottomLeading
+        default: return .bottomTrailing
+        }
+    }
+
+    var body: some View {
+        switch index {
+        case 0: recording
+        case 1: folder
+        default: destinations
+        }
+    }
+
+    private var recording: some View {
+        VStack(alignment: .trailing, spacing: Space.xs) {
+            HStack(spacing: 6) {
+                Circle().fill(Color.white).frame(width: 7, height: 7)
+                Text("REC 0:42")
+                    .font(.system(size: 13, weight: .bold, design: .rounded))
+                    .monospacedDigit()
+            }
+            .foregroundStyle(Color.white)
+            .padding(.horizontal, 12)
+            .frame(height: 30)
+            .background(Capsule().fill(Color.srRed))
+            .shadow(color: Color.srRed.opacity(0.45), radius: 12, y: 4)
+            HStack(spacing: 6) {
+                ForEach(["rectangle.on.rectangle", "video.fill", "waveform"], id: \.self) { symbol in
+                    Image(systemName: symbol)
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(Color.srOnDark)
+                        .frame(width: 30, height: 30)
+                        .background(Circle().fill(Color.srInkControl))
+                }
+            }
+        }
+    }
+
+    private var folder: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: Space.xs) {
+                Image(systemName: "folder.fill")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(Color.srRed)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("Product")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(Color.srOnDark)
+                    Text("3 recordings")
+                        .font(.system(size: 11))
+                        .foregroundStyle(Color.srOnDarkSecondary)
+                }
+            }
+            HStack(spacing: 4) {
+                Text("# checkout")
+                Text("Note at 0:14")
+            }
+            .font(.system(size: 10, weight: .semibold))
+            .foregroundStyle(Color.srRedGlow)
+        }
+        .padding(10)
+        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Color.srInkRaised))
+        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Color.white.opacity(0.1)))
+        .shadow(color: Color.black.opacity(0.3), radius: 14, y: 6)
+    }
+
+    private var destinations: some View {
+        HStack(spacing: 6) {
+            ForEach(["dot.radiowaves.left.and.right", "message.fill", "envelope.fill", "photo.on.rectangle"], id: \.self) { symbol in
+                Image(systemName: symbol)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(Color.white)
+                    .frame(width: 30, height: 30)
+                    .background(Circle().fill(symbol == "photo.on.rectangle" ? Color.srRed : Color.srInkControl))
+            }
+        }
+        .padding(6)
+        .background(Capsule().fill(Color.srInkRaised))
+        .overlay(Capsule().strokeBorder(Color.white.opacity(0.1)))
+        .shadow(color: Color.black.opacity(0.3), radius: 14, y: 6)
     }
 }

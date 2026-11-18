@@ -5,9 +5,12 @@
     "start.splash": {
      "reference": "f475b086",
      "pass": true,
+     "passAfterTriage": true,
      "judgePrefers": "equal",
      "missingFromSnapreel": [],
      "referencePreferredBecause": [],
+     "excusedByLead": [],
+     "stillMissing": [],
      "why": "Both are minimal, centered logo-plus-name splashes with no interactive elements, which is right for a splash. Image 1 is crisp and flat, with strong contrast and a distinctive, well-proportioned mark, and it shows the home indicator for a complete device frame. Image 2 adds depth with the radial glow and gradient mark and looks more atmospheric, but the glow is faint, the mark is a generic record icon, and the charging battery and missing home indicator make the frame slightly less clean. Neither clearly wins on its job.",
      "correspond": null,
      "mismatches": null
@@ -15,6 +18,7 @@
     "start.welcome": {
      "reference": "0ce2a2f6",
      "pass": false,
+     "passAfterTriage": false,
      "judgePrefers": "reference",
      "missingFromSnapreel": [
       {
@@ -24,19 +28,46 @@
      ],
      "referencePreferredBecause": [
       {
-       "reason": "Multi-slide carousel with page dots gives a fuller onboarding story",
+       "item": "Multi-slide carousel with page dots gives a fuller onboarding story",
        "kind": "completeness"
       },
       {
-       "reason": "Sign in and Sign up are both offered for returning and new users",
+       "item": "Sign in and Sign up are both offered for returning and new users",
        "kind": "completeness"
       },
       {
-       "reason": "Balanced, centred layout with a clear hierarchy of logo, headline, art, copy and buttons",
+       "item": "Balanced, centred layout with a clear hierarchy of logo, headline, art, copy and buttons",
        "kind": "craft"
       },
       {
-       "reason": "Polished flat illustration style and cohesive colour palette",
+       "item": "Polished flat illustration style and cohesive colour palette",
+       "kind": "craft"
+      }
+     ],
+     "excusedByLead": [
+      {
+       "item": "Page indicator dots implying a multi-slide onboarding carousel",
+       "kind": "feature",
+       "leadReason": "present-differently: the intro slides after Welcome have page dots"
+      },
+      {
+       "item": "Sign in and Sign up are both offered for returning and new users",
+       "kind": "completeness",
+       "leadReason": "server-only: accounts and sign-in (Snapreel has no account by design)",
+       "preference": true
+      }
+     ],
+     "stillMissing": [
+      {
+       "item": "Multi-slide carousel with page dots gives a fuller onboarding story",
+       "kind": "completeness"
+      },
+      {
+       "item": "Balanced, centred layout with a clear hierarchy of logo, headline, art, copy and buttons",
+       "kind": "craft"
+      },
+      {
+       "item": "Polished flat illustration style and cohesive colour palette",
        "kind": "craft"
       }
      ],
@@ -47,19 +78,38 @@
     "start.intro.1": {
      "reference": "0ce2a2f6",
      "pass": false,
+     "passAfterTriage": false,
      "judgePrefers": "reference",
      "missingFromSnapreel": [],
      "referencePreferredBecause": [
       {
-       "reason": "Bold two-tone headline creates stronger hierarchy and more visual impact",
+       "item": "Bold two-tone headline creates stronger hierarchy and more visual impact",
        "kind": "craft"
       },
       {
-       "reason": "Sign in / Sign up gives the screen a complete call to action",
+       "item": "Sign in / Sign up gives the screen a complete call to action",
        "kind": "completeness"
       },
       {
-       "reason": "Image 2 leaves large empty areas around a lone floating character and has no account path",
+       "item": "Image 2 leaves large empty areas around a lone floating character and has no account path",
+       "kind": "craft"
+      }
+     ],
+     "excusedByLead": [
+      {
+       "item": "Sign in / Sign up gives the screen a complete call to action",
+       "kind": "completeness",
+       "leadReason": "server-only: accounts and sign-in (Snapreel has no account by design)",
+       "preference": true
+      }
+     ],
+     "stillMissing": [
+      {
+       "item": "Bold two-tone headline creates stronger hierarchy and more visual impact",
+       "kind": "craft"
+      },
+      {
+       "item": "Image 2 leaves large empty areas around a lone floating character and has no account path",
        "kind": "craft"
       }
      ],
@@ -70,6 +120,7 @@
     "start.intro.2": {
      "reference": "38ff4bf6",
      "pass": false,
+     "passAfterTriage": false,
      "judgePrefers": "reference",
      "missingFromSnapreel": [
       {
@@ -79,19 +130,46 @@
      ],
      "referencePreferredBecause": [
       {
-       "reason": "Illustration directly demonstrates the feature (a notification card) instead of a generic character",
+       "item": "Illustration directly demonstrates the feature (a notification card) instead of a generic character",
        "kind": "craft"
       },
       {
-       "reason": "Centred, balanced layout with consistent spacing and soft shadows feels more finished",
+       "item": "Centred, balanced layout with consistent spacing and soft shadows feels more finished",
        "kind": "craft"
       },
       {
-       "reason": "Clear entry actions (Sign in / Sign up) complete the screen's job of getting users into the app",
+       "item": "Clear entry actions (Sign in / Sign up) complete the screen's job of getting users into the app",
        "kind": "completeness"
       },
       {
-       "reason": "Two-tone headline gives strong, memorable hierarchy",
+       "item": "Two-tone headline gives strong, memorable hierarchy",
+       "kind": "craft"
+      }
+     ],
+     "excusedByLead": [
+      {
+       "item": "Home indicator bar and polished soft-shadow card stack",
+       "kind": "craft",
+       "leadReason": "system-ui: drawn by iOS (missing from simulator captures)"
+      },
+      {
+       "item": "Clear entry actions (Sign in / Sign up) complete the screen's job of getting users into the app",
+       "kind": "completeness",
+       "leadReason": "server-only: accounts and sign-in (Snapreel has no account by design)",
+       "preference": true
+      }
+     ],
+     "stillMissing": [
+      {
+       "item": "Illustration directly demonstrates the feature (a notification card) instead of a generic character",
+       "kind": "craft"
+      },
+      {
+       "item": "Centred, balanced layout with consistent spacing and soft shadows feels more finished",
+       "kind": "craft"
+      },
+      {
+       "item": "Two-tone headline gives strong, memorable hierarchy",
        "kind": "craft"
       }
      ],
@@ -102,6 +180,7 @@
     "start.intro.3": {
      "reference": "8b5b84cc",
      "pass": false,
+     "passAfterTriage": false,
      "judgePrefers": "reference",
      "missingFromSnapreel": [
       {
@@ -111,19 +190,46 @@
      ],
      "referencePreferredBecause": [
       {
-       "reason": "Ends with clear Sign in and Sign up actions, so the slides lead somewhere",
+       "item": "Ends with clear Sign in and Sign up actions, so the slides lead somewhere",
        "kind": "completeness"
       },
       {
-       "reason": "Tighter, centred hierarchy with no large dead gap between art and copy",
+       "item": "Tighter, centred hierarchy with no large dead gap between art and copy",
        "kind": "craft"
       },
       {
-       "reason": "Polished shadows, fading mockup edge and two-tone headline give a more finished look",
+       "item": "Polished shadows, fading mockup edge and two-tone headline give a more finished look",
        "kind": "craft"
       },
       {
-       "reason": "Image 2 has only a Continue button and no skip or back control",
+       "item": "Image 2 has only a Continue button and no skip or back control",
+       "kind": "completeness"
+      }
+     ],
+     "excusedByLead": [
+      {
+       "item": "Final-slide dual call to action layout",
+       "kind": "feature",
+       "leadReason": "server-only: the two actions are Sign in / Sign up"
+      },
+      {
+       "item": "Ends with clear Sign in and Sign up actions, so the slides lead somewhere",
+       "kind": "completeness",
+       "leadReason": "server-only: accounts and sign-in (Snapreel has no account by design)",
+       "preference": true
+      }
+     ],
+     "stillMissing": [
+      {
+       "item": "Tighter, centred hierarchy with no large dead gap between art and copy",
+       "kind": "craft"
+      },
+      {
+       "item": "Polished shadows, fading mockup edge and two-tone headline give a more finished look",
+       "kind": "craft"
+      },
+      {
+       "item": "Image 2 has only a Continue button and no skip or back control",
        "kind": "completeness"
       }
      ],
@@ -134,9 +240,12 @@
     "start.use": {
      "reference": "3812ca86",
      "pass": true,
+     "passAfterTriage": true,
      "judgePrefers": "snapreel",
      "missingFromSnapreel": [],
      "referencePreferredBecause": [],
+     "excusedByLead": [],
+     "stillMissing": [],
      "why": "Image 1 has a back button, per-option icons, a clear eyebrow/headline/subtitle hierarchy and an explicit disabled-state hint, so the screen is complete and well finished. Image 2 has a charming illustration and a clean look, but plain text-only options, no back navigation and a washed-out disabled button make it less functional. Image 1's consistent red accent and dark cards feel more cohesive and polished for the task.",
      "correspond": null,
      "mismatches": null
@@ -144,9 +253,12 @@
     "start.use.selected": {
      "reference": "9520b8b2",
      "pass": true,
+     "passAfterTriage": true,
      "judgePrefers": "snapreel",
      "missingFromSnapreel": [],
      "referencePreferredBecause": [],
+     "excusedByLead": [],
+     "stillMissing": [],
      "why": "Image 1 has a back button, clear eyebrow/title/subtitle hierarchy, and an icon on every option, so the choices are easy to tell apart at a glance. Its card states, spacing and full-width CTA are consistent and polished. Image 2 has a charming illustration and a clear selected state, but it has no back control, plain text-only options, and a loose helper line placed far from the heading, and its button is narrower and less anchored.",
      "correspond": null,
      "mismatches": null
@@ -154,6 +266,7 @@
     "start.tour.intro": {
      "reference": "19689a04",
      "pass": false,
+     "passAfterTriage": true,
      "judgePrefers": "snapreel",
      "missingFromSnapreel": [
       {
@@ -166,6 +279,19 @@
       }
      ],
      "referencePreferredBecause": [],
+     "excusedByLead": [
+      {
+       "item": "Tab switcher New Activity / Watch History on the Home screen",
+       "kind": "feature",
+       "leadReason": "server-only: other people's activity, comments, views, share links or workspaces"
+      },
+      {
+       "item": "Four-segment step progress indicator on the tour sheet",
+       "kind": "feature",
+       "leadReason": "present-differently: shown from the first stop"
+      }
+     ],
+     "stillMissing": [],
      "why": "Image 2 gives the user a clear choice with both Skip and a prominent primary button, includes a descriptive subtitle that sets expectations, and keeps a full tab bar visible so the app context is richer. Its centered modal with a contained illustration is tidy and consistent. Image 1 has a striking illustration but it collides with the empty-state text behind it, has no skip option, a lone small Start link, and an unexplained row of empty progress segments, so it feels less resolved.",
      "correspond": null,
      "mismatches": null
@@ -173,6 +299,7 @@
     "start.tour.1": {
      "reference": "8cf23f32",
      "pass": false,
+     "passAfterTriage": true,
      "judgePrefers": "snapreel",
      "missingFromSnapreel": [
       {
@@ -185,6 +312,19 @@
       }
      ],
      "referencePreferredBecause": [],
+     "excusedByLead": [
+      {
+       "item": "New Activity / Watch History tabs behind the tour",
+       "kind": "feature",
+       "leadReason": "server-only: other people's activity, comments, views, share links or workspaces"
+      },
+      {
+       "item": "Full-width bottom sheet presentation",
+       "kind": "feature",
+       "leadReason": "presentation: sheet versus page"
+      }
+     ],
+     "stillMissing": [],
      "why": "Image 2 anchors the tour step to the real UI: a tooltip with an arrow points at the Home tab, and the background shows a full, populated Home screen, so the explanation maps directly to what the user sees. Its Next button is a clear filled pill and the copy is concrete about what Home contains. Image 1 is clean and tidy, but its sheet only shows a generic illustration of a tab bar, and the background is a mostly empty state, so it teaches less about the actual screen. Both have equivalent progress indicators and Next controls.",
      "correspond": null,
      "mismatches": null
@@ -192,6 +332,7 @@
     "start.tour.3": {
      "reference": "55a17d4d",
      "pass": false,
+     "passAfterTriage": true,
      "judgePrefers": "snapreel",
      "missingFromSnapreel": [
       {
@@ -204,6 +345,19 @@
       }
      ],
      "referencePreferredBecause": [],
+     "excusedByLead": [
+      {
+       "item": "Illustrative mini tab bar graphic with glowing purple record button inside the sheet",
+       "kind": "feature",
+       "leadReason": "presentation: Snapreel spotlights the real tab bar"
+      },
+      {
+       "item": "'Finish' button to end the tour",
+       "kind": "feature",
+       "leadReason": "present-differently: Snapreel's tour has one more stop, which ends it"
+      }
+     ],
+     "stillMissing": [],
      "why": "Image 2 is a true coach mark: the card points with an arrow at the actual red record button, the progress bar shows position (3 of 4), and a Next button moves the tour forward. The dimmed app behind it is rich and realistic, and the red styling is consistent. Image 1 explains the feature through a small illustrative tab bar in a bottom sheet, which is clean but less direct, and its four identical dashes and 'Finish' button give no sense of position. Image 1 also has an empty-state background with little visible content.",
      "correspond": null,
      "mismatches": null
@@ -211,6 +365,7 @@
     "start.tour.4": {
      "reference": "6ad134c1",
      "pass": false,
+     "passAfterTriage": true,
      "judgePrefers": "snapreel",
      "missingFromSnapreel": [
       {
@@ -227,6 +382,24 @@
       }
      ],
      "referencePreferredBecause": [],
+     "excusedByLead": [
+      {
+       "item": "Mini tab bar illustration with badge and purple glow inside the sheet",
+       "kind": "feature",
+       "leadReason": "presentation: Snapreel spotlights the real tab bar"
+      },
+      {
+       "item": "Step indicator showing progress (3 of 4 filled)",
+       "kind": "feature",
+       "leadReason": "present: the card shows its 4-of-4 indicator"
+      },
+      {
+       "item": "Next button to advance through tour",
+       "kind": "feature",
+       "leadReason": "present-differently: last stop ends with Turn on notifications / Not now"
+      }
+     ],
+     "stillMissing": [],
      "why": "Image 2 anchors the tour step to the real UI by spotlighting the Notifications tab with a pointer, and gives the user a clear primary action plus a non-committal Not now option. The illustration, specific benefit-led copy and consistent red accent make it more finished and engaging. Image 1 is clean but generic: a single Next link, a tab-bar mock instead of the real one, and weaker copy, and its step dots lack a skip or decline path.",
      "correspond": null,
      "mismatches": null
@@ -234,6 +407,7 @@
     "start.tour.permission": {
      "reference": "83ffab4c",
      "pass": false,
+     "passAfterTriage": true,
      "judgePrefers": "snapreel",
      "missingFromSnapreel": [
       {
@@ -246,6 +420,19 @@
       }
      ],
      "referencePreferredBecause": [],
+     "excusedByLead": [
+      {
+       "item": "Next button to advance through the tour",
+       "kind": "feature",
+       "leadReason": "present-differently: the system prompt is the step"
+      },
+      {
+       "item": "Segmented progress bar showing 3 of 4 steps complete",
+       "kind": "feature",
+       "leadReason": "present: indicator visible under the prompt"
+      }
+     ],
+     "stillMissing": [],
      "why": "Image 2 is a richer, more finished tour step: the tour card spotlights the real Notifications tab, includes a clear primary action plus a 'Not now' skip, and the underlying Home screen shows real content and a full tab bar. Image 1 is clean and readable with a clear heading and description, but its tour card is a generic illustration with only a Next link and no way to decline in-app. Image 2's main weakness is that the system alert covers most of the tour copy, so the explanation is hard to read in this capture, and the spinner state on the button looks mid-transition.",
      "correspond": null,
      "mismatches": null
@@ -253,6 +440,7 @@
     "home.filled": {
      "reference": "appstore-01",
      "pass": false,
+     "passAfterTriage": true,
      "judgePrefers": "snapreel",
      "missingFromSnapreel": [
       {
@@ -261,6 +449,14 @@
       }
      ],
      "referencePreferredBecause": [],
+     "excusedByLead": [
+      {
+       "item": "Section divider between Library and History",
+       "kind": "craft",
+       "leadReason": "presentation"
+      }
+     ],
+     "stillMissing": [],
      "why": "Image 1 is a true full-screen home with a clear hierarchy: personal greeting, counts on the shortcut rows, labelled tabs, an unread dot on notifications, and a selected state on Home. Its cards carry useful meta (age, type, notes) and the record action is prominent. Image 2 has richer, more convincing content (real thumbnails, author avatars, views) but is a promotional mockup cropped inside a phone frame, its tab bar has no labels or selected state, and the shortcut rows lack counts. Image 1 is the more complete and usable app screen, while image 2 looks more polished as marketing.",
      "correspond": null,
      "mismatches": null
@@ -268,6 +464,7 @@
     "home.empty": {
      "reference": "79dd23c0",
      "pass": false,
+     "passAfterTriage": true,
      "judgePrefers": "snapreel",
      "missingFromSnapreel": [
       {
@@ -280,6 +477,19 @@
       }
      ],
      "referencePreferredBecause": [],
+     "excusedByLead": [
+      {
+       "item": "Tab switcher between New Activity and Watch History",
+       "kind": "feature",
+       "leadReason": "server-only: other people's activity, comments, views, share links or workspaces"
+      },
+      {
+       "item": "Floating pill-style tab bar",
+       "kind": "feature",
+       "leadReason": "presentation: tab bar style"
+      }
+     ],
+     "stillMissing": [],
      "why": "Image 2 gives a first-time user several clear ways forward: pick Camera, Screen or Audio, start a recording, open Watch later or History, and see a library placeholder, with a friendly greeting and explanatory copy. Its hierarchy is strong, with grouped cards, consistent red accent icons and labelled tabs including a prominent record button. Image 1 is clean but is a single empty state with one button and unlabelled icons, so it offers less to do. Image 2 has minor flaws, since the library placeholder text is clipped under the tab bar, but overall it feels more complete and finished.",
      "correspond": null,
      "mismatches": null
@@ -287,6 +497,7 @@
     "home.history": {
      "reference": "4836687a",
      "pass": false,
+     "passAfterTriage": true,
      "judgePrefers": "snapreel",
      "missingFromSnapreel": [
       {
@@ -303,6 +514,24 @@
       }
      ],
      "referencePreferredBecause": [],
+     "excusedByLead": [
+      {
+       "item": "Top tab switcher between New Activity and Watch History",
+       "kind": "feature",
+       "leadReason": "server-only: other people's activity, comments, views, share links or workspaces"
+      },
+      {
+       "item": "Settings gear",
+       "kind": "feature",
+       "leadReason": "presentation: Settings opens from each tab's root"
+      },
+      {
+       "item": "Large full-width thumbnail with blurred backdrop",
+       "kind": "craft",
+       "leadReason": "presentation"
+      }
+     ],
+     "stillMissing": [],
      "why": "Image 1 is a purpose-built history screen: date grouping, per-item watch progress and status, overflow menus, a Clear action, a back control and a swipe-to-remove hint, with several varied items (screen, map, audio) that show the list working. Image 2 shows one card under a 'Watch History' tab and leaves half the screen empty, with no history-specific controls such as watch progress, clear or remove. Image 2's card is clean and has a nice big thumbnail, but image 1 is denser, more consistent and better finished for its job, apart from the truncated '82% wa...' text and the cut-off Friday section.",
      "correspond": null,
      "mismatches": null
@@ -310,6 +539,7 @@
     "home.history.empty": {
      "reference": "69fec831",
      "pass": false,
+     "passAfterTriage": true,
      "judgePrefers": "snapreel",
      "missingFromSnapreel": [
       {
@@ -322,6 +552,19 @@
       }
      ],
      "referencePreferredBecause": [],
+     "excusedByLead": [
+      {
+       "item": "Settings gear icon",
+       "kind": "feature",
+       "leadReason": "presentation: Settings opens from each tab's root"
+      },
+      {
+       "item": "Segmented tabs switching between New Activity and Watch History",
+       "kind": "feature",
+       "leadReason": "server-only: other people's activity, comments, views, share links or workspaces"
+      }
+     ],
+     "stillMissing": [],
      "why": "Image 1 is a complete, finished empty state: a custom illustration, clear heading, explanatory copy that says what the screen will hold, and a primary call to action that leads somewhere useful. Its hierarchy is clear and the labelled tab bar with a prominent record button is easy to read. Image 2 has useful structure (tabs, settings, floating nav) but its empty state is sparse, with a generic icon, no action, and large unused space. Image 2's title 'Home' also does not say it is history, and its nav icons have no labels.",
      "correspond": null,
      "mismatches": null
@@ -329,6 +572,7 @@
     "rec.shell": {
      "reference": "appstore-02",
      "pass": false,
+     "passAfterTriage": true,
      "judgePrefers": "snapreel",
      "missingFromSnapreel": [
       {
@@ -337,6 +581,14 @@
       }
      ],
      "referencePreferredBecause": [],
+     "excusedByLead": [
+      {
+       "item": "Dot indicator under selected tab",
+       "kind": "feature",
+       "leadReason": "presentation: tab bar style"
+      }
+     ],
+     "stillMissing": [],
      "why": "Image 1 is a real, full-screen recorder UI with a timer, mic control, labeled Import and Flip actions, a large clear record button and a clear segmented mode switch, all evenly spaced and legible. Image 2 is a marketing-style mockup: it is cropped by the phone frame, has a headline instead of app UI, lacks a timer and mic control, and has unlabeled icons with the record button sitting over the video. Image 1 is the more complete and better-finished screen for its job.",
      "correspond": null,
      "mismatches": null
@@ -344,6 +596,7 @@
     "rec.camera": {
      "reference": "appstore-02",
      "pass": false,
+     "passAfterTriage": true,
      "judgePrefers": "snapreel",
      "missingFromSnapreel": [
       {
@@ -352,6 +605,14 @@
       }
      ],
      "referencePreferredBecause": [],
+     "excusedByLead": [
+      {
+       "item": "Dot indicator under selected tab",
+       "kind": "craft",
+       "leadReason": "presentation: tab bar style"
+      }
+     ],
+     "stillMissing": [],
      "why": "Image 2 is a full-bleed, real viewfinder screen with a timer, mic control, labelled Import and Flip buttons and a clear segmented mode switcher, so every control is discoverable. Its layout separates the preview from the control area with good hierarchy and a prominent ring-style record button. Image 1 is a marketing screenshot in a device frame with a headline; its controls are unlabelled, the mode tabs are weak plain text, and it has no timer or mic control.",
      "correspond": null,
      "mismatches": null
@@ -359,6 +620,7 @@
     "rec.primer": {
      "reference": "c0ee6731",
      "pass": false,
+     "passAfterTriage": true,
      "judgePrefers": "snapreel",
      "missingFromSnapreel": [
       {
@@ -367,6 +629,14 @@
       }
      ],
      "referencePreferredBecause": [],
+     "excusedByLead": [
+      {
+       "item": "Sheet presentation with peek of underlying screen",
+       "kind": "feature",
+       "leadReason": "presentation: sheet versus page"
+      }
+     ],
+     "stillMissing": [],
      "why": "Image 2 is the more complete and finished screen: it has an illustrative icon pair, a clear heading, a privacy-forward explanation of where recordings stay, and a button label that matches the iOS permission wording. It also keeps the surrounding recorder chrome (settings, compose, import, three modes) so the screen feels part of a real app. Image 1 is clean but sparse, with a large empty area, a plain text-only hero, and an unusual dot indicator on the tab switcher.",
      "correspond": null,
      "mismatches": null
@@ -374,6 +644,7 @@
     "rec.screen.tutorial.1": {
      "reference": "8a4bd556",
      "pass": false,
+     "passAfterTriage": false,
      "judgePrefers": "reference",
      "missingFromSnapreel": [
       {
@@ -387,19 +658,49 @@
      ],
      "referencePreferredBecause": [
       {
-       "reason": "Illustration is complete and legible, while image 1's is cropped with truncated label text",
+       "item": "Illustration is complete and legible, while image 1's is cropped with truncated label text",
        "kind": "craft"
       },
       {
-       "reason": "Single obvious labelled primary action instead of an unlabelled record button plus extra controls",
+       "item": "Single obvious labelled primary action instead of an unlabelled record button plus extra controls",
        "kind": "craft"
       },
       {
-       "reason": "Cleaner hierarchy with less empty dead space between text and controls",
+       "item": "Cleaner hierarchy with less empty dead space between text and controls",
        "kind": "craft"
       },
       {
-       "reason": "Image 1 does have more features (skip, settings, import, audio), a point in its favour for completeness",
+       "item": "Image 1 does have more features (skip, settings, import, audio), a point in its favour for completeness",
+       "kind": "completeness"
+      }
+     ],
+     "excusedByLead": [
+      {
+       "item": "Home indicator and sheet presentation",
+       "kind": "craft",
+       "leadReason": "system-ui: drawn by iOS (missing from simulator captures)"
+      }
+     ],
+     "stillMissing": [
+      {
+       "item": "Full-width labelled 'Record screen' primary button",
+       "kind": "feature",
+       "leadReason": "fixedNext"
+      },
+      {
+       "item": "Illustration is complete and legible, while image 1's is cropped with truncated label text",
+       "kind": "craft"
+      },
+      {
+       "item": "Single obvious labelled primary action instead of an unlabelled record button plus extra controls",
+       "kind": "craft"
+      },
+      {
+       "item": "Cleaner hierarchy with less empty dead space between text and controls",
+       "kind": "craft"
+      },
+      {
+       "item": "Image 1 does have more features (skip, settings, import, audio), a point in its favour for completeness",
        "kind": "completeness"
       }
      ],
@@ -410,6 +711,7 @@
     "rec.screen.tutorial.2": {
      "reference": "9873040f",
      "pass": false,
+     "passAfterTriage": false,
      "judgePrefers": "snapreel",
      "missingFromSnapreel": [
       {
@@ -422,6 +724,20 @@
       }
      ],
      "referencePreferredBecause": [],
+     "excusedByLead": [
+      {
+       "item": "Sheet-style presentation with grab edge",
+       "kind": "feature",
+       "leadReason": "presentation: sheet versus page"
+      }
+     ],
+     "stillMissing": [
+      {
+       "item": "Orange 'Record screen' primary call-to-action button",
+       "kind": "feature",
+       "leadReason": "fixedNext"
+      }
+     ],
      "why": "Image 2 is a fuller screen: it shows an explicit step count, a Skip option, settings, import, a real record button and three capture modes, so the tutorial sits inside a working recorder. Its illustration is more specific, with a timer pill callout and stop icon, and the copy names the exact action. Image 1 is clean and readable with a strong headline and a clear primary button, but it is sparser, has a large empty gap, lacks a skip option, and its dim header text is low contrast.",
      "correspond": null,
      "mismatches": null
@@ -429,6 +745,7 @@
     "rec.screen.tutorial.3": {
      "reference": "9e42071f",
      "pass": false,
+     "passAfterTriage": false,
      "judgePrefers": "snapreel",
      "missingFromSnapreel": [
       {
@@ -441,6 +758,20 @@
       }
      ],
      "referencePreferredBecause": [],
+     "excusedByLead": [
+      {
+       "item": "Sheet peek at top and home indicator (native sheet finish)",
+       "kind": "feature",
+       "leadReason": "system-ui: drawn by iOS (missing from simulator captures)"
+      }
+     ],
+     "stillMissing": [
+      {
+       "item": "Full-width 'Record screen' primary CTA",
+       "kind": "feature",
+       "leadReason": "fixedNext"
+      }
+     ],
      "why": "Image 1 keeps the tutorial inside the real recording screen, so the record button, Import, mode switcher and settings stay visible, and it shows a custom illustration that matches the copy (notification, title field, share button). Its progress is explicit ('3 of 3' plus a pill indicator) and it has a clear 'Got it' dismiss. Image 2 is clean and has a strong primary CTA, but the illustration is generic (app grid) and does not show the naming/sharing step, the title is faint, and there is no explicit dismiss besides X. Image 1's 'Got it' is low-contrast and there is some empty space, but overall it is more complete.",
      "correspond": null,
      "mismatches": null
@@ -448,6 +779,7 @@
     "rec.broadcast": {
      "reference": "fe567cf9",
      "pass": false,
+     "passAfterTriage": true,
      "judgePrefers": "snapreel",
      "missingFromSnapreel": [
       {
@@ -460,6 +792,19 @@
       }
      ],
      "referencePreferredBecause": [],
+     "excusedByLead": [
+      {
+       "item": "Actual iOS Start Broadcast button and broadcast target picker with checkmark",
+       "kind": "feature",
+       "leadReason": "system-ui: iOS's Screen Broadcast sheet (Snapreel opens the same sheet; captured from round 2)"
+      },
+      {
+       "item": "Microphone on/off toggle with visible state 'Off'",
+       "kind": "feature",
+       "leadReason": "system-ui: iOS's Screen Broadcast sheet (Snapreel opens the same sheet; captured from round 2)"
+      }
+     ],
+     "stillMissing": [],
      "why": "Image 2 is a fully designed in-app step: clear heading, three concise explanations of what will happen (notifications, mic, privacy), a clear call to action, plus close, help, settings, import and mode switching. Image 1 is essentially the stock iOS broadcast picker with a warning line; it does its one job (start broadcast, see mic state) but offers no explanation, no navigation out beyond the system sheet and little app finish. Image 2 has consistent dark styling, good hierarchy and spacing, with only a large empty gap above the hint.",
      "correspond": null,
      "mismatches": null
@@ -467,6 +812,7 @@
     "rec.broadcast.unavailable": {
      "reference": "1245d328",
      "pass": false,
+     "passAfterTriage": true,
      "judgePrefers": "snapreel",
      "missingFromSnapreel": [
       {
@@ -479,6 +825,19 @@
       }
      ],
      "referencePreferredBecause": [],
+     "excusedByLead": [
+      {
+       "item": "Microphone on/off toggle in the broadcast step",
+       "kind": "feature",
+       "leadReason": "system-ui: iOS's Screen Broadcast sheet (Snapreel opens the same sheet; captured from round 2)"
+      },
+      {
+       "item": "Native iOS broadcast picker sheet behind the alert",
+       "kind": "feature",
+       "leadReason": "system-ui: iOS alert; Snapreel shows its own primer first, then the same alert (captured from round 2)"
+      }
+     ],
+     "stillMissing": [],
      "why": "Image 2 is a fully designed, branded error state that explains the cause, gives three concrete fixes, offers Try again, and keeps the capture mode switcher, import, settings and close controls available. Image 1 is a bare system alert over a dimmed, half-hidden picker with a terse message and only an OK button, so the user has no guidance or recovery path. Image 2 has consistent hierarchy, iconography and spacing; image 1 looks like an unstyled default iOS dialog.",
      "correspond": null,
      "mismatches": null
@@ -486,6 +845,7 @@
     "rec.screen.recording": {
      "reference": "8f0f7c0f",
      "pass": false,
+     "passAfterTriage": true,
      "judgePrefers": "snapreel",
      "missingFromSnapreel": [
       {
@@ -498,6 +858,19 @@
       }
      ],
      "referencePreferredBecause": [],
+     "excusedByLead": [
+      {
+       "item": "Multi-step tutorial carousel with page dots",
+       "kind": "feature",
+       "leadReason": "present-differently: the tutorial runs before recording"
+      },
+      {
+       "item": "Text button 'Stop recording' (outlined)",
+       "kind": "feature",
+       "leadReason": "present-differently: Stop button under the status"
+      }
+     ],
+     "stillMissing": [],
      "why": "Image 1 shows the actual recording state: a live timer, clear status, mic state, a prominent stop control and a mode switcher, so it does its job directly. Image 2 is a tutorial carousel page about sharing afterwards, with the stop action as a quieter outlined button and no timer or mic info on the screen. Image 1 has stronger hierarchy and a more polished, consistent look; image 2 has a nice illustration and onboarding paging but is less focused on the in-progress recording.",
      "correspond": null,
      "mismatches": null
@@ -505,6 +878,7 @@
     "rec.review": {
      "reference": "9bed6b10",
      "pass": false,
+     "passAfterTriage": true,
      "judgePrefers": "snapreel",
      "missingFromSnapreel": [
       {
@@ -521,6 +895,24 @@
       }
      ],
      "referencePreferredBecause": [],
+     "excusedByLead": [
+      {
+       "item": "Floating pill toolbar with circular teal checkmark confirm",
+       "kind": "feature",
+       "leadReason": "presentation: Done button"
+      },
+      {
+       "item": "Full-bleed immersive video area",
+       "kind": "feature",
+       "leadReason": "presentation"
+      },
+      {
+       "item": "Home indicator bar visible",
+       "kind": "craft",
+       "leadReason": "system-ui: drawn by iOS (missing from simulator captures)"
+      }
+     ],
+     "stillMissing": [],
      "why": "Image 1 gives a full review surface: playback controls with timeline and duration, an editable title with file metadata, four clearly labelled actions including Save to Photos, and an unmistakable Done button. Image 2 is clean and minimal but has no visible play control, timeline, duration, size or title field, and the unlabelled icons and checkmark are less clear. Image 1 has a more consistent, finished layout with good hierarchy, while image 2 has odd edge artifacts at the top and sides and a large empty black area.",
      "correspond": null,
      "mismatches": null
@@ -528,6 +920,7 @@
     "rec.title": {
      "reference": "18dfff18",
      "pass": false,
+     "passAfterTriage": true,
      "judgePrefers": "snapreel",
      "missingFromSnapreel": [
       {
@@ -544,6 +937,24 @@
       }
      ],
      "referencePreferredBecause": [],
+     "excusedByLead": [
+      {
+       "item": "Sheet grabber handle",
+       "kind": "feature",
+       "leadReason": "presentation: sheet versus page"
+      },
+      {
+       "item": "Autocomplete suggestions row populated",
+       "kind": "feature",
+       "leadReason": "system-ui: keyboard predictions"
+      },
+      {
+       "item": "Larger preview area",
+       "kind": "feature",
+       "leadReason": "presentation"
+      }
+     ],
+     "stillMissing": [],
      "why": "Image 1 is a clearly structured editor: a labelled sheet with Cancel, Title and Save, a placeholder that explains what to enter, and a character limit counter, over a recognisable dimmed preview. Image 2 has no Cancel or heading, an unlabelled field, and a preview that is mostly a black void with the content cropped at the bottom, which looks broken. Image 2 does show a filled-in state with suggestions, but its layout and hierarchy are weaker. Image 1 is more consistent and finished visually, though its dim red Save and the preview behind the sheet are slightly muddy.",
      "correspond": null,
      "mismatches": null
@@ -551,6 +962,7 @@
     "rec.share": {
      "reference": "96967148",
      "pass": false,
+     "passAfterTriage": true,
      "judgePrefers": "snapreel",
      "missingFromSnapreel": [
       {
@@ -559,6 +971,14 @@
       }
      ],
      "referencePreferredBecause": [],
+     "excusedByLead": [
+      {
+       "item": "Text Close button",
+       "kind": "feature",
+       "leadReason": "presentation: close control style"
+      }
+     ],
+     "stillMissing": [],
      "why": "Image 1 offers more share destinations (Copy, Save Video, Shared Album, Save to Files) plus a clear preview, file title and an X dismiss, so it does more for the sharing job. Image 2 is clean and has a clear primary action with a privacy statement, but it has only two actions and a dimmed, barely legible preview. Image 1 has a minor flaw in the truncated title and a lone More tile in the middle row; image 2 has a typo-like 'No log in required' and a mostly empty sheet.",
      "correspond": null,
      "mismatches": null
@@ -566,6 +986,7 @@
     "lib.videos": {
      "reference": "appstore-06",
      "pass": false,
+     "passAfterTriage": true,
      "judgePrefers": "snapreel",
      "missingFromSnapreel": [
       {
@@ -574,6 +995,14 @@
       }
      ],
      "referencePreferredBecause": [],
+     "excusedByLead": [
+      {
+       "item": "Dedicated Folders row with chevron at top of library",
+       "kind": "feature",
+       "leadReason": "present-differently: Folders tab"
+      }
+     ],
+     "stillMissing": [],
      "why": "Image 2 is a real full-screen app screen with a working information structure: tabs, an item count and total duration, a sort control, a clear selected tab state, labelled tabs and a badge, plus useful per-item metadata (source, comments, reactions, folder, needs-title state). Image 1 is a marketing mockup with a headline and phone frame, with an unlabelled icon-only tab bar and fewer states, though its thumbnails and sample content look polished. Image 2 has a stronger hierarchy and more consistent card finish, and it handles portrait video thumbnails sensibly.",
      "correspond": null,
      "mismatches": null
@@ -581,6 +1010,7 @@
     "lib.folders": {
      "reference": "8815cad9",
      "pass": false,
+     "passAfterTriage": true,
      "judgePrefers": "snapreel",
      "missingFromSnapreel": [
       {
@@ -589,6 +1019,14 @@
       }
      ],
      "referencePreferredBecause": [],
+     "excusedByLead": [
+      {
+       "item": "Floating pill-style bottom nav and home indicator",
+       "kind": "craft",
+       "leadReason": "system-ui: drawn by iOS (missing from simulator captures)"
+      }
+     ],
+     "stillMissing": [],
      "why": "Image 1 is a fuller, more finished folders screen: it shows a folder count, a clear create action in two places, thumbnails, recording counts and recency per folder, and a notification badge. Its card grid has clear hierarchy and consistent spacing. Image 2 has only one text-only folder row, no create-folder action, no counts or thumbnails, and most of the screen is empty, so it feels sparse. Image 2's floating nav pill is a nice touch but does not make up for the missing content.",
      "correspond": null,
      "mismatches": null
@@ -596,6 +1034,7 @@
     "lib.actions": {
      "reference": "5c3f6863",
      "pass": false,
+     "passAfterTriage": true,
      "judgePrefers": "snapreel",
      "missingFromSnapreel": [
       {
@@ -612,6 +1051,24 @@
       }
      ],
      "referencePreferredBecause": [],
+     "excusedByLead": [
+      {
+       "item": "Download action",
+       "kind": "feature",
+       "leadReason": "present-differently: Save to Photos"
+      },
+      {
+       "item": "Edit title action",
+       "kind": "feature",
+       "leadReason": "present-differently: labelled Rename in this build (relabelled Edit title next)"
+      },
+      {
+       "item": "Home indicator visible",
+       "kind": "craft",
+       "leadReason": "system-ui: drawn by iOS (missing from simulator captures)"
+      }
+     ],
+     "stillMissing": [],
      "why": "Image 1 gives a richer, well-organised sheet: video metadata (thumbnail, duration, type, date, size), primary quick actions, a grouped list with current values and chevrons, and a clearly separated destructive action. The hierarchy is clear and the styling is consistent. Image 2 is a clean, minimal sheet with four actions that is easy to scan, but it carries less information and context, and its destructive Delete sits inline with safe actions in the first position. Image 1 feels more finished and more complete for a video actions sheet.",
      "correspond": null,
      "mismatches": null
@@ -619,6 +1076,7 @@
     "video.player": {
      "reference": "333244de",
      "pass": false,
+     "passAfterTriage": false,
      "judgePrefers": "snapreel",
      "missingFromSnapreel": [
       {
@@ -639,6 +1097,30 @@
       }
      ],
      "referencePreferredBecause": [],
+     "excusedByLead": [
+      {
+       "item": "Thumbs-down reaction and raised-hands reaction",
+       "kind": "feature",
+       "leadReason": "present-differently: every emoji is available from Snapreel's full picker"
+      },
+      {
+       "item": "Activity tab label",
+       "kind": "feature",
+       "leadReason": "server-only: other people's activity, comments, views, share links or workspaces"
+      },
+      {
+       "item": "Add comment (speech bubble) button",
+       "kind": "feature",
+       "leadReason": "present-differently: note button at the end of the reaction bar"
+      }
+     ],
+     "stillMissing": [
+      {
+       "item": "Picture-in-picture button",
+       "kind": "feature",
+       "leadReason": "fixedNext"
+      }
+     ],
      "why": "Image 2 has a cleaner hierarchy: video, title, metadata, stats card, tabs, reactions, then a docked action bar, with nothing overlapping. Image 1 is feature rich, but its floating Activity/Transcript pill and reaction bar sit on top of the comment list, truncating the Reply label and covering a comment, so it looks unfinished. Image 2 also shows reactions as timeline markers and timestamped chips and has a clear compose action, while its dark styling is consistent. Image 1 does offer picture-in-picture, copy link and a visible comment thread.",
      "correspond": null,
      "mismatches": null
@@ -646,6 +1128,7 @@
     "video.details": {
      "reference": "appstore-04",
      "pass": false,
+     "passAfterTriage": false,
      "judgePrefers": "reference",
      "missingFromSnapreel": [
       {
@@ -667,15 +1150,53 @@
      ],
      "referencePreferredBecause": [
       {
-       "reason": "Includes comments, summary and a comment input, so the screen does its full details-and-summary job",
+       "item": "Includes comments, summary and a comment input, so the screen does its full details-and-summary job",
        "kind": "completeness"
       },
       {
-       "reason": "Clear action row (edit, download, copy, share) makes next steps obvious",
+       "item": "Clear action row (edit, download, copy, share) makes next steps obvious",
        "kind": "feature"
       },
       {
-       "reason": "Cleaner hierarchy and spacing, nothing clipped awkwardly except the faded summary",
+       "item": "Cleaner hierarchy and spacing, nothing clipped awkwardly except the faded summary",
+       "kind": "craft"
+      }
+     ],
+     "excusedByLead": [
+      {
+       "item": "Add a comment text field with video and voice comment options",
+       "kind": "feature",
+       "leadReason": "server-only: other people's activity, comments, views, share links or workspaces"
+      },
+      {
+       "item": "Checkmark reaction option",
+       "kind": "feature",
+       "leadReason": "present-differently: every emoji is available from Snapreel's full picker"
+      },
+      {
+       "item": "Segmented chapter bar on video",
+       "kind": "feature",
+       "leadReason": "server-only: chapters generated by the service"
+      },
+      {
+       "item": "Includes comments, summary and a comment input, so the screen does its full details-and-summary job",
+       "kind": "completeness",
+       "leadReason": "server-only: other people's activity, comments, views, share links or workspaces",
+       "preference": true
+      }
+     ],
+     "stillMissing": [
+      {
+       "item": "Edit, Download, Copy link actions as visible chips",
+       "kind": "feature",
+       "leadReason": "fixedNext"
+      },
+      {
+       "item": "Clear action row (edit, download, copy, share) makes next steps obvious",
+       "kind": "feature"
+      },
+      {
+       "item": "Cleaner hierarchy and spacing, nothing clipped awkwardly except the faded summary",
        "kind": "craft"
       }
      ],
@@ -686,6 +1207,7 @@
     "video.pip": {
      "reference": "307833f4",
      "pass": false,
+     "passAfterTriage": true,
      "judgePrefers": "snapreel",
      "missingFromSnapreel": [
       {
@@ -702,6 +1224,24 @@
       }
      ],
      "referencePreferredBecause": [],
+     "excusedByLead": [
+      {
+       "item": "Live PiP window preview with close and expand buttons",
+       "kind": "feature",
+       "leadReason": "system-ui: the PiP window belongs to iOS and does not run in the simulator"
+      },
+      {
+       "item": "PiP playback controls (rewind 15, pause, forward 15, progress bar)",
+       "kind": "feature",
+       "leadReason": "system-ui: the PiP window belongs to iOS and does not run in the simulator"
+      },
+      {
+       "item": "Thumbs down reaction and comment button",
+       "kind": "feature",
+       "leadReason": "server-only: other people's activity, comments, views, share links or workspaces"
+      }
+     ],
+     "stillMissing": [],
      "why": "Image 1 is a clean, deliberate PiP state: a clear message, one obvious 'Bring it back here' action, and a well-organised details area with stats, tabs and reactions, with no overlaps. Image 2 shows the real PiP window and its controls, which is realistic, but the PiP window clips the placeholder text, the tab pill floats over and cuts off comment rows, and the reaction bar overlaps the last comment, so it looks cluttered and less finished. Image 1 has more consistent hierarchy and spacing.",
      "correspond": null,
      "mismatches": null
@@ -709,6 +1249,7 @@
     "video.speed": {
      "reference": "5bdf10e6",
      "pass": false,
+     "passAfterTriage": true,
      "judgePrefers": "snapreel",
      "missingFromSnapreel": [
       {
@@ -717,6 +1258,14 @@
       }
      ],
      "referencePreferredBecause": [],
+     "excusedByLead": [
+      {
+       "item": "Thumbs down reaction",
+       "kind": "feature",
+       "leadReason": "present-differently: every emoji is available from Snapreel's full picker"
+      }
+     ],
+     "stillMissing": [],
      "why": "Image 2 is a fuller player screen: the speed menu is titled, has a clear red check, and the player chrome, scrubber and timecodes sit around it with consistent spacing. The info area is well organised, with title, stats, an analytics card, a Notes/Transcript toggle, timestamped reaction chips and a clear primary compose action. Image 1 has a plainer speed menu on a blurred video, and its Activity/Transcript toggle floats over and clips the comment list, so the Reply text and third comment are cut off and look unfinished. Image 1 does show actual comment content, but its overlapping layers and mixed type weights are less polished.",
      "correspond": null,
      "mismatches": null
@@ -724,6 +1273,7 @@
     "video.notes": {
      "reference": "08b623c3",
      "pass": false,
+     "passAfterTriage": true,
      "judgePrefers": "snapreel",
      "missingFromSnapreel": [
       {
@@ -736,6 +1286,19 @@
       }
      ],
      "referencePreferredBecause": [],
+     "excusedByLead": [
+      {
+       "item": "Activity / Transcript toggle (activity feed framing)",
+       "kind": "feature",
+       "leadReason": "server-only: other people's activity, comments, views, share links or workspaces"
+      },
+      {
+       "item": "Thumbs-down reaction",
+       "kind": "feature",
+       "leadReason": "present-differently: every emoji is available from Snapreel's full picker"
+      }
+     ],
+     "stillMissing": [],
      "why": "Image 2 is a fuller, more finished screen for a notes job: it has real player controls, timeline reaction markers, a reactions summary, note cards with timestamp-jump chips, overflow menus and a clear add-note action, in a consistent dark theme with strong hierarchy. Image 1 is a lighter comment feed with a tiny letterboxed video, a very sparse list of short comments, and no way to add a timed note beyond a chat icon. Image 1 is clean but plainer and the video area wastes space. Image 2's last card is clipped under the bar, which is normal scrolling.",
      "correspond": null,
      "mismatches": null
@@ -743,6 +1306,7 @@
     "video.transcript.none": {
      "reference": "1cf35f2e",
      "pass": false,
+     "passAfterTriage": false,
      "judgePrefers": "snapreel",
      "missingFromSnapreel": [
       {
@@ -767,6 +1331,34 @@
       }
      ],
      "referencePreferredBecause": [],
+     "excusedByLead": [
+      {
+       "item": "Timeline emoji reaction markers",
+       "kind": "feature",
+       "leadReason": "content: this sample recording has no reactions"
+      },
+      {
+       "item": "Activity tab",
+       "kind": "feature",
+       "leadReason": "server-only: other people's activity, comments, views, share links or workspaces"
+      },
+      {
+       "item": "Thumbs down reaction and comment bubble button",
+       "kind": "feature",
+       "leadReason": "server-only: other people's activity, comments, views, share links or workspaces"
+      }
+     ],
+     "stillMissing": [
+      {
+       "item": "Picture-in-picture button",
+       "kind": "feature",
+       "leadReason": "fixedNext"
+      },
+      {
+       "item": "Resume playback pill with dismiss",
+       "kind": "feature"
+      }
+     ],
      "why": "Image 2 explains the empty state clearly (heading plus explanatory subtext) and offers a direct recovery action (Try again), with a clear icon and a consistent dark theme and accent color. Image 1 only says no transcript is available and leaves a large blank area, and its Resume playback button is ambiguous in that context. Image 1 has richer player controls (PiP, timeline reactions, more emoji) but the transcript panel itself is thinner and less finished.",
      "correspond": null,
      "mismatches": null
@@ -774,6 +1366,7 @@
     "video.note.compose": {
      "reference": "e835b4d8",
      "pass": false,
+     "passAfterTriage": false,
      "judgePrefers": "snapreel",
      "missingFromSnapreel": [
       {
@@ -786,6 +1379,20 @@
       }
      ],
      "referencePreferredBecause": [],
+     "excusedByLead": [
+      {
+       "item": "Remaining-time readout (-0:31)",
+       "kind": "feature",
+       "leadReason": "presentation: the composer covers the scrubber"
+      }
+     ],
+     "stillMissing": [
+      {
+       "item": "Picture-in-picture button",
+       "kind": "feature",
+       "leadReason": "fixedNext"
+      }
+     ],
      "why": "Image 2 explains its state ('Playback is paused'), uses a guiding placeholder prompt, and has a more cohesive dark theme with rounded controls and a drag handle, so it reads as a more finished, purpose-built composer. Image 1 is clean and functional with a typed draft and send button, but the generic 'Comment' title, sparse dark video frame and light sheet over a dark player feel less cohesive. Image 2 has minor flaws: the clipped time label under the sheet and a large empty area below the field.",
      "correspond": null,
      "mismatches": null
@@ -793,6 +1400,7 @@
     "video.note.edit": {
      "reference": "20d71ce8",
      "pass": false,
+     "passAfterTriage": false,
      "judgePrefers": "snapreel",
      "missingFromSnapreel": [
       {
@@ -805,6 +1413,20 @@
       }
      ],
      "referencePreferredBecause": [],
+     "excusedByLead": [
+      {
+       "item": "Timestamp chip linked to a comment",
+       "kind": "feature",
+       "leadReason": "present-differently: header reads Edit note at 0:14"
+      }
+     ],
+     "stillMissing": [
+      {
+       "item": "Picture-in-picture button",
+       "kind": "feature",
+       "leadReason": "fixedNext"
+      }
+     ],
      "why": "Image 1 is a true edit-note screen: it names the timestamp being edited, shows where the note is stored, holds the editable text, and offers both Delete and Save, so the job is complete and the actions are clear. Its dark sheet is consistent with the dimmed player and the layout is tidy, though the Save button looks washed out and there is a lot of empty space under the text. Image 2 is a reply-to-thread screen rather than an edit-note screen; it is clean and polished but has no edit, save or delete, and relies on other users' content.",
      "correspond": null,
      "mismatches": null
@@ -812,6 +1434,7 @@
     "video.reaction": {
      "reference": "b670b4bf",
      "pass": false,
+     "passAfterTriage": true,
      "judgePrefers": "snapreel",
      "missingFromSnapreel": [
       {
@@ -836,6 +1459,34 @@
       }
      ],
      "referencePreferredBecause": [],
+     "excusedByLead": [
+      {
+       "item": "Thumbs-down reaction",
+       "kind": "feature",
+       "leadReason": "present-differently: every emoji is available from Snapreel's full picker"
+      },
+      {
+       "item": "Raised-hands reaction",
+       "kind": "feature",
+       "leadReason": "present-differently: every emoji is available from Snapreel's full picker"
+      },
+      {
+       "item": "Comment/chat icon in the bottom reaction bar",
+       "kind": "feature",
+       "leadReason": "server-only: other people's activity, comments, views, share links or workspaces"
+      },
+      {
+       "item": "Replay button in header",
+       "kind": "feature",
+       "leadReason": "present-differently: play-again control when the video ends"
+      },
+      {
+       "item": "Activity / Transcript tabs with activity feed",
+       "kind": "feature",
+       "leadReason": "server-only: other people's activity, comments, views, share links or workspaces"
+      }
+     ],
+     "stillMissing": [],
      "why": "Image 2 is a clean, well-layered screen: the reaction picker sits clearly over the video with a timestamp context ('React at 0:04'), a close button, and a timeline with reaction markers, and the content below is structured and legible. Image 1 looks broken in places: the video backdrop shows screen-broadcast text and a Loom timer bleeding behind the emoji buttons, the Activity/Transcript tab floats over the comment feed and cuts off 'Reply', and the bottom emoji bar overlaps feed rows. Image 2 also offers more functionality (speed, fullscreen, scrubber, add note, more emojis) and has a consistent dark theme.",
      "correspond": null,
      "mismatches": null
@@ -843,6 +1494,7 @@
     "video.actions": {
      "reference": "5c3f6863",
      "pass": false,
+     "passAfterTriage": false,
      "judgePrefers": "snapreel",
      "missingFromSnapreel": [
       {
@@ -859,6 +1511,25 @@
       }
      ],
      "referencePreferredBecause": [],
+     "excusedByLead": [
+      {
+       "item": "Delete, Download, Share, Edit title as a compact icon row",
+       "kind": "feature",
+       "leadReason": "presentation: same actions as a list"
+      },
+      {
+       "item": "Scrubber with elapsed/remaining time and emoji reaction markers",
+       "kind": "feature",
+       "leadReason": "presentation: behind the sheet"
+      }
+     ],
+     "stillMissing": [
+      {
+       "item": "Picture-in-picture button",
+       "kind": "feature",
+       "leadReason": "fixedNext"
+      }
+     ],
      "why": "Image 2 is a purpose-built actions sheet: a clear header with thumbnail, title, duration, date and close button, then a labelled list of five actions with helpful descriptions and a separated destructive action. It is easy to scan, consistent in icon treatment and has a drag handle and dismiss control. Image 1 shows a richer surrounding screen but its sheet is a compact row of four icon buttons with short labels, no descriptions and no close affordance, so it is less informative as an actions screen. The sheet in image 2 leaves a lot of empty space at the bottom, but overall it is clearer and more finished.",
      "correspond": null,
      "mismatches": null
@@ -866,6 +1537,7 @@
     "video.photos.permission": {
      "reference": "7abeda8d",
      "pass": false,
+     "passAfterTriage": false,
      "judgePrefers": "snapreel",
      "missingFromSnapreel": [
       {
@@ -882,6 +1554,24 @@
       }
      ],
      "referencePreferredBecause": [],
+     "excusedByLead": [
+      {
+       "item": "Native iOS permission alert with Don't Allow / OK",
+       "kind": "feature",
+       "leadReason": "system-ui: iOS alert; Snapreel shows its own primer first, then the same alert (captured from round 2)"
+      },
+      {
+       "item": "Activity / Transcript tabs",
+       "kind": "feature",
+       "leadReason": "server-only: other people's activity, comments, views, share links or workspaces"
+      }
+     ],
+     "stillMissing": [
+      {
+       "item": "Picture-in-picture button and progress/time labels",
+       "kind": "feature"
+      }
+     ],
      "why": "Image 1 is a purpose-built pre-permission screen: clear heading, plain-language explanation, a card naming the exact file with size and duration, a reassurance about privacy, and a clear primary and secondary action. It is cleanly laid out with strong hierarchy. Image 2 is only the bare system permission alert over a busy, dimmed screen, so the app contributes just one terse sentence and the user gets little context or choice beyond the OS dialog; the cluttered background (partly overlapped, truncated text) also makes it feel less finished as a save-to-photos screen.",
      "correspond": null,
      "mismatches": null
@@ -889,6 +1579,7 @@
     "video.stats": {
      "reference": "4ebeb7dc",
      "pass": false,
+     "passAfterTriage": true,
      "judgePrefers": "snapreel",
      "missingFromSnapreel": [
       {
@@ -897,6 +1588,14 @@
       }
      ],
      "referencePreferredBecause": [],
+     "excusedByLead": [
+      {
+       "item": "'See how we calculate this' link",
+       "kind": "feature",
+       "leadReason": "present-differently: explained under the stats"
+      }
+     ],
+     "stillMissing": [],
      "why": "Image 2 fills the screen with a coherent hierarchy: icon-labelled metric tiles, a progress card with bar, a metadata list and an explanatory footnote, all in a consistent dark theme with clear dismissal and privacy messaging. Image 1 is clean but sparse, with an orphaned third tile, a half-empty screen, and a tiny 0% completion that looks unfinished; its viewer list adds social depth but needs an account. Image 2 reads as the more complete and better-finished screen for its job.",
      "correspond": null,
      "mismatches": null
@@ -904,6 +1603,7 @@
     "notif.feed": {
      "reference": "appstore-05",
      "pass": false,
+     "passAfterTriage": true,
      "judgePrefers": "snapreel",
      "missingFromSnapreel": [
       {
@@ -916,6 +1616,19 @@
       }
      ],
      "referencePreferredBecause": [],
+     "excusedByLead": [
+      {
+       "item": "Underlined tabs All Activity / Comments / Reactions",
+       "kind": "feature",
+       "leadReason": "server-only: other people's activity, comments, views, share links or workspaces"
+      },
+      {
+       "item": "View transcript links with timestamps on each item",
+       "kind": "feature",
+       "leadReason": "present-differently: a transcript notification opens the recording's Transcript tab"
+      }
+     ],
+     "stillMissing": [],
      "why": "Image 2 is a real, full-bleed app screen with clear hierarchy, filter chips with unread counts, unread dots, thumbnails, a clear single action and labelled tabs, and it is large and legible. Image 1 is a marketing mock inside a phone frame with a headline, so the actual screen is smaller and cramped, and its last row is cut off, though its feed is richer in social interactions (replies, reactions). Image 2 feels more polished and self-contained for its job.",
      "correspond": null,
      "mismatches": null
@@ -923,6 +1636,7 @@
     "search.idle": {
      "reference": "2ba59348",
      "pass": false,
+     "passAfterTriage": true,
      "judgePrefers": "snapreel",
      "missingFromSnapreel": [
       {
@@ -931,6 +1645,14 @@
       }
      ],
      "referencePreferredBecause": [],
+     "excusedByLead": [
+      {
+       "item": "Floating pill-shaped tab bar with selected-dot indicator",
+       "kind": "feature",
+       "leadReason": "presentation: tab bar style"
+      }
+     ],
+     "stillMissing": [],
      "why": "Image 1 uses the idle state to give the user something to do: recent searches that can be removed or cleared, tags to browse, and a caption that says what the search covers. The hierarchy is clear, with a bold title, section headers, grouped cards and chips, and a prominent record button in the tab bar. Image 2 is clean and polished with a modern floating tab bar, but it is mostly empty space with a generic explanatory message, so it does less for the job. Image 1 has a bit more visual density but stays well organized.",
      "correspond": null,
      "mismatches": null
@@ -938,6 +1660,7 @@
     "search.typing": {
      "reference": "dc34fe74",
      "pass": false,
+     "passAfterTriage": true,
      "judgePrefers": "snapreel",
      "missingFromSnapreel": [
       {
@@ -950,6 +1673,19 @@
       }
      ],
      "referencePreferredBecause": [],
+     "excusedByLead": [
+      {
+       "item": "Search field focus outline with text selection and cursor state",
+       "kind": "feature",
+       "leadReason": "system-ui: keyboard focus state"
+      },
+      {
+       "item": "Autocorrect suggestion bar populated",
+       "kind": "feature",
+       "leadReason": "system-ui: keyboard predictions"
+      }
+     ],
+     "stillMissing": [],
      "why": "Image 1 groups results into labelled, counted sections (Recordings, Said in the video), highlights the matched text, and offers row actions (overflow menu, play at timestamp), so it does more for a search job and reads clearly. Its cards, large title, settings icon and consistent red accent feel deliberate and finished. Image 2 is a clean, simple flat list, but the metadata is truncated, thumbnails are blurry or near-identical dark frames, there is no match highlighting, no sections and no row actions, and the lower half is empty.",
      "correspond": null,
      "mismatches": null
@@ -957,6 +1693,7 @@
     "search.results": {
      "reference": "d9ee7199",
      "pass": false,
+     "passAfterTriage": true,
      "judgePrefers": "snapreel",
      "missingFromSnapreel": [
       {
@@ -965,6 +1702,14 @@
       }
      ],
      "referencePreferredBecause": [],
+     "excusedByLead": [
+      {
+       "item": "Green status dot at top of screen",
+       "kind": "feature",
+       "leadReason": "system-ui: iOS privacy indicator in the reference capture"
+      }
+     ],
+     "stillMissing": [],
      "why": "Image 1 groups results into clear sections (recordings, tags, transcript matches) with counts, highlighted query matches, comment and reaction counts, per-item actions, and play buttons, so it handles the search job in depth. Hierarchy is strong with a large title, card containers and consistent red accent. Image 2 is clean and modern but is a bare flat list with truncated metadata, no match highlighting, no result grouping or actions, and a large empty area. Image 2 has a nice floating tab bar, but overall it is less complete.",
      "correspond": null,
      "mismatches": null
@@ -972,6 +1717,7 @@
     "settings.root": {
      "reference": "74aeb655",
      "pass": false,
+     "passAfterTriage": true,
      "judgePrefers": "snapreel",
      "missingFromSnapreel": [
       {
@@ -980,6 +1726,14 @@
       }
      ],
      "referencePreferredBecause": [],
+     "excusedByLead": [
+      {
+       "item": "X close button instead of text Done",
+       "kind": "feature",
+       "leadReason": "presentation: close control style"
+      }
+     ],
+     "stillMissing": [],
      "why": "Image 2 fills the screen with useful settings: rounded inset grouped cards, labelled sections, live current-value hints (All on, 1080p, 2.23 GB) and a branded footer with version and privacy note. Image 1 is clean but sparse, with only four rows, no headers or values, and about half the screen empty. Image 2 has stronger hierarchy and consistent icon tinting, and feels more finished. Image 1's X close and plain flat rows are acceptable but less informative.",
      "correspond": null,
      "mismatches": null
@@ -987,9 +1741,12 @@
     "settings.notifications": {
      "reference": "be1d5c1e",
      "pass": true,
+     "passAfterTriage": true,
      "judgePrefers": "snapreel",
      "missingFromSnapreel": [],
      "referencePreferredBecause": [],
+     "excusedByLead": [],
+     "stillMissing": [],
      "why": "Image 2 is the more finished screen: grouped inset cards, tinted icon tiles, a description under every toggle, and a clear permission-state card with an Allow notifications call to action, so it explains itself and handles the OS-permission case. Hierarchy and spacing are consistent and modern iOS-style. Image 1 covers more notification types (engagement and sharing) and is clean, but it is a flat list of terse labels with only one description, no permission handling, and a cut-off section at the bottom. Image 2 has fewer settings, but each is better explained and the screen looks more polished.",
      "correspond": null,
      "mismatches": null
@@ -997,9 +1754,12 @@
     "settings.storage": {
      "reference": "3792bec9",
      "pass": true,
+     "passAfterTriage": true,
      "judgePrefers": "snapreel",
      "missingFromSnapreel": [],
      "referencePreferredBecause": [],
+     "excusedByLead": [],
+     "stillMissing": [],
      "why": "Image 1 is a real storage screen: it shows total usage against device capacity, a breakdown by category and type, and a list of the largest recordings with thumbnails, sizes and per-item delete. Hierarchy is clear, cards and icons are consistent, and the screen supports the job of finding and freeing space. Image 2 is an account-deletion screen rather than a storage view, contains a typo, and is mostly empty space with a single action, so it does not do the storage job at all.",
      "correspond": null,
      "mismatches": null
@@ -1007,6 +1767,7 @@
     "settings.storage.confirm": {
      "reference": "0adb4039",
      "pass": false,
+     "passAfterTriage": true,
      "judgePrefers": "snapreel",
      "missingFromSnapreel": [
       {
@@ -1019,6 +1780,19 @@
       }
      ],
      "referencePreferredBecause": [],
+     "excusedByLead": [
+      {
+       "item": "Back navigation chevron and screen title header",
+       "kind": "feature",
+       "leadReason": "presentation: confirmation sheet"
+      },
+      {
+       "item": "Native iOS confirmation alert with Delete Account / Cancel",
+       "kind": "feature",
+       "leadReason": "presentation: Snapreel confirms in a sheet that lists what is deleted"
+      }
+     ],
+     "stillMissing": [],
      "why": "Image 2 is a purpose-built confirmation sheet that itemizes exactly what will be deleted, with counts and size, consistent icons and clear hierarchy, so the user knows the consequence before acting. Image 1 relies on a generic system alert over a mostly empty screen with a vague one-sentence warning. Image 2 has minor flaws: the 'What stays' card is clipped awkwardly by the button and the primary button looks washed out. Overall it is still more informative and more polished.",
      "correspond": null,
      "mismatches": null
@@ -1026,6 +1800,7 @@
     "help.home": {
      "reference": "f9c3e1f6",
      "pass": false,
+     "passAfterTriage": true,
      "judgePrefers": "snapreel",
      "missingFromSnapreel": [
       {
@@ -1038,6 +1813,19 @@
       }
      ],
      "referencePreferredBecause": [],
+     "excusedByLead": [
+      {
+       "item": "See all 7 articles expand/collapse link",
+       "kind": "feature",
+       "leadReason": "present: Snapreel's categories have See all N articles below the fold"
+      },
+      {
+       "item": "Section header bar and bold sub-group titles",
+       "kind": "feature",
+       "leadReason": "presentation"
+      }
+     ],
+     "stillMissing": [],
      "why": "Image 1 has a clearer hierarchy: a suggested-for-you block with one-line descriptions, categories with icons and article counts, and rounded cards with chevrons that signal tappable rows. Image 2 is a plain, dense text list with grey low-contrast article titles, no chevrons or icons, and a less polished, dated look. Image 2 does offer an expand control for long groups, but overall image 1 is more scannable and better finished.",
      "correspond": null,
      "mismatches": null
@@ -1045,6 +1833,7 @@
     "help.article": {
      "reference": "5b3089b4",
      "pass": false,
+     "passAfterTriage": true,
      "judgePrefers": "snapreel",
      "missingFromSnapreel": [
       {
@@ -1073,6 +1862,39 @@
       }
      ],
      "referencePreferredBecause": [],
+     "excusedByLead": [
+      {
+       "item": "Search Help Center field",
+       "kind": "feature",
+       "leadReason": "present-differently: search is on the Help centre page"
+      },
+      {
+       "item": "Breadcrumb navigation",
+       "kind": "feature",
+       "leadReason": "present-differently: category label above the title"
+      },
+      {
+       "item": "Hamburger menu",
+       "kind": "feature",
+       "leadReason": "system-ui: the reference opens a hosted web page in Safari's in-app browser; Snapreel's pages are bundled and work offline"
+      },
+      {
+       "item": "Reader mode and reload buttons",
+       "kind": "feature",
+       "leadReason": "system-ui: the reference opens a hosted web page in Safari's in-app browser; Snapreel's pages are bundled and work offline"
+      },
+      {
+       "item": "Browser back/forward/share/open-in-Safari toolbar",
+       "kind": "feature",
+       "leadReason": "system-ui: the reference opens a hosted web page in Safari's in-app browser; Snapreel's pages are bundled and work offline"
+      },
+      {
+       "item": "Floating help icon",
+       "kind": "feature",
+       "leadReason": "system-ui: website chat widget"
+      }
+     ],
+     "stillMissing": [],
      "why": "Image 1 is a self-contained, native help article with clear hierarchy: category label, title, subtitle, intro, numbered steps in a card and a tip callout. It is consistent in colour and spacing and gives actionable content. Image 2 is a generic web page in a browser view with a stray 'Toggle navigation' button, a floating help icon overlapping text and clutter from site chrome, so the article content is pushed down and looks unfinished as an app screen.",
      "correspond": null,
      "mismatches": null
@@ -1080,9 +1902,12 @@
     "legal.menu": {
      "reference": "35a24f63",
      "pass": true,
+     "passAfterTriage": true,
      "judgePrefers": "snapreel",
      "missingFromSnapreel": [],
      "referencePreferredBecause": [],
+     "excusedByLead": [],
+     "stillMissing": [],
      "why": "Image 2 is the more complete screen: it adds a privacy summary card, per-row icons, a labelled back button and a copyright footer, all in a consistent red accent. Its inset grouped list follows iOS conventions and has a clear hierarchy. Image 1 is clean and functional but bare, with unlabelled back, no icons, no footer and a large empty area.",
      "correspond": null,
      "mismatches": null
@@ -1090,6 +1915,7 @@
     "legal.terms": {
      "reference": "d2910d61",
      "pass": false,
+     "passAfterTriage": true,
      "judgePrefers": "snapreel",
      "missingFromSnapreel": [
       {
@@ -1106,6 +1932,24 @@
       }
      ],
      "referencePreferredBecause": [],
+     "excusedByLead": [
+      {
+       "item": "Reader mode toggle",
+       "kind": "feature",
+       "leadReason": "system-ui: the reference opens a hosted web page in Safari's in-app browser; Snapreel's pages are bundled and work offline"
+      },
+      {
+       "item": "Reload button",
+       "kind": "feature",
+       "leadReason": "system-ui: the reference opens a hosted web page in Safari's in-app browser; Snapreel's pages are bundled and work offline"
+      },
+      {
+       "item": "Browser back/forward and open-in-Safari controls",
+       "kind": "feature",
+       "leadReason": "system-ui: the reference opens a hosted web page in Safari's in-app browser; Snapreel's pages are bundled and work offline"
+      }
+     ],
+     "stillMissing": [],
      "why": "Image 1 is a native, purpose-built legal reader with a clear title, a date pill, a plain-language summary and well-spaced, readable body text. Image 2 is a generic web view of a third-party website, with a large brand header, a nav dropdown and a hero band that push the actual terms below the fold and leave only a few lines of text visible. Image 1 looks more finished and focused on the reading job; image 2 is functionally complete as a browser but not designed for this screen.",
      "correspond": null,
      "mismatches": null
@@ -1113,6 +1957,7 @@
     "legal.privacy": {
      "reference": "dc86d237",
      "pass": false,
+     "passAfterTriage": true,
      "judgePrefers": "snapreel",
      "missingFromSnapreel": [
       {
@@ -1129,6 +1974,24 @@
       }
      ],
      "referencePreferredBecause": [],
+     "excusedByLead": [
+      {
+       "item": "Terms/Policies section dropdown to switch documents",
+       "kind": "feature",
+       "leadReason": "present-differently: Legal menu"
+      },
+      {
+       "item": "Safari toolbar: back/forward, open in Safari, text size, reload, URL with lock",
+       "kind": "feature",
+       "leadReason": "system-ui: the reference opens a hosted web page in Safari's in-app browser; Snapreel's pages are bundled and work offline"
+      },
+      {
+       "item": "Hamburger site menu",
+       "kind": "feature",
+       "leadReason": "system-ui: the reference opens a hosted web page in Safari's in-app browser; Snapreel's pages are bundled and work offline"
+      }
+     ],
+     "stillMissing": [],
      "why": "Image 2 is a purpose-built, native-feeling legal screen: clear back navigation, a share action, a dated pill, a plain-language summary and a consistent accent colour, with a lot of readable policy content visible straight away. Image 1 is a generic web view in a browser sheet where the site chrome (logo, menu, nav dropdown, hero band) and the browser toolbars use roughly half the screen and show only a few lines of the policy. Image 1 does offer a Terms/Policies switcher and a browser toolbar, but it feels like an external website rather than part of the app.",
      "correspond": null,
      "mismatches": null
@@ -1136,6 +1999,7 @@
     "legal.ack": {
      "reference": "939b73c4",
      "pass": false,
+     "passAfterTriage": true,
      "judgePrefers": "snapreel",
      "missingFromSnapreel": [
       {
@@ -1144,6 +2008,14 @@
       }
      ],
      "referencePreferredBecause": [],
+     "excusedByLead": [
+      {
+       "item": "Safari browser chrome: URL bar, AA text size, reload, back/forward, share, open in Safari",
+       "kind": "feature",
+       "leadReason": "system-ui: the reference opens a hosted web page in Safari's in-app browser; Snapreel's pages are bundled and work offline"
+      }
+     ],
+     "stillMissing": [],
      "why": "Image 1 is a native, purpose-built acknowledgements screen with a clear title, intro, section header and a tidy grouped list where each framework has a plain-language description of what it does. Image 2 is just an external web page in a Safari sheet, with a logo overlapping the heading, a link overflowing its box, clipped columns and a generic auto-generated report that is hard to read on a phone. Image 1 looks consistent, finished and readable; image 2 looks unpolished and depends on a third-party host.",
      "correspond": null,
      "mismatches": null
@@ -1154,14 +2026,61 @@
      "steps": 13,
      "droppedReferenceSteps": 8,
      "pass": false,
+     "passAfterTriage": false,
      "judgePrefers": "snapreel",
      "missingFromSnapreel": [
       {
-       "kind": "feature",
-       "detail": "Sign in / Sign up on every intro slide"
+       "item": "Sign in / Sign up on every intro slide",
+       "kind": "feature"
       }
      ],
      "referencePreferredBecause": [],
+     "excusedByLead": [
+      {
+       "item": "Sign in / Sign up on every intro slide",
+       "kind": "feature",
+       "leadReason": "server-only: accounts and sign-in (Snapreel has no account by design)"
+      },
+      {
+       "item": "step 2: Strip 1 has Skip and Next with no auth; strip 2 intro slides force Sign in / Sign up, so account creation is part of the intro.",
+       "kind": "mismatch",
+       "leadReason": "server-only: Sign in / Sign up"
+      },
+      {
+       "item": "step 3: Same as step 2: strip 1 offers Skip/Next, strip 2 offers Sign in / Sign up.",
+       "kind": "mismatch",
+       "leadReason": "server-only: Sign in / Sign up"
+      },
+      {
+       "item": "step 4: Strip 1 ends the intro with Continue; strip 2 still shows Sign in / Sign up.",
+       "kind": "mismatch",
+       "leadReason": "server-only: Sign in / Sign up"
+      },
+      {
+       "item": "step 7: Strip 1 asks permission to tour with Skip option; strip 2 shows a tour intro card with Start only (no skip).",
+       "kind": "mismatch",
+       "leadReason": "present-differently: Snapreel adds Skip"
+      },
+      {
+       "item": "step 13: Both end on home, but strip 1 has a record CTA plus library section, strip 2 an empty activity state.",
+       "kind": "mismatch",
+       "leadReason": "content"
+      }
+     ],
+     "stillMissing": [
+      {
+       "item": "step 10: Strip 1 tours the record button; strip 2 shows a notifications explainer at this point.",
+       "kind": "mismatch"
+      },
+      {
+       "item": "step 11: Both show the system permission alert, but strip 1 shows it over a custom pre-prompt screen, strip 2 over the tour card.",
+       "kind": "mismatch"
+      },
+      {
+       "item": "step 12: Strip 1 shows a full custom notification pre-prompt; strip 2 ends the tour on the record tab.",
+       "kind": "mismatch"
+      }
+     ],
      "why": "Strip 1 lets the user skip, explains value per slide with a distinct illustration, and personalises tips, while keeping the tour concise with Skip available. It also gives a dedicated pre-prompt before the notification permission with a Not now option. Strip 2 is clean but its tour is longer, has no skip, and repeats the notification step across two screens.",
      "correspond": false,
      "mismatches": [
@@ -1203,14 +2122,33 @@
      "steps": 2,
      "droppedReferenceSteps": 0,
      "pass": false,
+     "passAfterTriage": true,
      "judgePrefers": "snapreel",
      "missingFromSnapreel": [
       {
-       "kind": "feature",
-       "detail": "Home tabs switching between New Activity and Watch History"
+       "item": "Home tabs switching between New Activity and Watch History",
+       "kind": "feature"
       }
      ],
      "referencePreferredBecause": [],
+     "excusedByLead": [
+      {
+       "item": "Home tabs switching between New Activity and Watch History",
+       "kind": "feature",
+       "leadReason": "server-only: other people's activity, comments, views, share links or workspaces"
+      },
+      {
+       "item": "step 1: Strip 1 step 1 is a tabbed activity feed (empty) with one record CTA; strip 2 step 1 is a richer home hub with shortcuts, a recording-mode picker and a library preview.",
+       "kind": "mismatch",
+       "leadReason": "server-only: the reference's first step is a feed of other people's activity"
+      },
+      {
+       "item": "step 2: Strip 1 step 2 is the same Home screen on another tab; strip 2 step 2 is a separate pushed History screen reached from a row. Both show watch history empty, but via different navigation.",
+       "kind": "mismatch",
+       "leadReason": "presentation: History is a page opened from Home rather than a tab"
+      }
+     ],
+     "stillMissing": [],
      "why": "Strip 2 gives a first-time user more to do on Home: three recording modes, a clear explanation of what a recording is, and shortcuts to Watch later and History. Its empty History state has an illustration and a useful next action ('Browse my library'), whereas strip 1's second screen is a dead end with no CTA. Strip 1 is cleaner and the tabs are tidy, but its home is mostly empty space, and the Search tab is cut from its nav only in the sense of being less labelled.",
      "correspond": false,
      "mismatches": [
@@ -1228,22 +2166,90 @@
      "steps": 19,
      "droppedReferenceSteps": 2,
      "pass": false,
+     "passAfterTriage": false,
      "judgePrefers": "snapreel",
      "missingFromSnapreel": [
       {
-       "kind": "feature",
-       "detail": "Public link sharing with Copy Link and privacy setting"
+       "item": "Public link sharing with Copy Link and privacy setting",
+       "kind": "feature"
       },
       {
-       "kind": "feature",
-       "detail": "Explicit OS permission dialogs for camera and mic shown in flow"
+       "item": "Explicit OS permission dialogs for camera and mic shown in flow",
+       "kind": "feature"
       },
       {
-       "kind": "feature",
-       "detail": "Title suggestions via keyboard autocomplete"
+       "item": "Title suggestions via keyboard autocomplete",
+       "kind": "feature"
       }
      ],
      "referencePreferredBecause": [],
+     "excusedByLead": [
+      {
+       "item": "Public link sharing with Copy Link and privacy setting",
+       "kind": "feature",
+       "leadReason": "server-only: other people's activity, comments, views, share links or workspaces"
+      },
+      {
+       "item": "Explicit OS permission dialogs for camera and mic shown in flow",
+       "kind": "feature",
+       "leadReason": "system-ui: iOS alert; Snapreel shows its own primer first, then the same alert (captured from round 2)"
+      },
+      {
+       "item": "Title suggestions via keyboard autocomplete",
+       "kind": "feature",
+       "leadReason": "system-ui: keyboard predictions"
+      }
+     ],
+     "stillMissing": [
+      {
+       "item": "step 2: Strip 1 has a dedicated Enable button then two separate OS permission dialogs (steps 3-4); strip 2 shows three near-identical permission intro screens with no OS dialogs.",
+       "kind": "mismatch"
+      },
+      {
+       "item": "step 3: Strip 1 shows the OS microphone dialog; strip 2 still shows the intro.",
+       "kind": "mismatch"
+      },
+      {
+       "item": "step 4: Strip 1 shows the OS camera dialog; strip 2 the intro.",
+       "kind": "mismatch"
+      },
+      {
+       "item": "step 5: Both tutorial 1, but strip 2 has a numbered 1 of 3 pager and Skip.",
+       "kind": "mismatch"
+      },
+      {
+       "item": "step 8: Strip 1 shows the system broadcast picker; strip 2 shows an info sheet explaining screen recording.",
+       "kind": "mismatch"
+      },
+      {
+       "item": "step 9: Both show an AirPlay error, but strip 1 shows it as a dialog over the picker; strip 2 as a full-screen state with Try again.",
+       "kind": "mismatch"
+      },
+      {
+       "item": "step 10: Strip 1 repeats the share tutorial; strip 2 is already recording.",
+       "kind": "mismatch"
+      },
+      {
+       "item": "step 11: Strip 1 shows the system picker mid-broadcast; strip 2 shows in-app recording status.",
+       "kind": "mismatch"
+      },
+      {
+       "item": "step 12: Strip 1 shows an upload notification banner; strip 2 shows recording status.",
+       "kind": "mismatch"
+      },
+      {
+       "item": "step 13: Strip 1 preview/trim player; strip 2 preview with title row and Done.",
+       "kind": "mismatch"
+      },
+      {
+       "item": "step 15: Strip 1 title field is placed inline above the keyboard; strip 2 has a title field with Cancel/Save.",
+       "kind": "mismatch"
+      },
+      {
+       "item": "step 18: Strip 1 shows a link-sharing sheet (public link); strip 2 shows a local share/save sheet.",
+       "kind": "mismatch"
+      }
+     ],
      "why": "Strip 2 has a more polished, clearer flow: a 3-step pager with Skip, an info sheet that explains screen recording, an in-app live recording status with timer, a clear Done button, and a local save/share sheet. Strip 1 spends many screens on repeated tutorial and OS dialogs, and its flow is more fragmented, with an error dialog and a repeated step. Strip 1 does include a link-sharing path and an upload notification, which strip 2 lacks.",
      "correspond": false,
      "mismatches": [
@@ -1301,30 +2307,60 @@
      "steps": 4,
      "droppedReferenceSteps": 0,
      "pass": false,
+     "passAfterTriage": false,
      "judgePrefers": "snapreel",
      "missingFromSnapreel": [
       {
-       "kind": "feature",
-       "detail": "Picture-in-picture button and 1.2x speed state"
+       "item": "Picture-in-picture button and 1.2x speed state",
+       "kind": "feature"
       },
       {
-       "kind": "feature",
-       "detail": "Threaded replies with Reply buttons under comments"
+       "item": "Threaded replies with Reply buttons under comments",
+       "kind": "feature"
       },
       {
-       "kind": "feature",
-       "detail": "Copy-link button next to share"
+       "item": "Copy-link button next to share",
+       "kind": "feature"
       },
       {
-       "kind": "feature",
-       "detail": "Player collapses to a sticky strip while scrolling"
+       "item": "Player collapses to a sticky strip while scrolling",
+       "kind": "feature"
       },
       {
-       "kind": "feature",
-       "detail": "New Activity / Watch History tabs on home"
+       "item": "New Activity / Watch History tabs on home",
+       "kind": "feature"
       }
      ],
      "referencePreferredBecause": [],
+     "excusedByLead": [
+      {
+       "item": "Threaded replies with Reply buttons under comments",
+       "kind": "feature",
+       "leadReason": "server-only: other people's activity, comments, views, share links or workspaces"
+      },
+      {
+       "item": "Copy-link button next to share",
+       "kind": "feature",
+       "leadReason": "server-only: other people's activity, comments, views, share links or workspaces"
+      },
+      {
+       "item": "Player collapses to a sticky strip while scrolling",
+       "kind": "feature",
+       "leadReason": "presentation"
+      },
+      {
+       "item": "New Activity / Watch History tabs on home",
+       "kind": "feature",
+       "leadReason": "server-only: other people's activity, comments, views, share links or workspaces"
+      }
+     ],
+     "stillMissing": [
+      {
+       "item": "Picture-in-picture button and 1.2x speed state",
+       "kind": "feature",
+       "leadReason": "fixedNext"
+      }
+     ],
      "why": "Strip-1 gives the video detail more to use: timestamped notes, reaction markers on the scrubber, a stats card and an actionable empty transcript state that explains why it is empty. Its home is also richer, with Watch later, History and library sections. Strip-2 is cleaner and its collapsing player is a nice touch, but the floating pill overlaps content in step 2 and the detail is thinner.",
      "correspond": true,
      "mismatches": [
@@ -1346,30 +2382,89 @@
      "steps": 3,
      "droppedReferenceSteps": 0,
      "pass": false,
+     "passAfterTriage": false,
      "judgePrefers": "reference",
      "missingFromSnapreel": [
       {
-       "kind": "feature",
-       "detail": "Visible confirmation after a reaction: floating emoji, timeline marker, and reaction count increase"
+       "item": "Visible confirmation after a reaction: floating emoji, timeline marker, and reaction count increase",
+       "kind": "feature"
       },
       {
-       "kind": "feature",
-       "detail": "Skip back/forward 5s controls and picture-in-picture"
+       "item": "Skip back/forward 5s controls and picture-in-picture",
+       "kind": "feature"
       },
       {
-       "kind": "feature",
-       "detail": "Thumbs-down reaction and a comment shortcut in the bottom bar"
+       "item": "Thumbs-down reaction and a comment shortcut in the bottom bar",
+       "kind": "feature"
       },
       {
-       "kind": "feature",
-       "detail": "Threaded comments with Reply and Activity/Transcript tabs"
+       "item": "Threaded comments with Reply and Activity/Transcript tabs",
+       "kind": "feature"
       }
      ],
      "referencePreferredBecause": [
-      "Strip 2 gives immediate, visible feedback that the reaction registered (floating emoji, marker, count update).",
-      "Strip 2's overlay keeps the video context and adds clear controls such as replay.",
-      "Strip 1's final screen shows no change, so the user cannot tell the reaction was recorded.",
-      "Strip 1's picker is cleaner and more focused, with a timestamp label and an option for more emoji, but this does not outweigh the missing confirmation."
+      {
+       "item": "Strip 2 gives immediate, visible feedback that the reaction registered (floating emoji, marker, count update).",
+       "kind": "feature"
+      },
+      {
+       "item": "Strip 2's overlay keeps the video context and adds clear controls such as replay.",
+       "kind": "feature"
+      },
+      {
+       "item": "Strip 1's final screen shows no change, so the user cannot tell the reaction was recorded.",
+       "kind": "feature"
+      },
+      {
+       "item": "Strip 1's picker is cleaner and more focused, with a timestamp label and an option for more emoji, but this does not outweigh the missing confirmation.",
+       "kind": "feature"
+      }
+     ],
+     "excusedByLead": [
+      {
+       "item": "Thumbs-down reaction and a comment shortcut in the bottom bar",
+       "kind": "feature",
+       "leadReason": "server-only: other people's activity, comments, views, share links or workspaces"
+      },
+      {
+       "item": "Threaded comments with Reply and Activity/Transcript tabs",
+       "kind": "feature",
+       "leadReason": "server-only: other people's activity, comments, views, share links or workspaces"
+      }
+     ],
+     "stillMissing": [
+      {
+       "item": "Visible confirmation after a reaction: floating emoji, timeline marker, and reaction count increase",
+       "kind": "feature"
+      },
+      {
+       "item": "Skip back/forward 5s controls and picture-in-picture",
+       "kind": "feature"
+      },
+      {
+       "item": "Strip 2 gives immediate, visible feedback that the reaction registered (floating emoji, marker, count update).",
+       "kind": "feature"
+      },
+      {
+       "item": "Strip 2's overlay keeps the video context and adds clear controls such as replay.",
+       "kind": "feature"
+      },
+      {
+       "item": "Strip 1's final screen shows no change, so the user cannot tell the reaction was recorded.",
+       "kind": "feature"
+      },
+      {
+       "item": "Strip 1's picker is cleaner and more focused, with a timestamp label and an option for more emoji, but this does not outweigh the missing confirmation.",
+       "kind": "feature"
+      },
+      {
+       "item": "step 1: Strip 1 shows the video paused with a play button; strip 2 shows it playing with a pause button and 5-second skip controls. Both have a bottom emoji bar, so the job is the same.",
+       "kind": "mismatch"
+      },
+      {
+       "item": "step 3: Strip 2's third screen shows clear feedback that the reaction was sent (floating emoji, timeline marker, count up to 2). Strip 1's third screen looks the same as step 2 and shows no confirmation.",
+       "kind": "mismatch"
+      }
      ],
      "why": "Strip 2 closes the loop: after tapping an emoji, the user sees it float up, land on the timeline, and increase the reaction count. Strip 1 shows no change after the reaction, so it is unclear whether anything was sent. Strip 1 does have a nicer, more focused emoji picker with an option for more emoji and a timestamp label, but it feels unfinished at the last step.",
      "correspond": false,
@@ -1388,30 +2483,101 @@
      "steps": 5,
      "droppedReferenceSteps": 0,
      "pass": false,
+     "passAfterTriage": false,
      "judgePrefers": "reference",
      "missingFromSnapreel": [
       {
-       "kind": "feature",
-       "detail": "Threaded replies to comments, with Reply buttons"
+       "item": "Threaded replies to comments, with Reply buttons",
+       "kind": "feature"
       },
       {
-       "kind": "feature",
-       "detail": "Reaction emojis pinned on the video timeline at the moment they were left"
+       "item": "Reaction emojis pinned on the video timeline at the moment they were left",
+       "kind": "feature"
       },
       {
-       "kind": "feature",
-       "detail": "'Resume playback' pill after commenting"
+       "item": "'Resume playback' pill after commenting",
+       "kind": "feature"
       },
       {
-       "kind": "feature",
-       "detail": "Autocomplete suggestions and send button that activates when text is typed"
+       "item": "Autocomplete suggestions and send button that activates when text is typed",
+       "kind": "feature"
       }
      ],
      "referencePreferredBecause": [
-      "Strip 1 shows the complete comment flow from composer to posted comment, making it easy to follow.",
-      "Strip 1 shows the posted comment in context, in a thread with a timeline marker and a way to resume playback.",
-      "Strip 2 never shows typing or the saved note, so the flow reads as incomplete even though the composer's 'playback is paused' message is clear.",
-      "Strip 2's reaction list with timestamps and its explicit Add note button are tidier and easier to scan than strip 1's mixed activity feed."
+      {
+       "item": "Strip 1 shows the complete comment flow from composer to posted comment, making it easy to follow.",
+       "kind": "feature"
+      },
+      {
+       "item": "Strip 1 shows the posted comment in context, in a thread with a timeline marker and a way to resume playback.",
+       "kind": "feature"
+      },
+      {
+       "item": "Strip 2 never shows typing or the saved note, so the flow reads as incomplete even though the composer's 'playback is paused' message is clear.",
+       "kind": "feature"
+      },
+      {
+       "item": "Strip 2's reaction list with timestamps and its explicit Add note button are tidier and easier to scan than strip 1's mixed activity feed.",
+       "kind": "feature"
+      }
+     ],
+     "excusedByLead": [
+      {
+       "item": "Threaded replies to comments, with Reply buttons",
+       "kind": "feature",
+       "leadReason": "server-only: other people's activity, comments, views, share links or workspaces"
+      },
+      {
+       "item": "Reaction emojis pinned on the video timeline at the moment they were left",
+       "kind": "feature",
+       "leadReason": "present: Snapreel pins reactions on its timeline"
+      },
+      {
+       "item": "'Resume playback' pill after commenting",
+       "kind": "feature",
+       "leadReason": "server-only: other people's activity, comments, views, share links or workspaces"
+      },
+      {
+       "item": "Autocomplete suggestions and send button that activates when text is typed",
+       "kind": "feature",
+       "leadReason": "system-ui: keyboard predictions"
+      },
+      {
+       "item": "Strip 1 shows the complete comment flow from composer to posted comment, making it easy to follow.",
+       "kind": "feature",
+       "leadReason": "server-only: other people's activity, comments, views, share links or workspaces",
+       "preference": true
+      },
+      {
+       "item": "Strip 1 shows the posted comment in context, in a thread with a timeline marker and a way to resume playback.",
+       "kind": "feature",
+       "leadReason": "server-only: other people's activity, comments, views, share links or workspaces",
+       "preference": true
+      },
+      {
+       "item": "Strip 2's reaction list with timestamps and its explicit Add note button are tidier and easier to scan than strip 1's mixed activity feed.",
+       "kind": "feature",
+       "leadReason": "server-only: other people's activity, comments, views, share links or workspaces",
+       "preference": true
+      }
+     ],
+     "stillMissing": [
+      {
+       "item": "Strip 2 never shows typing or the saved note, so the flow reads as incomplete even though the composer's 'playback is paused' message is clear.",
+       "kind": "feature"
+      },
+      {
+       "item": "step 3: Strip 1 shows text typed and ready to send; strip 2 repeats the empty composer, so the typing step is missing.",
+       "kind": "mismatch"
+      },
+      {
+       "item": "step 4: Strip 1 shows the new comment posted in the thread; strip 2 shows the notes list with no new note, so the result of posting is not shown.",
+       "kind": "mismatch"
+      },
+      {
+       "item": "step 5: Both end on a home screen, but strip 1 shows watch history with comment counts while strip 2 shows a library and watch-later layout. Same job (leave the video), different content.",
+       "kind": "mismatch"
+      }
      ],
      "why": "Strip 1 shows the whole commenting flow: open the composer, type, send, and see the comment appear in the thread with a timeline marker and a resume-playback prompt. Strip 2 shows a clean composer that says playback is paused, but it never shows text being entered or the note appearing afterward, so the flow reads as incomplete. Strip 2 has a more organized layout (reactions list with timestamps, separate Add note button), but the demonstrated flow is weaker.",
      "correspond": false,
@@ -1434,22 +2600,42 @@
      "steps": 3,
      "droppedReferenceSteps": 0,
      "pass": false,
+     "passAfterTriage": false,
      "judgePrefers": "snapreel",
      "missingFromSnapreel": [
       {
-       "kind": "feature",
-       "detail": "Picture-in-picture button in the player controls"
+       "item": "Picture-in-picture button in the player controls",
+       "kind": "feature"
       },
       {
-       "kind": "feature",
-       "detail": "Controls auto-hide so playback continues unobstructed after choosing a speed"
+       "item": "Controls auto-hide so playback continues unobstructed after choosing a speed",
+       "kind": "feature"
       },
       {
-       "kind": "feature",
-       "detail": "Comments, emoji reactions and view counts attached to the video"
+       "item": "Comments, emoji reactions and view counts attached to the video",
+       "kind": "feature"
       }
      ],
      "referencePreferredBecause": [],
+     "excusedByLead": [
+      {
+       "item": "Controls auto-hide so playback continues unobstructed after choosing a speed",
+       "kind": "feature",
+       "leadReason": "present: controls auto-hide while playing; the capture is paused"
+      },
+      {
+       "item": "Comments, emoji reactions and view counts attached to the video",
+       "kind": "feature",
+       "leadReason": "server-only: other people's activity, comments, views, share links or workspaces"
+      }
+     ],
+     "stillMissing": [
+      {
+       "item": "Picture-in-picture button in the player controls",
+       "kind": "feature",
+       "leadReason": "fixedNext"
+      }
+     ],
      "why": "Strip 2's menu is anchored to the speed pill that opened it, has a 'Playback speed' title, and has clear high-contrast rows with a red checkmark, so it is obvious what the menu does. The pill stays on screen in every step, which gives a place to confirm the speed. Strip 1's translucent menu floats in the middle of a dimmed video with no title, and its controls vanish afterwards, though it does show the video playing.",
      "correspond": true,
      "mismatches": [
@@ -1467,22 +2653,42 @@
      "steps": 2,
      "droppedReferenceSteps": 0,
      "pass": false,
+     "passAfterTriage": false,
      "judgePrefers": "snapreel",
      "missingFromSnapreel": [
       {
-       "kind": "feature",
-       "detail": "Visible floating PiP mini-player with close, pause and skip controls, shown inside the screen"
+       "item": "Visible floating PiP mini-player with close, pause and skip controls, shown inside the screen",
+       "kind": "feature"
       },
       {
-       "kind": "feature",
-       "detail": "Explicit PiP entry button in the player's top bar"
+       "item": "Explicit PiP entry button in the player's top bar",
+       "kind": "feature"
       },
       {
-       "kind": "feature",
-       "detail": "Threaded comments with timestamps and replies, plus a per-viewer 'views' row"
+       "item": "Threaded comments with timestamps and replies, plus a per-viewer 'views' row",
+       "kind": "feature"
       }
      ],
      "referencePreferredBecause": [],
+     "excusedByLead": [
+      {
+       "item": "Visible floating PiP mini-player with close, pause and skip controls, shown inside the screen",
+       "kind": "feature",
+       "leadReason": "system-ui: the PiP window belongs to iOS and does not run in the simulator"
+      },
+      {
+       "item": "Threaded comments with timestamps and replies, plus a per-viewer 'views' row",
+       "kind": "feature",
+       "leadReason": "server-only: other people's activity, comments, views, share links or workspaces"
+      }
+     ],
+     "stillMissing": [
+      {
+       "item": "Explicit PiP entry button in the player's top bar",
+       "kind": "feature",
+       "leadReason": "fixedNext"
+      }
+     ],
      "why": "Strip-1's PiP state is a clear, readable explanation with a one-tap way to bring the video back, which helps users who are confused about where the video went. Its text is legible and the layout is clean. Strip-2 shows the real floating mini-player with controls, which is more realistic, but its placeholder text is dim and clipped ('playing in picture in' wraps awkwardly), and the mini-player overlaps the placeholder. Strip-1's lack of a visible PiP trigger in step 1 is a gap, but the second screen is stronger.",
      "correspond": true,
      "mismatches": [
@@ -1500,18 +2706,33 @@
      "steps": 4,
      "droppedReferenceSteps": 0,
      "pass": false,
+     "passAfterTriage": false,
      "judgePrefers": "snapreel",
      "missingFromSnapreel": [
       {
-       "kind": "feature",
-       "detail": "Picture-in-picture button and playback speed shown as 1.2x in the player"
+       "item": "Picture-in-picture button and playback speed shown as 1.2x in the player",
+       "kind": "feature"
       },
       {
-       "kind": "feature",
-       "detail": "Copy-link button next to share on the video page"
+       "item": "Copy-link button next to share on the video page",
+       "kind": "feature"
       }
      ],
      "referencePreferredBecause": [],
+     "excusedByLead": [
+      {
+       "item": "Copy-link button next to share on the video page",
+       "kind": "feature",
+       "leadReason": "server-only: other people's activity, comments, views, share links or workspaces"
+      }
+     ],
+     "stillMissing": [
+      {
+       "item": "Picture-in-picture button and playback speed shown as 1.2x in the player",
+       "kind": "feature",
+       "leadReason": "fixedNext"
+      }
+     ],
      "why": "Strip 1 prepares the user for the system permission prompt, shows what is being saved and its size, offers a way out, and confirms success with a link to open Photos. Strip 2 is shorter and simpler, but it drops the user into a bare system alert and then gives no sign that the download worked. Strip 2's action sheet is quicker to scan, but strip 1's added feedback and clarity make the flow more trustworthy.",
      "correspond": true,
      "mismatches": [
@@ -1533,18 +2754,32 @@
      "steps": 3,
      "droppedReferenceSteps": 0,
      "pass": false,
+     "passAfterTriage": true,
      "judgePrefers": "snapreel",
      "missingFromSnapreel": [
       {
-       "kind": "feature",
-       "detail": "Per-card share button"
+       "item": "Per-card share button",
+       "kind": "feature"
       },
       {
-       "kind": "feature",
-       "detail": "View count text ('No Views Yet')"
+       "item": "View count text ('No Views Yet')",
+       "kind": "feature"
       }
      ],
      "referencePreferredBecause": [],
+     "excusedByLead": [
+      {
+       "item": "Per-card share button",
+       "kind": "feature",
+       "leadReason": "present-differently: Share is in each card's menu"
+      },
+      {
+       "item": "View count text ('No Views Yet')",
+       "kind": "feature",
+       "leadReason": "server-only: other people's activity, comments, views, share links or workspaces"
+      }
+     ],
+     "stillMissing": [],
      "why": "Strip 2 packs more information per screen (count/duration summary, sort, compact rows, folder tags, needs-title prompt) and its Folders tab is richer, with cover images, counts and a create-folder affordance. Strip 1 has large cards that show only about one and a half videos per screen, a blank grey placeholder thumbnail, and a sparse single-row Folders screen with no way to create a folder. Strip 2's middle screen is a duplicate of the first, which is a minor weakness against strip 1's scroll demonstration.",
      "correspond": true,
      "mismatches": [
@@ -1558,18 +2793,42 @@
      "steps": 2,
      "droppedReferenceSteps": 0,
      "pass": false,
+     "passAfterTriage": false,
      "judgePrefers": "snapreel",
      "missingFromSnapreel": [
       {
-       "kind": "feature",
-       "detail": "Bottom sheet detail view for a notification with transcript empty state"
+       "item": "Bottom sheet detail view for a notification with transcript empty state",
+       "kind": "feature"
       },
       {
-       "kind": "feature",
-       "detail": "Per-row timestamp pills (0:00, 0:09) and transcript icon button"
+       "item": "Per-row timestamp pills (0:00, 0:09) and transcript icon button",
+       "kind": "feature"
       }
      ],
      "referencePreferredBecause": [],
+     "excusedByLead": [
+      {
+       "item": "Bottom sheet detail view for a notification with transcript empty state",
+       "kind": "feature",
+       "leadReason": "present-differently: opens the recording on its Transcript tab (from round 2)"
+      },
+      {
+       "item": "Per-row timestamp pills (0:00, 0:09) and transcript icon button",
+       "kind": "feature",
+       "leadReason": "server-only: timestamps of other people's comments and reactions"
+      },
+      {
+       "item": "step 1: Both are notification lists, but strip-1 shows app/system status notifications grouped by day with filter chips; strip-2 shows social interactions from other people with no filters.",
+       "kind": "mismatch",
+       "leadReason": "server-only: other people's activity"
+      }
+     ],
+     "stillMissing": [
+      {
+       "item": "step 2: Strip-1 step 2 repeats the list with no new state; strip-2 step 2 opens a transcript bottom sheet (with empty state) from a row.",
+       "kind": "mismatch"
+      }
+     ],
      "why": "Strip-1 has a clear hierarchy, filter chips with unread counts, day grouping, unread dots and an inline action ('Add a title') that makes notifications actionable. Strip-2 shows a richer social interaction model and a detail sheet, but its only second-step content is an empty state, and the rows are denser and less scannable. Strip-1's second screen shows no flow progress, which limits it, but the first screen is stronger.",
      "correspond": false,
      "mismatches": [
@@ -1587,14 +2846,23 @@
      "steps": 1,
      "droppedReferenceSteps": 0,
      "pass": false,
+     "passAfterTriage": true,
      "judgePrefers": "snapreel",
      "missingFromSnapreel": [
       {
-       "kind": "feature",
-       "detail": "Search by person"
+       "item": "Search by person",
+       "kind": "feature"
       }
      ],
      "referencePreferredBecause": [],
+     "excusedByLead": [
+      {
+       "item": "Search by person",
+       "kind": "feature",
+       "leadReason": "server-only: other people's activity, comments, views, share links or workspaces"
+      }
+     ],
+     "stillMissing": [],
      "why": "Strip 2 gives the user something to act on before typing: recent searches with clear/remove, and tag chips to browse. Its field also searches transcripts, and the copy states the scope plainly. Strip 1 is a clean but empty state, with a large blank area and only a placeholder illustration.",
      "correspond": true,
      "mismatches": []
@@ -1603,18 +2871,32 @@
      "steps": 3,
      "droppedReferenceSteps": 0,
      "pass": false,
+     "passAfterTriage": true,
      "judgePrefers": "snapreel",
      "missingFromSnapreel": [
       {
-       "kind": "feature",
-       "detail": "Search by person (author name is matched)"
+       "item": "Search by person (author name is matched)",
+       "kind": "feature"
       },
       {
-       "kind": "feature",
-       "detail": "Keyboard predictive suggestions strip active"
+       "item": "Keyboard predictive suggestions strip active",
+       "kind": "feature"
       }
      ],
      "referencePreferredBecause": [],
+     "excusedByLead": [
+      {
+       "item": "Search by person (author name is matched)",
+       "kind": "feature",
+       "leadReason": "server-only: other people's activity, comments, views, share links or workspaces"
+      },
+      {
+       "item": "Keyboard predictive suggestions strip active",
+       "kind": "feature",
+       "leadReason": "system-ui: keyboard predictions"
+      }
+     ],
+     "stillMissing": [],
      "why": "Strip 1 gives the user something useful before typing (recent searches, tag browsing) and groups results by type: recordings, tags and transcript matches with highlighted terms and play buttons. Strip 2 is clean but its landing is an empty state and its results are one flat, undifferentiated list. Strip 1 also states what is searched, which makes the scope clear.",
      "correspond": true,
      "mismatches": []
@@ -1623,9 +2905,12 @@
      "steps": 2,
      "droppedReferenceSteps": 0,
      "pass": true,
+     "passAfterTriage": true,
      "judgePrefers": "snapreel",
      "missingFromSnapreel": [],
      "referencePreferredBecause": [],
+     "excusedByLead": [],
+     "stillMissing": [],
      "why": "Strip-1's settings sheet is richer and more useful: it exposes real preferences (recording quality, storage, notification controls) with current values shown inline, a help section, a tour replay and a clear privacy statement. Strip-2's settings is a bare four-row nav list with no inline values, so users must drill in for everything. Strip-1's notifications screen also adds filter chips, date grouping and thumbnails, and is more actionable (Add a title). Strip-2's is clean but plain.",
      "correspond": true,
      "mismatches": []
@@ -1634,18 +2919,49 @@
      "steps": 5,
      "droppedReferenceSteps": 0,
      "pass": false,
+     "passAfterTriage": false,
      "judgePrefers": "snapreel",
      "missingFromSnapreel": [
       {
-       "kind": "feature",
-       "detail": "Expandable See all N articles with load-more"
+       "item": "Expandable See all N articles with load-more",
+       "kind": "feature"
       },
       {
-       "kind": "feature",
-       "detail": "Account row in settings"
+       "item": "Account row in settings",
+       "kind": "feature"
       }
      ],
      "referencePreferredBecause": [],
+     "excusedByLead": [
+      {
+       "item": "Expandable See all N articles with load-more",
+       "kind": "feature",
+       "leadReason": "present: Snapreel's categories have See all N articles"
+      },
+      {
+       "item": "Account row in settings",
+       "kind": "feature",
+       "leadReason": "server-only: accounts and sign-in (Snapreel has no account by design)"
+      }
+     ],
+     "stillMissing": [
+      {
+       "item": "step 1: Strip 1 settings has preferences and an in-page Help group with contact support and tour; strip 2 settings has a single Help & Support entry among account rows.",
+       "kind": "mismatch"
+      },
+      {
+       "item": "step 3: Strip 1 shows no change from step 2; strip 2 shows an expansion with a loading spinner.",
+       "kind": "mismatch"
+      },
+      {
+       "item": "step 4: Strip 1 still the same view; strip 2 shows the expanded list.",
+       "kind": "mismatch"
+      },
+      {
+       "item": "step 5: Strip 1 shows the same top view again; strip 2 scrolls to further categories and FAQ.",
+       "kind": "mismatch"
+      }
+     ],
      "why": "Strip 1 has a clearer help hub: suggested articles, article counts per category, task-focused titles with one-line summaries, and a Contact support entry. Strip 2 is a plain long list of article titles with a loading spinner and no visible contact path. Strip 1 does show a repeated screen across steps 2 to 5, so its flow variety is weaker, but each screen is more useful.",
      "correspond": false,
      "mismatches": [
@@ -1671,22 +2987,50 @@
      "steps": 3,
      "droppedReferenceSteps": 1,
      "pass": false,
+     "passAfterTriage": false,
      "judgePrefers": "snapreel",
      "missingFromSnapreel": [
       {
-       "kind": "feature",
-       "detail": "Engagement and video-sharing notification groups (views, comments, replies, reactions, shares, permission changes)"
+       "item": "Engagement and video-sharing notification groups (views, comments, replies, reactions, shares, permission changes)",
+       "kind": "feature"
       },
       {
-       "kind": "feature",
-       "detail": "Visible toggle-off state in the final screen"
+       "item": "Visible toggle-off state in the final screen",
+       "kind": "feature"
       },
       {
-       "kind": "feature",
-       "detail": "Account row in settings"
+       "item": "Account row in settings",
+       "kind": "feature"
       }
      ],
      "referencePreferredBecause": [],
+     "excusedByLead": [
+      {
+       "item": "Engagement and video-sharing notification groups (views, comments, replies, reactions, shares, permission changes)",
+       "kind": "feature",
+       "leadReason": "server-only: other people's activity, comments, views, share links or workspaces"
+      },
+      {
+       "item": "Account row in settings",
+       "kind": "feature",
+       "leadReason": "server-only: accounts and sign-in (Snapreel has no account by design)"
+      }
+     ],
+     "stillMissing": [
+      {
+       "item": "Visible toggle-off state in the final screen",
+       "kind": "feature",
+       "leadReason": "fixedNext"
+      },
+      {
+       "item": "step 3: Strip 1 shows an edit happening (a toggle switched off). Strip 2's third screen looks identical to its second, so the edit is not shown.",
+       "kind": "mismatch"
+      },
+      {
+       "item": "step 2: Strip 2 adds an OS permission prompt card ('Allow notifications') above the toggles. Strip 1 has no such card. The toggle lists do the same job.",
+       "kind": "mismatch"
+      }
+     ],
      "why": "Strip 2 has the richer, clearer settings: a status summary on the entry row ('All on'), a permission card that explains why alerts matter, and a short description under each toggle. Strip 1 is clean and demonstrates the edit, but it is a long, terse list of toggles with little explanation. Strip 2 loses points because its last screen does not show any change, so the editing step is not demonstrated.",
      "correspond": false,
      "mismatches": [
@@ -1704,14 +3048,23 @@
      "steps": 2,
      "droppedReferenceSteps": 0,
      "pass": false,
+     "passAfterTriage": true,
      "judgePrefers": "snapreel",
      "missingFromSnapreel": [
       {
-       "kind": "feature",
-       "item": "Account row in settings"
+       "item": "Account row in settings",
+       "kind": "feature"
       }
      ],
      "referencePreferredBecause": [],
+     "excusedByLead": [
+      {
+       "item": "Account row in settings",
+       "kind": "feature",
+       "leadReason": "server-only: accounts and sign-in (Snapreel has no account by design)"
+      }
+     ],
+     "stillMissing": [],
      "why": "Both strips go from a settings list to a legal sub-screen with the same three document links. Strip 2 is more informative and polished: grouped sections with current values, icons on every legal row, a plain-language privacy summary card, and a copyright footer. Strip 1 is a bare list that leaves the second screen mostly empty.",
      "correspond": true,
      "mismatches": []
@@ -1720,9 +3073,12 @@
      "steps": 2,
      "droppedReferenceSteps": 0,
      "pass": true,
+     "passAfterTriage": true,
      "judgePrefers": "snapreel",
      "missingFromSnapreel": [],
      "referencePreferredBecause": [],
+     "excusedByLead": [],
+     "stillMissing": [],
      "why": "Strip 2 keeps the user inside the app with native, consistently styled screens, a plain-language short summary, and a clear last-updated date. Strip 1 is a bare list that hands off to a generic web page with a marketing header and a dense legal wall, which feels disconnected and depends on the network. Strip 2 also adds reassurance with its privacy card.",
      "correspond": true,
      "mismatches": []
@@ -1731,14 +3087,23 @@
      "steps": 2,
      "droppedReferenceSteps": 0,
      "pass": false,
+     "passAfterTriage": true,
      "judgePrefers": "snapreel",
      "missingFromSnapreel": [
       {
-       "kind": "feature",
-       "detail": "Browser chrome: Done, text size (AA), reload, back/forward, share and open-in-Safari"
+       "item": "Browser chrome: Done, text size (AA), reload, back/forward, share and open-in-Safari",
+       "kind": "feature"
       }
      ],
      "referencePreferredBecause": [],
+     "excusedByLead": [
+      {
+       "item": "Browser chrome: Done, text size (AA), reload, back/forward, share and open-in-Safari",
+       "kind": "feature",
+       "leadReason": "system-ui: the reference opens a hosted web page in Safari's in-app browser; Snapreel's pages are bundled and work offline"
+      }
+     ],
+     "stillMissing": [],
      "why": "Strip 1 keeps the policy in the app as native, readable text with a short summary up front, a last-updated date and a share button, so it works offline and matches the app's look. Its Legal screen also states the privacy position before the user taps anything. Strip 2 opens a website in a browser sheet that needs a connection, shows a heavy site header and navigation unrelated to the policy, and has a plain, unstyled list screen.",
      "correspond": true,
      "mismatches": []
@@ -1747,14 +3112,23 @@
      "steps": 2,
      "droppedReferenceSteps": 0,
      "pass": false,
+     "passAfterTriage": true,
      "judgePrefers": "snapreel",
      "missingFromSnapreel": [
       {
-       "kind": "feature",
-       "detail": "In-app browser controls (Done, reader/text size, reload, back/forward, share, open in Safari)"
+       "item": "In-app browser controls (Done, reader/text size, reload, back/forward, share, open in Safari)",
+       "kind": "feature"
       }
      ],
      "referencePreferredBecause": [],
+     "excusedByLead": [
+      {
+       "item": "In-app browser controls (Done, reader/text size, reload, back/forward, share, open in Safari)",
+       "kind": "feature",
+       "leadReason": "system-ui: the reference opens a hosted web page in Safari's in-app browser; Snapreel's pages are bundled and work offline"
+      }
+     ],
+     "stillMissing": [],
      "why": "Strip-1 keeps the acknowledgements inside the app as a native, readable screen. Each credited framework has a one-line explanation, and the layout is clean and on brand. Strip-2 sends the user to an external hosted web page that is malformed (overflowing, clipped text) and shows a raw repo name, which feels unfinished and depends on the network. Strip-1's legal hub also adds useful context with the privacy card, while strip-2's is bare.",
      "correspond": true,
      "mismatches": []
@@ -1763,14 +3137,40 @@
      "steps": 4,
      "droppedReferenceSteps": 1,
      "pass": false,
+     "passAfterTriage": false,
      "judgePrefers": "snapreel",
      "missingFromSnapreel": [
       {
-       "kind": "feature",
-       "item": "Sign out action next to the account email"
+       "item": "Sign out action next to the account email",
+       "kind": "feature"
       }
      ],
      "referencePreferredBecause": [],
+     "excusedByLead": [
+      {
+       "item": "Sign out action next to the account email",
+       "kind": "feature",
+       "leadReason": "server-only: accounts and sign-in (Snapreel has no account by design)"
+      }
+     ],
+     "stillMissing": [
+      {
+       "item": "step 1: Strip-1 opens on account settings with a dedicated delete-account row; strip-2 opens on a storage overview with no explicit delete-everything entry visible.",
+       "kind": "mismatch"
+      },
+      {
+       "item": "step 2: Strip-1 shows a dedicated warning page with a delete button; strip-2 repeats the storage screen with no new content.",
+       "kind": "mismatch"
+      },
+      {
+       "item": "step 3: Strip-1 is a short native alert; strip-2 is a detailed itemized confirmation sheet showing counts and sizes.",
+       "kind": "mismatch"
+      },
+      {
+       "item": "step 4: Strip-1 ends by sending the user off to a website to finish deletion (not completed in-app); strip-2 ends with an in-app completion confirmation.",
+       "kind": "mismatch"
+      }
+     ],
      "why": "Strip-2 completes the deletion in the app and tells the user exactly what will be removed (counts and sizes), then confirms the result and offers a way back. Strip-1 gives a generic warning and a standard alert, then hands the user off to a website, so deletion is not finished in the flow. Strip-2's weaknesses are a redundant second frame and a delete-data flow that is not an account deletion; the confirmation button also looks disabled in the captured frame.",
      "correspond": false,
      "mismatches": [
@@ -1795,10 +3195,15 @@
    },
    "missingScreenshots": [],
    "summary": {
-    "screensPassed": 6,
     "screensJudged": 57,
+    "screensPassed": 6,
+    "screensPassedAfterTriage": 43,
+    "screensJudgePrefersSnapreel": 50,
+    "flowsJudged": 21,
     "flowsPassed": 2,
-    "flowsJudged": 21
+    "flowsPassedAfterTriage": 9,
+    "flowsJudgePrefersSnapreel": 19,
+    "triageFile": "refs/compare/round-1/triage.json"
    }
   }
  }

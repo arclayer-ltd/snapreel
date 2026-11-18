@@ -95,6 +95,8 @@ struct PlayerInitialState {
     var photosStage: PhotosSaveStage? = nil
     /// Scrolls the Notes / Transcript switch to the top of the details area on open.
     var scrollsToPanel = false
+    /// Shows "Keep watching", as after a note paused a playing video.
+    var showsResumePill = false
 }
 
 /// A large emoji that rises over the video when you react.
