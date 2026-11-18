@@ -95,7 +95,8 @@ struct IntroSlides: View {
                 .accessibilityLabel("Back")
                 .transition(.opacity.combined(with: .scale(scale: 0.8)))
             }
-            OnboardingPageDots(count: slides.count, index: page)
+            // Welcome is the first page of four; the slides are the other three.
+            OnboardingPageDots(count: slides.count + 1, index: page + 1)
             Spacer()
             Button {
                 if isLast {

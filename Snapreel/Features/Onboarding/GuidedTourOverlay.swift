@@ -191,7 +191,13 @@ struct GuidedTourOverlay: View {
                         .foregroundStyle(Color.srTextSecondary)
                     Spacer(minLength: Space.xs)
                     // The four stops ahead, none done yet.
-                    TourProgress(current: 0, total: TourStep.stepCount)
+                    HStack(spacing: Space.xs) {
+                        Text("\(TourStep.stepCount) stops")
+                            .font(.srCaption)
+                            .foregroundStyle(Color.srTextSecondary)
+                            .accessibilityHidden(true)
+                        TourProgress(current: 0, total: TourStep.stepCount)
+                    }
                 }
             }
             VStack(alignment: .leading, spacing: 6) {
@@ -414,8 +420,8 @@ struct TourProgress: View {
         HStack(spacing: 5) {
             ForEach(1...max(total, 1), id: \.self) { index in
                 Capsule()
-                    .fill(index <= current ? Color.srRed : Color.srFill)
-                    .frame(width: 18, height: 4)
+                    .fill(index <= current ? Color.srRed : Color.srTextTertiary.opacity(0.45))
+                    .frame(width: 20, height: 5)
             }
         }
         .accessibilityElement(children: .ignore)

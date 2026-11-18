@@ -68,6 +68,9 @@ struct WelcomeStep: View {
 
     private var actions: some View {
         VStack(spacing: Space.m) {
+            // First of four: welcome, then the three intro slides.
+            OnboardingPageDots(count: IntroSlide.all.count + 1, index: 0)
+                .padding(.bottom, Space.xxs)
             Button("Get started") {
                 Haptics.firm()
                 onStart()

@@ -805,7 +805,7 @@
     "home.empty",
     "rec.primer",
     "rec.primer.mic",
-    null,
+    "rec.primer.camera",
     "rec.screen.tutorial.1",
     "rec.screen.tutorial.2",
     "rec.screen.tutorial.3",
@@ -824,7 +824,7 @@
     null,
     "home.filled"
    ],
-   "note": "Step 4 (camera prompt) and the iOS Screen Broadcast sheet at step 8 can't be captured in the simulator: the simulator has no camera and does not present the broadcast sheet, so step 8 pairs with Snapreel's broadcast step. Step 11 is the app being recorded; step 12 is the system sheet mid-broadcast; step 13 is a system notification banner; step 15 repeats the review paused; step 20 is the link-copied toast (server-only)."
+   "note": "Step 4 is the iOS camera prompt over Snapreel's primer. The iOS Screen Broadcast sheet at step 8 can't be captured in the simulator (it does not present the sheet), so step 8 pairs with Snapreel's broadcast step. Step 11 is the app being recorded; step 12 is the system sheet mid-broadcast; step 13 is a system notification banner; step 15 repeats the review paused; step 20 is the link-copied toast (server-only)."
   },
   "05-video-detail": {
    "snapreel": [
@@ -867,7 +867,7 @@
    "snapreel": [
     "video.player",
     "video.actions",
-    "video.photos.permission",
+    "video.photos.alert",
     "video.photos.saved"
    ]
   },

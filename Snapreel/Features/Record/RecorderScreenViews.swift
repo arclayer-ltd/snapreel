@@ -446,7 +446,7 @@ struct ScreenRecordingProgressView: View {
                 Text(model.isStoppingBroadcast ? "Stopping…" : "Snapreel is recording your screen")
                     .font(.srTitle)
                     .foregroundStyle(.white)
-                Text("Go to any app and show what you need to. When you're done, tap Stop below or the red pill at the top of the screen.")
+                Text("Go to any app and show what you need to. When you're done, tap Stop recording or the red pill at the top of the screen.")
                     .font(.srCallout)
                     .foregroundStyle(Color.srOnDarkSecondary)
             }
@@ -454,8 +454,31 @@ struct ScreenRecordingProgressView: View {
             .fixedSize(horizontal: false, vertical: true)
             .padding(.horizontal, Space.xl)
             microphone
+            stopButton
+                .padding(.top, Space.xs)
             Spacer()
         }
+    }
+
+    /// A named way to stop, next to the explanation, as well as the round button below.
+    private var stopButton: some View {
+        Button {
+            model.stopBroadcast()
+        } label: {
+            HStack(spacing: Space.xs) {
+                Image(systemName: "stop.fill")
+                    .font(.system(size: 13, weight: .bold))
+                Text(model.isStoppingBroadcast ? "Stopping…" : "Stop recording")
+                    .font(.srHeadline)
+            }
+            .foregroundStyle(Color.white)
+            .padding(.horizontal, Space.l)
+            .frame(height: 48)
+            .overlay(Capsule().strokeBorder(Color.white.opacity(0.55), lineWidth: 1.5))
+            .contentShape(Capsule())
+        }
+        .buttonStyle(PressScaleStyle())
+        .disabled(model.isStoppingBroadcast)
     }
 
     private func pill(now: Date) -> some View {
