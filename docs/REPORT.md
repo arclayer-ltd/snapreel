@@ -4,8 +4,8 @@ Snapreel is a native SwiftUI iPhone app (iOS 16.0 and later) for recording your 
 
 ## Where it stands
 
-- **TestFlight:** build 20 of "Snapreel: Screen Recorder" (`co.arclayer.snapreel`) is processed by Apple and valid. The internal group "Snapreel Internal" gets every build, and you are its tester. Apple still shows your invitation as not accepted, so open the TestFlight invite email on the iPhone (or redeem it in the TestFlight app) before installing.
-- **Code:** `arclayer-ltd/snapreel` (public, so the macOS CI minutes are free). The last full CI run (Xcode 27.2, iOS 27.2 SDK) compiled both targets with no errors and no warnings and screenshotted 124 screen states in the simulator. Building with the iOS 27 SDK clears App Store Connect's ITMS-90725 warning, which builds 12 to 18 carried (built with the iOS 26.2 SDK, which can't be uploaded from April 2027).
+- **TestFlight:** build 22 of "Snapreel: Screen Recorder" (`co.arclayer.snapreel`) is processed by Apple and valid, and the internal group "Snapreel Internal" has it, so it shows up in the TestFlight app on your iPhone. It fixes what you found testing build 20 on the phone: the record button sat off-centre in Screen and Audio, the app ignored the iPhone's Dark mode (the welcome screens were always dark and everything else always light), and the welcome animation stuttered when it looped.
+- **Code:** `arclayer-ltd/snapreel` (public, so the macOS CI minutes are free). The last full CI run (Xcode 27.2, iOS 27.2 SDK) compiled both targets with no errors and no warnings and screenshotted 124 screen states in the simulator (run 21), and run 22 screenshotted 42 of them again in Dark mode. Building with the iOS 27 SDK clears App Store Connect's ITMS-90725 warning, which builds 12 to 18 carried (built with the iOS 26.2 SDK, which can't be uploaded from April 2027).
 - **Plan:** all 57 planned screens exist and are reachable, plus their states (124 screenshots in total). `docs/PLAN.md` maps every feature to its screens and data; `refs/index.json` maps every screen to its reference.
 
 ### Against the brief's "Done means"
@@ -15,7 +15,7 @@ Snapreel is a native SwiftUI iPhone app (iOS 16.0 and later) for recording your 
 | Every planned screen exists, is reachable and has a screenshot | Done: 57 screens, 124 screenshots of screens and states in the last CI run |
 | Every feature works with real recordings and no network | Built and compiled; device-only parts are unverified until you run the phone checklist below |
 | Comparison results recorded | Done: three rounds in `refs/results.json` |
-| A processed TestFlight build exists | Done: build 20, valid |
+| A processed TestFlight build exists | Done: build 22, valid |
 | Parallel sessions A–E, merged | Done in the first part of the build |
 
 ## What was built
@@ -134,9 +134,9 @@ Install build 20 from TestFlight. Put the phone on Airplane Mode for everything 
 
 ## Not verified
 
-- **Nothing has run on a real iPhone in this build session.** Everything here comes from compiling, simulator screenshots of debug states with sample data, and Apple's processing of the TestFlight builds.
-- **Screen recording:** the broadcast extension can't run in the simulator, so it's untested end to end. That covers its memory use under the 50 MB cap and the finish notification.
-- **Camera capture:** untested (the simulator has no camera). Mic capture, audio mixing and the saved files are also untested.
+- **On the iPhone:** you tested build 20 on the iPhone X and found recording, audio and the screen working; build 22's three fixes are checked only in simulator screenshots until you run items 15 to 17 below. Everything else here comes from compiling, simulator screenshots of debug states with sample data, and Apple's processing of the TestFlight builds.
+- **Screen recording:** works on your iPhone X (build 20). Its memory use against the extension's 50 MB cap hasn't been measured.
+- **Camera and audio:** you found them working on the phone; CI can't check them (the simulator has no camera).
 - **Picture in picture:** untested; the simulator reports it unsupported.
 - **On-device services:** local notification delivery, Save to Photos, sharing, on-device transcription, and the low-storage warning have not been exercised.
 - **iOS 16 specifically:** the app targets iOS 16.0 (Apple confirms build 20's minimum is 16.0), but CI screenshots on the iOS 27 simulator, so iOS 16 behaviour is checked only by the compiler's availability rules. Build 20's screenshots show iOS 27's own keyboard, back buttons, sheets and confirmation dialogs; the iPhone X draws its iOS 16 versions. The comparison rounds used iOS 26 screenshots (builds 13, 15 and 17).
