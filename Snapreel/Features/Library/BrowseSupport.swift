@@ -261,10 +261,10 @@ struct BrowseTagChip: View {
         HStack(spacing: 5) {
             Image(systemName: style == .suggestion ? "plus" : "number")
                 .font(.system(size: 11, weight: .bold))
-                .foregroundStyle(style == .removable ? Color.srRedDeep : Color.srTextTertiary)
+                .foregroundStyle(style == .removable ? Color.srRedText : Color.srTextTertiary)
             Text(verbatim: text)
                 .font(.srSubheadlineStrong)
-                .foregroundStyle(style == .removable ? Color.srRedDeep : Color.srText)
+                .foregroundStyle(style == .removable ? Color.srRedText : Color.srText)
                 .lineLimit(1)
             if let count {
                 Text("\(count)")
@@ -274,7 +274,7 @@ struct BrowseTagChip: View {
             if style == .removable {
                 Image(systemName: "xmark")
                     .font(.system(size: 10, weight: .bold))
-                    .foregroundStyle(Color.srRedDeep)
+                    .foregroundStyle(Color.srRedText)
             }
         }
         .padding(.horizontal, Space.s)
@@ -332,7 +332,7 @@ enum BrowseHighlight {
         }
         let before = Text(verbatim: String(text[text.startIndex..<range.lowerBound]))
         let match = Text(verbatim: String(text[range]))
-            .foregroundColor(Color.srRedDeep)
+            .foregroundColor(Color.srRedText)
             .fontWeight(.bold)
         let after = Text(verbatim: String(text[range.upperBound...]))
         return before + match + after

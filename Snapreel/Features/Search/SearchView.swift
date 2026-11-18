@@ -409,7 +409,7 @@ private struct SpokenMatchRow: View {
                     HStack(spacing: Space.xs) {
                         Text(verbatim: Format.stamp(match.segment.start))
                             .font(.srTimerSmall)
-                            .foregroundStyle(Color.srRedDeep)
+                            .foregroundStyle(Color.srRedText)
                             .padding(.horizontal, 6)
                             .padding(.vertical, 2)
                             .background(Capsule().fill(Color.srRedSoft))

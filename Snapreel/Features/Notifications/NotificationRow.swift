@@ -117,7 +117,7 @@ struct FeedFilterBar: View {
             HStack(spacing: 6) {
                 Text(option.title)
                     .font(.srSubheadlineStrong)
-                    .foregroundStyle(selected ? Color.white : Color.srText)
+                    .foregroundStyle(selected ? Color.srOnInverse : Color.srText)
                     .lineLimit(1)
                     .fixedSize()
                 if count > 0 {
@@ -131,7 +131,7 @@ struct FeedFilterBar: View {
             }
             .padding(.horizontal, 14)
             .frame(height: 36)
-            .background(Capsule().fill(selected ? Color.srInk : Color.srSurface))
+            .background(Capsule().fill(selected ? Color.srInverse : Color.srSurface))
             .overlay(Capsule().strokeBorder(selected ? Color.clear : Color.srLine, lineWidth: 1))
             .contentShape(Capsule())
         }

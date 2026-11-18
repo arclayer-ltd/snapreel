@@ -172,7 +172,6 @@ private struct RecorderPresentations: ViewModifier {
                         }
                     }
             }
-            .preferredColorScheme(.light)
         }
     }
 }
@@ -331,18 +330,22 @@ struct RecorderTimerPill: View {
 // MARK: - Controls
 
 /// Import on the left, the big record button in the middle, flip (or pause) on the right.
+/// Each side slot keeps its width when it's empty (screen and audio have no right-hand
+/// control), so the record button always sits in the middle of the screen.
 private struct RecorderControlsRow: View {
     @EnvironmentObject private var model: RecorderModel
 
     var body: some View {
         HStack(spacing: 0) {
-            leading
+            Color.clear
                 .frame(width: 64, height: 64)
+                .overlay { leading }
             Spacer(minLength: 0)
             center
             Spacer(minLength: 0)
-            trailing
+            Color.clear
                 .frame(width: 64, height: 64)
+                .overlay { trailing }
         }
         .padding(.horizontal, Space.l)
         .frame(height: 92)

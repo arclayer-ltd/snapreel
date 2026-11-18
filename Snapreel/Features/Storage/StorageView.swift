@@ -160,11 +160,11 @@ struct StorageView: View {
                 HStack {
                     Text("Delete all my data")
                         .font(.srBody)
-                        .foregroundStyle(Color.srRedDeep)
+                        .foregroundStyle(Color.srRedText)
                     Spacer()
                     Image(systemName: "trash")
                         .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(Color.srRedDeep)
+                        .foregroundStyle(Color.srRedText)
                 }
                 .contentShape(Rectangle())
             }

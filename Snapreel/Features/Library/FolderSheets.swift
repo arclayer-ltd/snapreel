@@ -86,7 +86,7 @@ struct FolderEditorSheet: View {
                 .padding(.horizontal, Space.gutter)
             Text(verbatim: problem ?? "Up to \(FolderNameRules.limit) characters. A recording sits in one folder at a time.")
                 .font(.srFootnote)
-                .foregroundStyle(problem == nil ? Color.srTextSecondary : Color.srRedDeep)
+                .foregroundStyle(problem == nil ? Color.srTextSecondary : Color.srRedText)
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.horizontal, Space.gutter)
                 .padding(.top, Space.xs)
@@ -257,7 +257,7 @@ struct MoveToFolderSheet: View {
                 if let problem = FolderNameRules.problem(with: newName, in: library) {
                     Text(verbatim: problem)
                         .font(.srFootnote)
-                        .foregroundStyle(Color.srRedDeep)
+                        .foregroundStyle(Color.srRedText)
                 }
                 Button("Create and move") { createAndMove() }
                     .buttonStyle(.srPrimaryCompact)

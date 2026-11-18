@@ -66,7 +66,7 @@ struct IntroSlides: View {
                 onSkip()
             }
             .font(.srSubheadlineStrong)
-            .foregroundStyle(Color.srOnDarkSecondary)
+            .foregroundStyle(Color.srTextSecondary)
             .padding(.vertical, Space.xs)
             .padding(.leading, Space.m)
             .contentShape(Rectangle())
@@ -87,9 +87,9 @@ struct IntroSlides: View {
                 } label: {
                     Image(systemName: "chevron.left")
                         .font(.system(size: 15, weight: .bold))
-                        .foregroundStyle(Color.srOnDark)
+                        .foregroundStyle(Color.srText)
                         .frame(width: 40, height: 40)
-                        .background(Circle().fill(Color.white.opacity(0.1)))
+                        .background(Circle().fill(Color.srFill))
                 }
                 .buttonStyle(PressScaleStyle())
                 .accessibilityLabel("Back")
@@ -127,6 +127,7 @@ struct IntroSlidePage: View {
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dynamicTypeSize) private var typeSize
+    @Environment(\.colorScheme) private var colorScheme
 
     init(slide: IntroSlide, isActive: Bool) {
         self.slide = slide
@@ -152,14 +153,15 @@ struct IntroSlidePage: View {
         let share: CGFloat = typeSize.isAccessibilitySize ? 0.4 : 0.7
         let side = min(size.width * 1.06, size.height * share)
         return OnboardingCharacter(clip: slide.clip, width: side)
-            .frame(width: size.width, height: side * 0.8)
+            .onboardingStage(clip: slide.clip, pageWidth: size.width, height: side * 0.8, colorScheme: colorScheme)
             .scaleEffect(isActive || reduceMotion ? 1 : 0.92)
             .opacity(isActive ? 1 : 0.55)
             .overlay(alignment: IntroCallout.alignment(for: slide.index)) {
                 // A bit of the real app beside the character, so the slide shows what it means.
                 IntroCallout(index: slide.index)
-                    .padding(.horizontal, Space.gutter)
-                    .padding(.vertical, Space.l)
+                    // In Light mode the art is a card inset by the margin; keep the callout inside it.
+                    .padding(.horizontal, colorScheme == .light ? Space.gutter + Space.m : Space.gutter)
+                    .padding(.vertical, colorScheme == .light ? Space.m : Space.l)
                     .opacity(isActive ? 1 : 0)
                     .offset(y: isActive || reduceMotion ? 0 : 12)
                     .accessibilityHidden(true)
@@ -178,14 +180,14 @@ struct IntroSlidePage: View {
             }
             .foregroundStyle(Color.srRed)
             .accessibilityHidden(true)
-            (Text(slide.title).foregroundColor(Color.srOnDark)
-                + Text(slide.accent).foregroundColor(Color.srRedGlow))
+            (Text(slide.title).foregroundColor(Color.srText)
+                + Text(slide.accent).foregroundColor(OnboardingStyle.accent))
                 .font(.srDisplay)
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityAddTraits(.isHeader)
             Text(slide.message)
                 .font(.srBody)
-                .foregroundStyle(Color.srOnDarkSecondary)
+                .foregroundStyle(Color.srTextSecondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .leading)

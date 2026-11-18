@@ -30,6 +30,14 @@ final class AppSettings: ObservableObject {
     // Playback
     @Published var playbackRate: Double { didSet { defaults.set(playbackRate, forKey: Keys.rate) } }
 
+    // Appearance: match the iPhone, or always Light or Dark (Settings > Appearance).
+    @Published var appearance: AppearanceMode {
+        didSet {
+            defaults.set(appearance.rawValue, forKey: Keys.appearance)
+            AppearanceController.apply(appearance)
+        }
+    }
+
     // Notifications: one toggle per kind, default on.
     @Published private(set) var notificationToggles: [NotificationKind: Bool]
 
@@ -51,6 +59,7 @@ final class AppSettings: ObservableObject {
         showsSpeakerNotes = defaults.bool(forKey: Keys.showsNotes)
         let rate = defaults.double(forKey: Keys.rate)
         playbackRate = rate > 0 ? rate : 1
+        appearance = defaults.string(forKey: Keys.appearance).flatMap(AppearanceMode.init(rawValue:)) ?? .system
         var toggles: [NotificationKind: Bool] = [:]
         for kind in NotificationKind.allCases {
             toggles[kind] = defaults.object(forKey: kind.defaultsKey) as? Bool ?? true
@@ -93,5 +102,6 @@ final class AppSettings: ObservableObject {
         static let speakerNotes = "recording.speakerNotes"
         static let showsNotes = "recording.showsSpeakerNotes"
         static let rate = "playback.rate"
+        static let appearance = "display.appearance"
     }
 }

@@ -191,13 +191,13 @@ struct PillSwitch<Option: Hashable>: View {
                 } label: {
                     Text(title(option))
                         .font(.srSubheadlineStrong)
-                        .foregroundStyle(selected ? (onDark ? Color.srInk : Color.white)
+                        .foregroundStyle(selected ? (onDark ? Color.srInk : Color.srOnInverse)
                                                   : (onDark ? Color.srOnDarkSecondary : Color.srTextSecondary))
                         .padding(.horizontal, Space.m)
                         .frame(height: 34)
                         .background {
                             if selected {
-                                Capsule().fill(onDark ? Color.white : Color.srInk)
+                                Capsule().fill(onDark ? Color.white : Color.srInverse)
                                     .matchedGeometryEffect(id: "pill", in: pill)
                             }
                         }
@@ -234,7 +234,7 @@ struct ToastView: View {
         }
         .padding(.horizontal, Space.m)
         .padding(.vertical, Space.s)
-        .background(Capsule().fill(Color.srInk.opacity(0.94)))
+        .background(Capsule().fill(Color.srToast.opacity(0.96)))
         .shadow(color: .black.opacity(0.18), radius: 16, y: 6)
         .accessibilityElement(children: .combine)
     }
@@ -307,6 +307,6 @@ struct UnreadDot: View {
     var size: CGFloat = 8
     var body: some View {
         Circle().fill(Color.srRed).frame(width: size, height: size)
-            .overlay(Circle().strokeBorder(Color.white, lineWidth: size * 0.2))
+            .overlay(Circle().strokeBorder(Color.srSurface, lineWidth: size * 0.2))
     }
 }

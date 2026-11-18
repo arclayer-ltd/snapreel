@@ -2,12 +2,15 @@
 # Installs the simulator build on a 375x812-point iPhone and screenshots every debug screen
 # the app lists (DebugCatalog, written on `-dumpScreens`), each launched fresh with
 # `-screen <id>`. Records screens whose launch produced a crash report in crashes.txt.
-# Usage: ci-screenshots.sh <Snapreel.app> <out-dir> [id-prefix]
+# Usage: ci-screenshots.sh <Snapreel.app> <out-dir> [id-prefixes] [light|dark]
+# id-prefixes: space-separated; a screen is shot when its id starts with any of them (empty = all).
+# The simulator's appearance is set to the fourth argument (default light); the app follows it.
 set -uo pipefail
 
 APP="$1"
 OUT="${2:-screenshots}"
 ONLY="${3:-}"
+APPEARANCE="${4:-light}"
 BUNDLE="co.arclayer.snapreel"
 mkdir -p "$OUT"
 
@@ -65,7 +68,7 @@ done
 # Light mode, no first-use keyboard tips ("slide to type"), a clean 9:41 status bar.
 # Re-applied after a reboot (the status bar override does not survive one).
 prepare_device() {
-  xcrun simctl ui "$DEVICE" appearance light
+  xcrun simctl ui "$DEVICE" appearance "$APPEARANCE"
   for KEY in DidShowContinuousPathIntroduction DidShowGestureKeyboardIntroduction; do
     xcrun simctl spawn "$DEVICE" defaults write com.apple.keyboard.preferences "$KEY" -bool true || true
   done
@@ -129,7 +132,13 @@ wait_ready() {
 
 while IFS="$TAB" read -r ID WAIT TITLE FLAG || [ -n "${ID:-}" ]; do
   [ -z "$ID" ] && continue
-  if [ -n "$ONLY" ] && [[ "$ID" != "$ONLY"* ]]; then ID=""; continue; fi
+  if [ -n "$ONLY" ]; then
+    WANTED=0
+    for PREFIX in $ONLY; do
+      if [[ "$ID" == "$PREFIX"* ]]; then WANTED=1; break; fi
+    done
+    if [ "$WANTED" = "0" ]; then ID=""; continue; fi
+  fi
   xcrun simctl terminate "$DEVICE" "$BUNDLE" > /dev/null 2>&1 || true
   if [ "${FLAG:-}" = "prompt" ]; then
     # Privacy prompts (camera, microphone, Photos) stay up even after an uninstall, so every
@@ -172,6 +181,6 @@ done < "$OUT/../debug-screens.tsv"
 xcrun simctl terminate "$DEVICE" "$BUNDLE" > /dev/null 2>&1 || true
 mkdir -p "$OUT/../crash-reports"
 find "$REPORTS" -name "Snapreel*" -newer "$OUT/../debug-screens.tsv" -exec cp {} "$OUT/../crash-reports/" \; 2>/dev/null || true
-echo "### Screenshots: $COUNT captured, $(wc -l < "$OUT/../crashes.txt" | tr -d ' ') crashed" >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
+echo "### Screenshots ($APPEARANCE): $COUNT captured, $(wc -l < "$OUT/../crashes.txt" | tr -d ' ') crashed" >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
 cat "$OUT/../crashes.txt"
 xcrun simctl shutdown "$DEVICE" || true

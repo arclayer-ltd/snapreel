@@ -4,8 +4,14 @@ import UIKit
 // MARK: - Colour
 //
 // Sampled from the app icon (art/icon-1024.png): a record-red ring and dot on near-black.
-// Recorder and player use the dark ink surfaces; lists and settings are light. Red is the
-// only accent: primary actions, recording state, selection and the unread dot.
+// Red is the only accent: primary actions, recording state, selection and the unread dot.
+//
+// Two kinds of colour:
+// - Fixed ink colours (`srInk…`, `srOnDark…`) for the recorder, the player and the splash,
+//   which stay dark in both appearances, like the Camera app and a video player.
+// - Adaptive colours (`srCanvas`, `srSurface`, `srText`…) for everything else. They're light
+//   in Light mode and switch to the ink family in Dark mode, following the iPhone's setting
+//   or Settings > Appearance (`AppearanceMode`).
 
 extension Color {
     init(hex: UInt32, opacity: Double = 1) {
@@ -14,6 +20,22 @@ extension Color {
                   green: Double((hex >> 8) & 0xFF) / 255,
                   blue: Double(hex & 0xFF) / 255,
                   opacity: opacity)
+    }
+
+    /// A colour that follows the current appearance: `light` in Light mode, `dark` in Dark mode.
+    init(light: UInt32, dark: UInt32) {
+        self.init(UIColor { traits in
+            UIColor(hex: traits.userInterfaceStyle == .dark ? dark : light)
+        })
+    }
+}
+
+extension UIColor {
+    convenience init(hex: UInt32, alpha: CGFloat = 1) {
+        self.init(red: CGFloat((hex >> 16) & 0xFF) / 255,
+                  green: CGFloat((hex >> 8) & 0xFF) / 255,
+                  blue: CGFloat(hex & 0xFF) / 255,
+                  alpha: alpha)
     }
 }
 
@@ -25,8 +47,10 @@ extension ShapeStyle where Self == Color {
     static var srRedDeep: Color { Color(hex: 0xD32434) }
     /// #FE6262, the dot's highlight. Glows and live indicators on dark.
     static var srRedGlow: Color { Color(hex: 0xFE6262) }
-    /// Red at 10% on white, for tinted chips and selected rows on light surfaces.
-    static var srRedSoft: Color { Color(hex: 0xFDECED) }
+    /// Tinted red behind red icons and destructive labels. Light: #FDECED. Dark: #3B1D24.
+    static var srRedSoft: Color { Color(light: 0xFDECED, dark: 0x3B1D24) }
+    /// Red text and destructive labels on adaptive surfaces. Light: #D32434. Dark: #FF6E72.
+    static var srRedText: Color { Color(light: 0xD32434, dark: 0xFF6E72) }
 
     // Dark surfaces (icon background)
     /// #13141B, the icon background. Recorder, player, splash.
@@ -45,23 +69,31 @@ extension ShapeStyle where Self == Color {
     static var srOnDarkSecondary: Color { Color.white.opacity(0.72) }
     static var srOnDarkTertiary: Color { Color.white.opacity(0.42) }
 
-    // Light surfaces
-    /// #F4F4F6, grouped background behind lists and settings.
-    static var srCanvas: Color { Color(hex: 0xF4F4F6) }
-    /// White cards and rows.
-    static var srSurface: Color { Color.white }
-    /// #ECECF0, search fields, chips, placeholders.
-    static var srFill: Color { Color(hex: 0xECECF0) }
-    /// #E3E3E8, hairlines on light.
-    static var srLine: Color { Color(hex: 0xE3E3E8) }
+    // Adaptive surfaces (tabs, lists, settings, sheets, onboarding)
+    /// Grouped background behind lists and settings. Light: #F4F4F6. Dark: #0E0F14.
+    static var srCanvas: Color { Color(light: 0xF4F4F6, dark: 0x0E0F14) }
+    /// Cards, rows and the tab bar. Light: white. Dark: #1C1E27 (ink raised).
+    static var srSurface: Color { Color(light: 0xFFFFFF, dark: 0x1C1E27) }
+    /// Search fields, chips, placeholders. Light: #ECECF0. Dark: #2A2C37 (ink control).
+    static var srFill: Color { Color(light: 0xECECF0, dark: 0x2A2C37) }
+    /// Hairlines. Light: #E3E3E8. Dark: #30323D.
+    static var srLine: Color { Color(light: 0xE3E3E8, dark: 0x30323D) }
 
-    // Text on light
-    /// Ink, the primary text colour on light surfaces.
-    static var srText: Color { Color(hex: 0x13141B) }
-    /// #5B5E6B
-    static var srTextSecondary: Color { Color(hex: 0x5B5E6B) }
-    /// #8F929D
-    static var srTextTertiary: Color { Color(hex: 0x8F929D) }
+    // Adaptive text
+    /// Primary text. Light: ink #13141B. Dark: #F4F4F6.
+    static var srText: Color { Color(light: 0x13141B, dark: 0xF4F4F6) }
+    /// Light: #5B5E6B. Dark: #A6A9B5.
+    static var srTextSecondary: Color { Color(light: 0x5B5E6B, dark: 0xA6A9B5) }
+    /// Light: #8F929D. Dark: #737685.
+    static var srTextTertiary: Color { Color(light: 0x8F929D, dark: 0x737685) }
+
+    // Adaptive inverse, for selected chips and pills that stand out from the page
+    /// Light: ink. Dark: near-white.
+    static var srInverse: Color { Color(light: 0x13141B, dark: 0xF4F4F6) }
+    /// Text on `srInverse`. Light: white. Dark: ink.
+    static var srOnInverse: Color { Color(light: 0xFFFFFF, dark: 0x13141B) }
+    /// Floating toasts: ink in Light mode, a raised grey in Dark mode so they lift off the page.
+    static var srToast: Color { Color(light: 0x13141B, dark: 0x30323D) }
 }
 
 extension UIColor {

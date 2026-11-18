@@ -54,7 +54,7 @@ private struct SRButtonBody: View {
         case .primary: return .white
         case .secondary: return colorScheme == .dark ? .white : .srText
         case .tertiary: return configuration.isPressed ? .srRedDeep : .srRed
-        case .destructive: return .srRedDeep
+        case .destructive: return .srRedText
         case .inverted: return .srInk
         }
     }

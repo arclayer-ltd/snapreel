@@ -90,7 +90,7 @@ struct LegalMenuView: View {
         HStack(alignment: .firstTextBaseline, spacing: Space.s) {
             Image(systemName: systemImage)
                 .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(Color.srRedDeep)
+                .foregroundStyle(Color.srRedText)
                 .frame(width: 22)
             Text(text)
                 .font(.srSubheadline)

@@ -16,9 +16,14 @@ on:
         type: boolean
         default: true
       only:
-        description: Only screenshot ids starting with this prefix (empty = all)
+        description: Only screenshot ids starting with these space-separated prefixes (empty = all)
         type: string
         default: ""
+      dark:
+        # A second pass with the simulator in Dark mode, over these id prefixes ("none" skips it).
+        description: Dark-mode screenshot prefixes (none = skip)
+        type: string
+        default: "start.welcome start.intro start.use.selected start.tour.1 start.tour.intro home.filled home.empty lib.videos lib.folders lib.actions notif.feed search.results settings.root settings.appearance settings.recording settings.storage.confirm help.home help.article legal.menu rec.shell rec.camera.recording rec.review video.player video.details photos.audio video.photos.alert share.sheet kit.components"
       runner:
         # xcode-27 (Apple silicon, macOS 27) builds with the iOS 27 SDK, which App Store Connect
         # requires for uploads from April 2027 (ITMS-90725). The others build with the iOS 26 SDK.
@@ -89,7 +94,11 @@ jobs:
 
       - name: Simulator screenshots
         if: ${{ inputs.screenshots }}
-        run: bash scripts/ci-screenshots.sh build/Build/Products/Debug-iphonesimulator/Snapreel.app ci-out/screenshots "${{ inputs.only }}"
+        run: bash scripts/ci-screenshots.sh build/Build/Products/Debug-iphonesimulator/Snapreel.app ci-out/screenshots "${{ inputs.only }}" light
+
+      - name: Simulator screenshots (Dark mode)
+        if: ${{ inputs.screenshots && inputs.dark != 'none' }}
+        run: bash scripts/ci-screenshots.sh build/Build/Products/Debug-iphonesimulator/Snapreel.app ci-out/dark/screenshots "${{ inputs.dark }}" dark
 
       # Reuses the team's existing distribution certificate and two App Store profiles made
       # through the App Store Connect API, so a run never creates or revokes anything.

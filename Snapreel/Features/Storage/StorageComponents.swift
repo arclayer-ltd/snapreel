@@ -171,7 +171,7 @@ struct LargestVideoRow: View {
             } label: {
                 Image(systemName: "trash")
                     .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(Color.srRedDeep)
+                    .foregroundStyle(Color.srRedText)
                     .frame(width: 34, height: 34)
                     .background(Circle().fill(Color.srRedSoft))
             }

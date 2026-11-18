@@ -35,7 +35,7 @@ struct UseCaseQuestion: View {
 
     private var topBar: some View {
         HStack {
-            CircleIconButton(systemName: "chevron.left", label: "Back", tone: .dark, size: 36) {
+            CircleIconButton(systemName: "chevron.left", label: "Back", tone: .light, size: 36) {
                 onBack()
             }
             Spacer()
@@ -53,12 +53,12 @@ struct UseCaseQuestion: View {
                 .accessibilityHidden(true)
             Text("What will you use Snapreel for?")
                 .font(.srDisplay)
-                .foregroundStyle(Color.srOnDark)
+                .foregroundStyle(Color.srText)
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityAddTraits(.isHeader)
             Text("Pick one and we'll put the most useful tips for you first in Help.")
                 .font(.srCallout)
-                .foregroundStyle(Color.srOnDarkSecondary)
+                .foregroundStyle(Color.srTextSecondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
     }
@@ -83,7 +83,7 @@ struct UseCaseQuestion: View {
                 .disabled(selection == nil)
             Text(selection == nil ? "Choose one to continue" : "You're all set")
                 .font(.srFootnote)
-                .foregroundStyle(Color.srOnDarkTertiary)
+                .foregroundStyle(Color.srTextTertiary)
                 .animation(nil, value: selection)
         }
         .padding(.horizontal, Space.gutter)
@@ -116,12 +116,12 @@ struct UseCaseRow: View {
                 VStack(alignment: .leading, spacing: Space.xxs) {
                     Text(useCase.title)
                         .font(.srHeadline)
-                        .foregroundStyle(Color.srOnDark)
+                        .foregroundStyle(Color.srText)
                         .frame(minHeight: 40, alignment: .leading)
                     if isSelected {
                         Text(useCase.hint)
                             .font(.srSubheadline)
-                            .foregroundStyle(Color.srOnDarkSecondary)
+                            .foregroundStyle(Color.srTextSecondary)
                             .fixedSize(horizontal: false, vertical: true)
                             .transition(.opacity.combined(with: .move(edge: .top)))
                     }
@@ -133,11 +133,11 @@ struct UseCaseRow: View {
             .padding(Space.m)
             .background(
                 RoundedRectangle(cornerRadius: Radius.l, style: .continuous)
-                    .fill(isSelected ? Color.srInkControl : OnboardingStyle.raised)
+                    .fill(isSelected ? OnboardingStyle.raisedSelected : OnboardingStyle.raised)
             )
             .overlay(
                 RoundedRectangle(cornerRadius: Radius.l, style: .continuous)
-                    .strokeBorder(isSelected ? Color.srRed : Color.srInkLine, lineWidth: isSelected ? 1.5 : 1)
+                    .strokeBorder(isSelected ? Color.srRed : Color.srLine, lineWidth: isSelected ? 1.5 : 1)
             )
             .contentShape(RoundedRectangle(cornerRadius: Radius.l, style: .continuous))
         }
@@ -151,7 +151,7 @@ struct UseCaseRow: View {
     private var radio: some View {
         ZStack {
             Circle()
-                .strokeBorder(isSelected ? Color.srRed : Color.white.opacity(0.3), lineWidth: 2)
+                .strokeBorder(isSelected ? Color.srRed : OnboardingStyle.quiet, lineWidth: 2)
             if isSelected {
                 Circle()
                     .fill(Color.srRed)

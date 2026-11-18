@@ -103,7 +103,7 @@ struct VideoCard: View {
         case .failed(let reason, _):
             Text(verbatim: reason)
                 .font(.srCaption)
-                .foregroundStyle(Color.srRedDeep)
+                .foregroundStyle(Color.srRedText)
                 .lineLimit(3)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -204,7 +204,7 @@ struct VideoCardBadges: View {
                     Text("Needs a title")
                 }
                 .font(.srCaption)
-                .foregroundStyle(Color.srRedDeep)
+                .foregroundStyle(Color.srRedText)
                 .padding(.horizontal, 6)
                 .padding(.vertical, 2)
                 .background(Capsule().fill(Color.srRedSoft))

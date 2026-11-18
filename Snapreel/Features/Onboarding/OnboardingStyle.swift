@@ -1,11 +1,34 @@
 import SwiftUI
 
-/// Shared look of the getting-started screens. The page colour is the one baked into the dark
-/// character clips, so the clips sit on the page with no visible edge.
+/// Shared look of the getting-started screens, in both appearances.
+/// Dark: the page is the colour baked into the character clips, so the clips sit on it with no
+/// visible edge. Light: the page is the app's canvas and each clip sits in a rounded card of its
+/// own colour (`onboardingStage`).
 enum OnboardingStyle {
-    static let background: Color = CharacterClip.welcome.background
-    /// Cards and rows on the onboarding page.
-    static let raised: Color = Color.srInkRaised
+    static let background = Color(light: 0xF4F4F6, dark: 0x15151F)
+    /// Answer rows on the onboarding page.
+    static let raised = Color(light: 0xFFFFFF, dark: 0x1C1E27)
+    /// A selected answer row.
+    static let raisedSelected = Color(light: 0xFFFFFF, dark: 0x2A2C37)
+    /// The red end of each headline: the dot's glow on dark, a deeper red that reads on light.
+    static let accent = Color(light: 0xE03A44, dark: 0xFE6262)
+    /// Page dots that aren't the current page, and unselected radio rings.
+    static let quiet = Color(light: 0xC8C9D0, dark: 0x525259)
+}
+
+extension View {
+    /// Frames a character clip `height` tall on a page `pageWidth` wide. Dark mode: full width,
+    /// the clip's faded edges melting into the page. Light mode: inset by the screen margin in a
+    /// rounded card the colour of the clip, so the dark art reads as a picture on the light page.
+    func onboardingStage(clip: CharacterClip, pageWidth: CGFloat, height: CGFloat,
+                         colorScheme: ColorScheme) -> some View {
+        let isCard = colorScheme == .light
+        let shape = RoundedRectangle(cornerRadius: isCard ? Radius.xl : 0, style: .continuous)
+        return frame(width: isCard ? max(pageWidth - Space.gutter * 2, 0) : pageWidth, height: height)
+            .background(isCard ? clip.background : Color.clear)
+            .clipShape(shape)
+            .frame(width: pageWidth)
+    }
 }
 
 /// A character clip drawn at `width` (it may be wider than the screen), with its flat edges
@@ -46,7 +69,7 @@ struct OnboardingPageDots: View {
         HStack(spacing: 6) {
             ForEach(0..<count, id: \.self) { item in
                 Capsule()
-                    .fill(item == index ? Color.srRed : Color.white.opacity(0.26))
+                    .fill(item == index ? Color.srRed : OnboardingStyle.quiet)
                     .frame(width: item == index ? 22 : 7, height: 7)
             }
         }
@@ -69,7 +92,7 @@ struct BrandLockup: View {
                 .frame(width: markSize, height: markSize)
             Text("Snapreel")
                 .font(font)
-                .foregroundStyle(Color.srOnDark)
+                .foregroundStyle(Color.srText)
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Snapreel")

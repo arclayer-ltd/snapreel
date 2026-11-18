@@ -6,6 +6,7 @@ import SwiftUI
 enum SettingsPage: Hashable {
     case notifications
     case recording
+    case appearance
     case storage
     case help
     case helpArticle(String)
@@ -33,6 +34,7 @@ struct SettingsDestination: View {
         switch page {
         case .notifications: NotificationSettingsView()
         case .recording: RecordingDefaultsView()
+        case .appearance: AppearanceView()
         case .storage: StorageView()
         case .help: HelpCenterView()
         case .helpArticle(let id): HelpArticleView(articleID: id)
@@ -81,7 +83,6 @@ struct SettingsView: View {
             .settingsDestinations()
         }
         .tint(Color.srRed)
-        .preferredColorScheme(.light)
     }
 
     // MARK: Groups
@@ -93,6 +94,9 @@ struct SettingsView: View {
             SettingsDivider()
             SettingsLinkRow(page: .recording, systemImage: "video.fill", title: "Recording",
                             value: settings.recordingQuality.label)
+            SettingsDivider()
+            SettingsLinkRow(page: .appearance, systemImage: "circle.lefthalf.filled", title: "Appearance",
+                            value: settings.appearance.label)
             SettingsDivider()
             SettingsLinkRow(page: .storage, systemImage: "internaldrive.fill", title: "Storage",
                             value: Format.bytes(library.totalVideoBytes))

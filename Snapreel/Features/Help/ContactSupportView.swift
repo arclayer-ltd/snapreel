@@ -435,7 +435,7 @@ struct MailUnavailableSheet: View {
                 if openFailed {
                     Text("No mail app could open the message. Copy the address instead.")
                         .font(.srFootnote)
-                        .foregroundStyle(Color.srRedDeep)
+                        .foregroundStyle(Color.srRedText)
                         .multilineTextAlignment(.center)
                         .frame(maxWidth: .infinity)
                 }
@@ -444,7 +444,6 @@ struct MailUnavailableSheet: View {
         }
         .padding(Space.gutter)
         .background(Color.srSurface.ignoresSafeArea())
-        .preferredColorScheme(.light)
     }
 
     private func openOtherMailApp() {

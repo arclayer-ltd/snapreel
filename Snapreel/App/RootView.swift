@@ -6,6 +6,12 @@ struct RootView: View {
     @State private var showsSplash = true
 
     var body: some View {
+        content
+            // The window exists by the time the root appears; apply the saved appearance to it.
+            .onAppear { AppearanceController.apply(settings.appearance) }
+    }
+
+    @ViewBuilder private var content: some View {
         #if DEBUG
         if let id = AppEnvironment.shared.debugScreenID {
             DebugHost(screenID: id)

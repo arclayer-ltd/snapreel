@@ -7,6 +7,7 @@ struct WelcomeStep: View {
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dynamicTypeSize) private var typeSize
+    @Environment(\.colorScheme) private var colorScheme
     @State private var appeared = false
 
     init(onStart: @escaping @MainActor () -> Void) {
@@ -39,7 +40,7 @@ struct WelcomeStep: View {
         let height = min(size.width * 1.22 * 0.75, size.height * share)
         let width = height / 0.75
         return OnboardingCharacter(clip: .welcome, width: width)
-            .frame(width: size.width, height: height)
+            .onboardingStage(clip: .welcome, pageWidth: size.width, height: height, colorScheme: colorScheme)
             .opacity(appeared ? 1 : 0)
             .scaleEffect(appeared || reduceMotion ? 1 : 0.96)
             .animation(reduceMotion ? Animation.easeOut(duration: 0.25) : Motion.gentle, value: appeared)
@@ -49,14 +50,14 @@ struct WelcomeStep: View {
         VStack(alignment: .leading, spacing: Space.s) {
             BrandLockup(markSize: 28, font: .srTitle3)
                 .padding(.bottom, Space.xxs)
-            (Text("Say it with a ").foregroundColor(Color.srOnDark)
-                + Text("quick video.").foregroundColor(Color.srRedGlow))
+            (Text("Say it with a ").foregroundColor(Color.srText)
+                + Text("quick video.").foregroundColor(OnboardingStyle.accent))
                 .font(.srLargeTitle)
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityAddTraits(.isHeader)
             Text("Record your screen, your camera or just your voice, then send it to anyone in seconds.")
                 .font(.srBody)
-                .foregroundStyle(Color.srOnDarkSecondary)
+                .foregroundStyle(Color.srTextSecondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -82,7 +83,7 @@ struct WelcomeStep: View {
                 Text("No account. Everything stays on this iPhone.")
                     .font(.srFootnote)
             }
-            .foregroundStyle(Color.srOnDarkTertiary)
+            .foregroundStyle(Color.srTextTertiary)
             .accessibilityElement(children: .combine)
         }
         .padding(.horizontal, Space.gutter)

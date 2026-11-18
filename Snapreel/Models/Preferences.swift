@@ -75,3 +75,37 @@ enum CameraSide: String, Codable, CaseIterable, Identifiable {
     var id: String { rawValue }
     var label: String { self == .front ? "Front" : "Back" }
 }
+
+/// Settings > Appearance. `system` follows the iPhone's Light or Dark setting. The recorder and
+/// the player stay dark either way, like the Camera app and a video player.
+enum AppearanceMode: String, Codable, CaseIterable, Identifiable {
+    case system
+    case light
+    case dark
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .system: return "Match iPhone"
+        case .light: return "Light"
+        case .dark: return "Dark"
+        }
+    }
+
+    var detail: String {
+        switch self {
+        case .system: return "Switches with your iPhone's Light and Dark setting"
+        case .light: return "Always light"
+        case .dark: return "Always dark"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .system: return "circle.lefthalf.filled"
+        case .light: return "sun.max.fill"
+        case .dark: return "moon.fill"
+        }
+    }
+}

@@ -36,6 +36,9 @@ extension DebugCatalog {
             DebugScreen("settings.root", "Settings root") {
                 SettingsDebugHost(path: [])
             },
+            DebugScreen("settings.appearance", "Settings > Appearance") {
+                SettingsDebugHost(path: [.appearance])
+            },
             DebugScreen("help.home", "Help centre") {
                 SettingsDebugHost(path: [.help], useCase: .work)
             },

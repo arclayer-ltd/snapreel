@@ -9,7 +9,8 @@ enum OnboardingStep: Hashable {
     case useCase
 }
 
-/// Welcome, three intro slides and the "what will you use it for" question, on the dark page.
+/// Welcome, three intro slides and the "what will you use it for" question. Follows Light and
+/// Dark like the rest of the app (`OnboardingStyle`).
 /// Saves the answer to `settings.useCase`, then calls `onFinish`; the guided tour runs over the
 /// tab shell afterwards.
 struct OnboardingFlow: View {
@@ -61,7 +62,6 @@ struct OnboardingFlow: View {
             OnboardingStyle.background.ignoresSafeArea()
             content
         }
-        .preferredColorScheme(.dark)
     }
 
     @ViewBuilder private var content: some View {

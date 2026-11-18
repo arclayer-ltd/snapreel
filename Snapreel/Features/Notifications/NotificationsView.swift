@@ -118,7 +118,7 @@ struct NotificationsView: View {
                 } label: {
                     Label("Mark as read", systemImage: "envelope.open")
                 }
-                .tint(Color.srInk)
+                .tint(Color(light: 0x13141B, dark: 0x4A4D5A))
             }
         }
         .contextMenu {
