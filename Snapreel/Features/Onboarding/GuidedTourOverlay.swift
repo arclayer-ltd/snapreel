@@ -185,9 +185,14 @@ struct GuidedTourOverlay: View {
                 characterPanel(clip)
             }
             if step == .intro {
-                Label("Takes about 20 seconds", systemImage: "clock")
-                    .font(.srCaption)
-                    .foregroundStyle(Color.srTextSecondary)
+                HStack {
+                    Label("Takes about 20 seconds", systemImage: "clock")
+                        .font(.srCaption)
+                        .foregroundStyle(Color.srTextSecondary)
+                    Spacer(minLength: Space.xs)
+                    // The four stops ahead, none done yet.
+                    TourProgress(current: 0, total: TourStep.stepCount)
+                }
             }
             VStack(alignment: .leading, spacing: 6) {
                 Text(step.title)
@@ -414,6 +419,6 @@ struct TourProgress: View {
             }
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Step \(current) of \(total)")
+        .accessibilityLabel(current == 0 ? "\(total) stops" : "Step \(current) of \(total)")
     }
 }

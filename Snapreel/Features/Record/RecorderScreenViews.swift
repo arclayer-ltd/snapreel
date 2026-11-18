@@ -64,36 +64,68 @@ struct ScreenTutorialView: View {
 
     private var isLastCard: Bool { model.tutorialPage >= tutorialCards.count - 1 }
 
-    /// Page dots, Skip, and a labelled Next / Got it.
+    /// "Record screen" from any card, then page dots, Skip and Next / Got it.
     private var controls: some View {
-        HStack {
-            dots
-            Spacer()
-            if !isLastCard {
-                Button("Skip") { model.finishTutorial() }
+        VStack(spacing: Space.s) {
+            recordScreenButton
+            HStack {
+                dots
+                Spacer()
+                if !isLastCard {
+                    Button("Skip") { model.finishTutorial() }
+                        .font(.srSubheadlineStrong)
+                        .foregroundStyle(Color.srOnDarkSecondary)
+                        .padding(.trailing, Space.m)
+                }
+                Button {
+                    if isLastCard {
+                        model.finishTutorial()
+                    } else {
+                        Haptics.selection()
+                        withAnimation(Motion.standard) { model.tutorialPage += 1 }
+                    }
+                } label: {
+                    HStack(spacing: 6) {
+                        Text(isLastCard ? "Got it" : "Next")
+                        Image(systemName: isLastCard ? "checkmark" : "arrow.right")
+                            .font(.system(size: 13, weight: .bold))
+                    }
                     .font(.srSubheadlineStrong)
-                    .foregroundStyle(Color.srOnDarkSecondary)
-                    .padding(.trailing, Space.s)
-            }
-            Button {
-                if isLastCard {
-                    model.finishTutorial()
-                } else {
-                    Haptics.selection()
-                    withAnimation(Motion.standard) { model.tutorialPage += 1 }
-                }
-            } label: {
-                HStack(spacing: 6) {
-                    Text(isLastCard ? "Got it" : "Next")
-                    Image(systemName: isLastCard ? "checkmark" : "arrow.right")
-                        .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(Color.srOnDark)
                 }
             }
-            .buttonStyle(.srPrimaryCompact)
+            .frame(height: 36)
         }
         .padding(.horizontal, Space.l)
         .padding(.bottom, Space.m)
         .animation(Motion.quick, value: isLastCard)
+    }
+
+    /// A labelled way to start right away. Like the round record button, the tap goes straight
+    /// to iOS (an invisible system broadcast button sits on top), which opens its sheet.
+    private var recordScreenButton: some View {
+        ZStack {
+            HStack(spacing: Space.xs) {
+                Image(systemName: "record.circle")
+                    .font(.system(size: 17, weight: .semibold))
+                Text("Record screen")
+                    .font(.srHeadline)
+            }
+            .foregroundStyle(Color.white)
+            .frame(maxWidth: .infinity)
+            .frame(height: 50)
+            .background(Capsule().fill(Color.srRed))
+            .accessibilityHidden(true)
+            if !model.isStatic {
+                BroadcastPickerButton(onTap: {
+                    model.broadcastPickerTapped()
+                    model.finishTutorial()
+                })
+            }
+        }
+        .frame(height: 50)
+        .accessibilityElement(children: model.isStatic ? .ignore : .contain)
+        .accessibilityLabel("Record screen")
     }
 
     private func page(_ card: TutorialCard) -> some View {

@@ -1,11 +1,10 @@
 #if DEBUG
 import AVFoundation
 import Photos
-import ReplayKit
 import UIKit
 
 /// Things a debug screen can do once it has settled, so a screenshot shows a later moment of
-/// a flow: a list scrolled down, or a real system sheet or prompt over the screen.
+/// a flow: a list scrolled down, or a real system prompt over the screen.
 enum DebugSettle {
     /// Scroll the screen's main vertical list to `fraction` of the way down (0 = top, 1 = end).
     case scroll(CGFloat)
@@ -15,15 +14,13 @@ enum DebugSettle {
     case cameraPrompt
     /// Ask iOS for add-only Photos access.
     case photosPrompt
-    /// Tap the system broadcast button so iOS shows its Screen Broadcast sheet.
-    case broadcastPicker
 
     /// System prompts stay on screen until answered, even across relaunches, so the screenshot
     /// script shoots these last, each on a fresh install.
     var raisesSystemPrompt: Bool {
         switch self {
         case .microphonePrompt, .cameraPrompt, .photosPrompt: return true
-        case .scroll, .broadcastPicker: return false
+        case .scroll: return false
         }
     }
 
@@ -38,8 +35,6 @@ enum DebugSettle {
             AVCaptureDevice.requestAccess(for: .video) { _ in }
         case .photosPrompt:
             PHPhotoLibrary.requestAuthorization(for: .addOnly) { _ in }
-        case .broadcastPicker:
-            DebugSettle.tapBroadcastPicker()
         }
     }
 
@@ -80,14 +75,6 @@ enum DebugSettle {
         let bottom = list.contentSize.height - list.bounds.height + insets.bottom
         let y = top + (bottom - top) * min(max(fraction, 0), 1)
         list.setContentOffset(CGPoint(x: list.contentOffset.x, y: y), animated: false)
-    }
-
-    @MainActor
-    private static func tapBroadcastPicker() {
-        guard let root = topView,
-              let picker = views(of: RPSystemBroadcastPickerView.self, in: root).first,
-              let button = views(of: UIButton.self, in: picker).first else { return }
-        button.sendActions(for: .touchUpInside)
     }
 }
 #endif

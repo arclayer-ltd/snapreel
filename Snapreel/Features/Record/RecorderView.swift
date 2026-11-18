@@ -489,7 +489,7 @@ private struct RecorderModeRow: View {
 
     var body: some View {
         ZStack {
-            if model.stage.isCapturing || model.stage == .finishing {
+            if model.stage.isCapturing || model.stage == .finishing || isScreenRecording {
                 Text(statusText)
                     .font(.srSubheadlineStrong)
                     .foregroundStyle(Color.srOnDarkSecondary)
@@ -504,7 +504,13 @@ private struct RecorderModeRow: View {
         .animation(Motion.quick, value: model.stage)
     }
 
+    /// A screen broadcast is running (the take happens outside the recorder's own stages).
+    private var isScreenRecording: Bool { model.mode == .screen && model.screenStep == .inProgress }
+
     private var statusText: String {
+        if isScreenRecording {
+            return model.isStoppingBroadcast ? "Stopping…" : "Tap to stop recording"
+        }
         switch model.stage {
         case .paused: return "Paused. Resume or stop when you're ready."
         case .finishing: return "Finishing up…"

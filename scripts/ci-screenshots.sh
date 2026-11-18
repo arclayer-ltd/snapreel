@@ -59,14 +59,18 @@ for ATTEMPT in 1 2 3; do
   xcrun simctl erase "$DEVICE" 2>/dev/null || true
 done
 [ "$BOOTED" = "1" ] || { echo "Simulator never booted" | tee "$OUT/../screenshots-missing.txt"; exit 1; }
-xcrun simctl ui "$DEVICE" appearance light
-# No first-use keyboard tips ("slide to type") over text fields.
-for KEY in DidShowContinuousPathIntroduction DidShowGestureKeyboardIntroduction; do
-  xcrun simctl spawn "$DEVICE" defaults write com.apple.keyboard.preferences "$KEY" -bool true || true
-done
+# Light mode, no first-use keyboard tips ("slide to type"), a clean 9:41 status bar.
+# Re-applied after a reboot (the status bar override does not survive one).
+prepare_device() {
+  xcrun simctl ui "$DEVICE" appearance light
+  for KEY in DidShowContinuousPathIntroduction DidShowGestureKeyboardIntroduction; do
+    xcrun simctl spawn "$DEVICE" defaults write com.apple.keyboard.preferences "$KEY" -bool true || true
+  done
+  xcrun simctl status_bar "$DEVICE" override --time "9:41" --batteryState charged --batteryLevel 100 \
+    --cellularMode active --cellularBars 4 --wifiBars 3 || true
+}
+prepare_device
 xcrun simctl install "$DEVICE" "$APP"
-xcrun simctl status_bar "$DEVICE" override --time "9:41" --batteryState charged --batteryLevel 100 \
-  --cellularMode active --cellularBars 4 --wifiBars 3 || true
 
 # Ask the app for its screen list (retry: the first launch after boot can be slow).
 CONTAINER=""
@@ -125,6 +129,15 @@ while IFS="$TAB" read -r ID WAIT TITLE FLAG || [ -n "${ID:-}" ]; do
   if [ -n "$ONLY" ] && [[ "$ID" != "$ONLY"* ]]; then ID=""; continue; fi
   xcrun simctl terminate "$DEVICE" "$BUNDLE" > /dev/null 2>&1 || true
   if [ "${FLAG:-}" = "prompt" ]; then
+    # Privacy prompts (camera, microphone, Photos) stay up even after an uninstall, so every
+    # prompt screen after the first starts from a rebooted simulator.
+    if [ "${PROMPTS_SHOT:-0}" -gt 0 ]; then
+      xcrun simctl shutdown "$DEVICE" > /dev/null 2>&1 || true
+      xcrun simctl boot "$DEVICE" > /dev/null 2>&1 || true
+      xcrun simctl bootstatus "$DEVICE" -b > /dev/null 2>&1 || true
+      prepare_device
+    fi
+    PROMPTS_SHOT=$(( ${PROMPTS_SHOT:-0} + 1 ))
     # Fresh install: no earlier prompt on screen and no permission already decided.
     xcrun simctl uninstall "$DEVICE" "$BUNDLE" > /dev/null 2>&1 || true
     xcrun simctl install "$DEVICE" "$APP"

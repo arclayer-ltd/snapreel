@@ -49,13 +49,13 @@ struct WelcomeStep: View {
         VStack(alignment: .leading, spacing: Space.s) {
             BrandLockup(markSize: 28, font: .srTitle3)
                 .padding(.bottom, Space.xxs)
-            Text("Say it with a quick video.")
+            (Text("Say it with a ").foregroundColor(Color.srOnDark)
+                + Text("quick video.").foregroundColor(Color.srRedGlow))
                 .font(.srLargeTitle)
-                .foregroundStyle(Color.srOnDark)
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityAddTraits(.isHeader)
             Text("Record your screen, your camera or just your voice, then send it to anyone in seconds.")
-                .font(.srCallout)
+                .font(.srBody)
                 .foregroundStyle(Color.srOnDarkSecondary)
                 .fixedSize(horizontal: false, vertical: true)
         }

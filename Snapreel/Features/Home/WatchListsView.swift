@@ -20,6 +20,7 @@ struct WatchLaterView: View {
         .background(Color.srCanvas.ignoresSafeArea())
         .navigationTitle("Watch later")
         .navigationBarTitleDisplayMode(.large)
+        .settingsToolbar()
         .libraryVideoActions(actions)
     }
 
@@ -78,6 +79,7 @@ struct WatchHistoryView: View {
                 }
             }
         }
+        .settingsToolbar()
         .libraryVideoActions(actions)
         .alert("Clear your watch history?", isPresented: $confirmsClear) {
             Button("Clear history", role: .destructive) { clearAll() }

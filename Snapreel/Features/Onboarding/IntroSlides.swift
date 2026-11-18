@@ -7,19 +7,21 @@ struct IntroSlide: Identifiable {
     let kicker: String
     let symbol: String
     let title: String
+    /// The end of the title, drawn in the accent colour.
+    let accent: String
     let message: String
 
     var id: Int { index }
 
     static let all: [IntroSlide] = [
         IntroSlide(index: 0, clip: .introRecord, kicker: "Record", symbol: "record.circle",
-                   title: "Record what you mean",
+                   title: "Record ", accent: "what you mean",
                    message: "Capture your screen, your camera or just your voice. One tap to start, one tap to stop."),
         IntroSlide(index: 1, clip: .introLibrary, kicker: "Organise", symbol: "folder",
-                   title: "Keep it organised",
+                   title: "Keep it ", accent: "organised",
                    message: "Sort recordings into folders, add tags and pin notes to the exact moment. Search even finds the words you said."),
         IntroSlide(index: 2, clip: .introSend, kicker: "Send", symbol: "paperplane",
-                   title: "Send it your way",
+                   title: "Send it ", accent: "your way",
                    message: "AirDrop it, message it, mail it or save it to Photos. It's a real video file, so it plays anywhere."),
     ]
 }
@@ -175,13 +177,13 @@ struct IntroSlidePage: View {
             }
             .foregroundStyle(Color.srRed)
             .accessibilityHidden(true)
-            Text(slide.title)
+            (Text(slide.title).foregroundColor(Color.srOnDark)
+                + Text(slide.accent).foregroundColor(Color.srRedGlow))
                 .font(.srDisplay)
-                .foregroundStyle(Color.srOnDark)
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityAddTraits(.isHeader)
             Text(slide.message)
-                .font(.srCallout)
+                .font(.srBody)
                 .foregroundStyle(Color.srOnDarkSecondary)
                 .fixedSize(horizontal: false, vertical: true)
         }

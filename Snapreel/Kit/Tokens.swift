@@ -42,7 +42,7 @@ extension ShapeStyle where Self == Color {
 
     // Text on dark
     static var srOnDark: Color { Color.white }
-    static var srOnDarkSecondary: Color { Color.white.opacity(0.64) }
+    static var srOnDarkSecondary: Color { Color.white.opacity(0.72) }
     static var srOnDarkTertiary: Color { Color.white.opacity(0.42) }
 
     // Light surfaces

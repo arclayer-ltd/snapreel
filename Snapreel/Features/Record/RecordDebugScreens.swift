@@ -130,10 +130,6 @@ extension DebugCatalog {
             DebugScreen("rec.broadcast", "Broadcast step") {
                 RecordDebug.recorder(.screen) { $0.showsTutorial = false }
             },
-            DebugScreen("rec.broadcast.picker", "Broadcast step [system sheet]", wait: 4,
-                        settle: .broadcastPicker) {
-                RecordDebug.recorder(.screen) { $0.showsTutorial = false }
-            },
             DebugScreen("rec.broadcast.unavailable", "Broadcast step [unavailable]") {
                 RecordDebug.recorder(.screen) {
                     $0.showsTutorial = false
