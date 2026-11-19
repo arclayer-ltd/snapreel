@@ -4,7 +4,11 @@ Snapreel is a native SwiftUI iPhone app (iOS 16.0 and later) for recording your 
 
 ## Where it stands
 
-- **TestFlight:** build 29 of "Snapreel: Screen Recorder" (`co.arclayer.snapreel`) is the one to install. Apple has processed it as valid and the internal group "Snapreel Internal" has it, so it shows up in the TestFlight app on your iPhone.
+- **TestFlight:** build 30 of "Snapreel: Screen Recorder" (`co.arclayer.snapreel`) is the one to install. Apple has processed it as valid and the internal group "Snapreel Internal" has it, so it shows up in the TestFlight app on your iPhone.
+  - Build 30 makes the whole app follow Light and Dark, as you asked after testing build 29 in Light mode (19 November). The recorder (chooser, Camera, Screen, Audio, the "recording your screen" page, settings, notes, saving and review), the player (details, notes, transcript, speed menu, reactions, mini player, picture-in-picture placeholder, sheets), title editing and the Lock Screen card are light in Light mode and dark in Dark mode. Only the picture stays dark: the live camera, the video, full-screen playback, and the controls drawn on them over a shaded edge, as in Apple's Camera and Photos apps. Dark mode looks as it did before.
+  - Build 30 also has the camera crash fix: the iPhone X front camera has fixed focus, and build 29 tried to set face-driven focus on it.
+  - Items 15, 29 and 30 test build 30.
+  - Build 31 is not built yet. It fixes the three things you found on build 29: the Lock Screen timer kept counting after the phone locked, review showed twice, and the audio bars stood still on playback. It also fixes one thing build 30's screenshots showed: in Light mode the strip behind the clock at the top of the player is still near-black, so on iOS 16 the clock there may be hard to read. Build 31 makes it the page colour. It's on `main` (33ce468) and waits for your OK to run CI. Items 31 to 33 test it.
   - Builds 23 to 25 fixed what your videos of builds 22 and 23 showed (19 November). Items 18 to 26 of the phone checklist test those fixes.
   - Build 29 fixes what your 16:11 video of build 25 showed. Under a portrait recording, taps on share, the more button, Edit title and Details did nothing, and the notes scrolled up but never back down.
   - It opens a "transcript ready" notification on the Transcript tab.
@@ -12,7 +16,7 @@ Snapreel is a native SwiftUI iPhone app (iOS 16.0 and later) for recording your 
   - The floating picture-in-picture button is gone, as you asked.
   - Items 19, 24, 27 and 28 test build 29.
   - The Live Activity runs in a new widget extension. You approved its App ID (`co.arclayer.snapreel.liveactivity`) and App Store profile, which were made with the existing distribution certificate.
-- **Code:** `arclayer-ltd/snapreel` (public, so the macOS CI minutes are free). The last full CI run (run 29, Xcode 27.2, iOS 27.2 SDK) compiled the app and both extensions (screen broadcast and Live Activity) with no errors and no warnings and screenshotted 135 screen states in the simulator, 48 of them again in Dark mode, with no crashes. Building with the iOS 27 SDK clears App Store Connect's ITMS-90725 warning, which builds 12 to 18 carried (built with the iOS 26.2 SDK, which can't be uploaded from April 2027).
+- **Code:** `arclayer-ltd/snapreel` (public, so the macOS CI minutes are free). The last full CI run (run 30, Xcode 27.2, iOS 27.2 SDK) compiled the app and both extensions (screen broadcast and Live Activity) with no errors and no warnings and screenshotted 135 screen states in the simulator, 84 of them again in Dark mode (every recorder, review, player, Save to Photos and Live Activity screen), with no crashes. Every recorder and player pair differs between Light and Dark except full-screen playback, which stays dark by design. Building with the iOS 27 SDK clears App Store Connect's ITMS-90725 warning, which builds 12 to 18 carried (built with the iOS 26.2 SDK, which can't be uploaded from April 2027).
 - **Plan:** all 57 planned screens exist and are reachable, plus their states (135 screenshots in total). `docs/PLAN.md` maps every feature to its screens and data; `refs/index.json` maps every screen to its reference.
 
 ### Against the brief's "Done means"
@@ -22,7 +26,7 @@ Snapreel is a native SwiftUI iPhone app (iOS 16.0 and later) for recording your 
 | Every planned screen exists, is reachable and has a screenshot | Done: 57 screens, 135 screenshots of screens and states in the last full CI run |
 | Every feature works with real recordings and no network | Built and compiled; device-only parts are unverified until you run the phone checklist below |
 | Comparison results recorded | Done: three rounds in `refs/results.json` |
-| A processed TestFlight build exists | Done: build 29, valid |
+| A processed TestFlight build exists | Done: build 30, valid |
 | Parallel sessions A–E, merged | Done in the first part of the build |
 
 ## What was built
@@ -104,7 +108,7 @@ Why the raw numbers stay low: almost every reference screen carries something Sn
 
 ## Test on the phone (iPhone X, iOS 16.7)
 
-Install build 29 from TestFlight. Put the phone on Airplane Mode for everything except sending.
+Install build 30 from TestFlight. Put the phone on Airplane Mode for everything except sending.
 
 1. **First run:** Get started → three slides (swipe and Back) → choose a use → tour → Turn on notifications → Allow.
 2. **Camera:** Record → Camera → Allow camera and microphone → both iOS prompts → Allow.
@@ -135,7 +139,7 @@ Install build 29 from TestFlight. Put the phone on Airplane Mode for everything 
     - Save to Photos → primer → iOS prompt (Add Photos Only) → Allow → progress → Saved → Open Photos.
     - Then turn Photos access off in iOS Settings and try again. Expect "Photos access is off" with Open Settings.
 14. **Storage:** Settings → Storage shows the real space used. Delete a large recording, then Delete all my data → confirm → everything gone, including notifications.
-15. **Light and Dark (build 22):** with the iPhone in Dark mode, the welcome screens, Home, Library, Notifications, Search, Settings and their sheets are all dark. Switch the iPhone to Light (Control Centre, or Settings → Display & Brightness) and they turn light, with the character art in rounded dark cards. Then Settings → Appearance → Light or Dark keeps that look whatever the iPhone is set to; Match iPhone hands control back. The recorder and the player stay dark in every mode.
+15. **Light and Dark (build 22):** with the iPhone in Dark mode, the welcome screens, Home, Library, Notifications, Search, Settings and their sheets are all dark. Switch the iPhone to Light (Control Centre, or Settings → Display & Brightness) and they turn light, with the character art in rounded dark cards. Then Settings → Appearance → Light or Dark keeps that look whatever the iPhone is set to; Match iPhone hands control back. From build 30 the recorder and the player follow it too (item 29).
 16. **Record button (build 22):** Record → Screen, and Record → Audio. The big record button sits in the middle of the screen, the same as in Camera mode.
 17. **Character loops (build 22):** watch the welcome screen for ten seconds. The five friends keep walking with no stutter, ghosted legs or pause when the clip restarts.
 18. **Player, swipe down (build 23):** open any recording and drag the video down. The page follows your finger and the app shows behind it. Let go past a third of the way, or flick, and it shrinks into the bar above the tab bar while it keeps playing. A short drag springs back. With the details scrolled to the top, pulling them further down does the same. Try it with an audio recording too.
@@ -163,6 +167,17 @@ Install build 29 from TestFlight. Put the phone on Airplane Mode for everything 
     - Tap it and unlock: Snapreel opens on "Snapreel is recording your screen". Tap Stop recording, and the timer leaves the Lock Screen.
     - Then Record → Audio: start, lock the phone, and check "Recording your voice". Pause in Snapreel, and it reads "Voice recording paused".
     - If nothing shows, check Settings → Snapreel → Live Activities is on. The iPhone X has no Dynamic Island, so only the Lock Screen applies.
+29. **Light and Dark everywhere (build 30):** with the iPhone in Light mode, open each of these and check that nothing is dark except the camera picture and the video itself:
+    - Record: "What do you want to record?", then Camera, Screen and Audio, the gear (settings) and the pencil (speaker notes).
+    - Record → Screen → start, and look at "Snapreel is recording your screen". Stop, then the saving screen and the review (Add a title, Delete, Title, Share, Save to Photos, Done), and the title sheet.
+    - Open any recording: the details, Notes and Transcript, the speed menu, the ⋯ actions, Stats, the emoji picker and adding a note. Swipe it down to the mini player.
+    - Lock the phone mid-recording: the Lock Screen card is white with dark text.
+    - Then switch the iPhone to Dark and check the same screens are dark, as before. Settings → Appearance → Light or Dark must win over the iPhone's setting on these screens too.
+    - Known in build 30: the strip behind the clock at the top of the player stays black in Light mode, and an audio recording's panel is still dark. Build 31 fixes both.
+30. **Camera, front and back (build 30):** Record → Camera. The preview opens on the front camera without the app closing (build 29 crashed here). Record a few seconds, tap Flip, record on the back camera, and stop. Both clips play in review.
+31. **Lock during a screen recording (build 31, not built yet):** Record → Screen → Start Broadcast, then lock the phone. iOS ends the recording. On the Lock Screen the card should read "Screen recording stopped" with the time frozen, not keep counting. Tap it and unlock: the review of what was recorded before the lock opens, and the card goes. Repeat, but go to the Home Screen and use another app for a minute before locking: if Snapreel was already asleep the card may keep the clock, but it stops counting after 15 minutes and asks you to open Snapreel.
+32. **Review once (build 31, not built yet):** stop a screen recording, review it, tap Done, then tap the record button: "What do you want to record?" appears straight away, not the review again. Do the same after a camera and an audio recording.
+33. **Audio bars on playback (build 31, not built yet):** record 20 seconds of voice, then play it in review and from Library. The red bars move with your voice, as while recording, and hold still when you pause. In Light mode the panel is light.
 
 ## Not verified
 
@@ -182,7 +197,11 @@ Install build 29 from TestFlight. Put the phone on Airplane Mode for everything 
   - A broadcast started from Control Centre gets no Live Activity until Snapreel is opened.
 - **Broadcast sheet (build 25):** opening Snapreel's own link to close the sheet comes from one developer's report on iOS 14. It hasn't been tried on iOS 16.7. Going to the Home Screen by itself would need an undocumented Apple call; it's written but off, as you chose ("Ship 25 as is").
 - **Endless spinner (build 25):** the spinner was the saving screen with the video already saved. Build 25 makes the recorder move on by itself, but I couldn't replay your exact steps, because the simulator can't broadcast.
-- **Swiping over a light screen:** while the player or recorder is dragged down over a light Home, the clock and battery at the top stay white, so they're faint for that moment. Everything else here comes from compiling, simulator screenshots of debug states with sample data, and Apple's processing of the TestFlight builds.
+- **Swiping over a light screen:** fixed by build 30. The recorder and the player are now light in Light mode, so the clock and battery no longer stay white while they're dragged down over Home. Everything else here comes from compiling, simulator screenshots of debug states with sample data, and Apple's processing of the TestFlight builds.
+- **Light and Dark (build 30):** checked in the simulator only, with Light and Dark screenshots of every recorder, review, player and Live Activity screen side by side. The real Lock Screen card's colours come from iOS and the screenshots draw a stand-in, so item 29 confirms it. The splash stays dark in both modes: it matches the dark launch screen and the icon. Toasts stay dark in Light mode, as they were app-wide.
+- **Lock Screen timer after a lock (build 31):** ActivityKit lets only the app change its own Live Activity, not the broadcast extension, and a suspended app can't react. Build 31 keeps Snapreel awake for about 30 seconds after you leave it during a screen recording, which covers locking the phone straight away. If Snapreel was already asleep when the recording ended, the card keeps its clock until Snapreel opens, at most 15 minutes, then iOS shows it without the clock. Ending it from a server push would need a server, which Snapreel doesn't have.
+- **Review twice (build 31):** I couldn't reproduce the exact steps without the phone. Several things hand a finished screen recording to the review (coming back to Snapreel, the extension's signal, a notification tap), and one that arrived while the recorder was closing waited for the next one. Build 31 shows each recording's review once, whatever arrives later.
+- **Audio bars (build 31):** read from the recording's file. CI's sample recordings have no sound, so the screenshots (`video.audio`, `video.audio.playing`, `rec.review.audio`) draw a speech-like sample instead; item 33 checks a real voice.
 - **Screen recording:** works on your iPhone X (build 20). Its memory use against the extension's 50 MB cap hasn't been measured.
 - **Camera and audio:** you found them working on the phone; CI can't check them (the simulator has no camera).
 - **Picture in picture:** untested; the simulator reports it unsupported.
