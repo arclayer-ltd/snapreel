@@ -203,9 +203,20 @@ final class RecorderCameraEngine: NSObject, AVCaptureVideoDataOutputSampleBuffer
             device.whiteBalanceMode = .continuousAutoWhiteBalance
         }
         if device.isLowLightBoostSupported { device.automaticallyEnablesLowLightBoostWhenAvailable = true }
+        // These setters throw (an Objective-C exception Swift can't catch, so the app closes) on a
+        // camera without auto exposure or autofocus: the iPhone X front camera has fixed focus.
+        // Both default to on, so only switch back one that another app turned off.
         if #available(iOS 15.4, *) {
-            device.automaticallyAdjustsFaceDrivenAutoExposureEnabled = true
-            device.automaticallyAdjustsFaceDrivenAutoFocusEnabled = true
+            let autoExposure = device.isExposureModeSupported(.autoExpose)
+                || device.isExposureModeSupported(.continuousAutoExposure)
+            if autoExposure, !device.automaticallyAdjustsFaceDrivenAutoExposureEnabled {
+                device.automaticallyAdjustsFaceDrivenAutoExposureEnabled = true
+            }
+            let autoFocus = device.isFocusModeSupported(.autoFocus)
+                || device.isFocusModeSupported(.continuousAutoFocus)
+            if autoFocus, !device.automaticallyAdjustsFaceDrivenAutoFocusEnabled {
+                device.automaticallyAdjustsFaceDrivenAutoFocusEnabled = true
+            }
         }
     }
 
