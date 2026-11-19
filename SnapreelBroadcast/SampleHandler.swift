@@ -6,9 +6,13 @@ import UserNotifications
 /// recorded; it writes the movie into the App Group and leaves it in the inbox for the app.
 ///
 /// How it ends, in every case the movie is finished and moved to the inbox first:
-/// - the person stops from the red status pill or Control Centre (`broadcastFinished`),
+/// - the person stops from the red status pill or Control Centre, or the phone locks
+///   (`broadcastFinished`),
 /// - the app asks it to stop (`BroadcastSignal.stopRequested`),
 /// - the phone is nearly full (stops early and keeps what was recorded).
+/// Except when the app asked (it's in front and ends the card itself), it then ends the Lock
+/// Screen card through the push relay (`LiveActivityPush.sendEnd`), because the app is
+/// usually suspended and can't.
 final class SampleHandler: RPBroadcastSampleHandler {
     /// Must match `PendingImports.broadcastNotificationPrefix` in the app.
     static let notificationPrefix = "broadcast-"
@@ -37,6 +41,8 @@ final class SampleHandler: RPBroadcastSampleHandler {
             let message = "Your iPhone is almost full. Free up some space, then try again."
             writeState(.failed, message: message)
             BroadcastSignal.finished.post()
+            SharedLog.append("broadcast: not started, the phone is almost full")
+            LiveActivityPush.sendEnd(elapsed: 0)
             finishBroadcastWithError(Self.error(.insufficientStorage, message))
             return
         }
@@ -76,7 +82,7 @@ final class SampleHandler: RPBroadcastSampleHandler {
     private func stopRequestedByApp() {
         work.async { [weak self] in
             guard let self else { return }
-            self.finalize(endedEarly: false, note: nil)
+            self.finalize(endedEarly: false, note: nil, endsCardByPush: false)
             self.finishBroadcastWithError(Self.savedMessage)
         }
     }
@@ -112,7 +118,7 @@ final class SampleHandler: RPBroadcastSampleHandler {
 
     /// Finishes the movie, moves it to the inbox with its manifest, updates the shared state,
     /// tells the app and schedules the "ready" notification. Runs once.
-    private func finalize(endedEarly: Bool, note: String?) {
+    private func finalize(endedEarly: Bool, note: String?, endsCardByPush: Bool = true) {
         stateLock.lock()
         if didFinish {
             stateLock.unlock()
@@ -123,6 +129,7 @@ final class SampleHandler: RPBroadcastSampleHandler {
         heartbeat = nil
         stateLock.unlock()
         timer?.cancel()
+        let stoppedAt = Date()
 
         writeState(.finishing)
         let outcome = writer?.finish() ?? .nothingRecorded
@@ -139,6 +146,11 @@ final class SampleHandler: RPBroadcastSampleHandler {
             writeState(.failed, message: "Nothing was recorded. Try again, and keep the recording going for a moment before you stop it.")
         }
         BroadcastSignal.finished.post()
+        let length = stoppedAt.timeIntervalSince(startedAt)
+        SharedLog.append(String(format: "broadcast: finished after %.1f s%@", length, endedEarly ? ", early" : ""))
+        // Last: the app (if it is running) has heard the signal and ends the card itself; this
+        // covers the usual case where it is suspended. Waits up to 6 s for the relay.
+        if endsCardByPush { LiveActivityPush.sendEnd(elapsed: length) }
     }
 
     private func deliver(_ movie: URL, endedEarly: Bool, note: String?, microphone: Bool) {

@@ -59,6 +59,8 @@ struct DeviceDetails {
     let freeSpace: String
     /// How long the last recordings took from Stop to review, step by step (`ReviewTiming`).
     var recentSaves: [String] = []
+    /// What the last Lock Screen end push got back from the relay (`LiveActivityPush`).
+    var lockScreenPush: String? = nil
 
     @MainActor
     static func current() -> DeviceDetails {
@@ -66,12 +68,14 @@ struct DeviceDetails {
                       system: "\(UIDevice.current.systemName) \(UIDevice.current.systemVersion)",
                       app: "Snapreel \(AppInfo.version) (\(AppInfo.build))",
                       freeSpace: "\(Format.bytes(DiskSpace.available)) free",
-                      recentSaves: ReviewTiming.recent)
+                      recentSaves: ReviewTiming.recent,
+                      lockScreenPush: LiveActivityPush.lastOutcome)
     }
 
     /// One line per detail, as they appear in the email.
     var lines: [String] {
-        let device = ["Device: \(model)", "System: \(system)", "App: \(app)", "Storage: \(freeSpace)"]
+        var device = ["Device: \(model)", "System: \(system)", "App: \(app)", "Storage: \(freeSpace)"]
+        if let lockScreenPush { device.append("Lock Screen end: \(lockScreenPush)") }
         return recentSaves.isEmpty ? device : device + ["Recent saves (seconds):"] + recentSaves
     }
 

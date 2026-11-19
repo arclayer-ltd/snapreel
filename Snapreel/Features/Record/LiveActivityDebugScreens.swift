@@ -28,6 +28,9 @@ extension DebugCatalog {
                     (.screen, .recording(clockStart: Date().addingTimeInterval(-1_000))),
                 ], staleCards: [1])
             },
+            DebugScreen("rec.live.push", "Live Activity end push [the JSON the relay gets]") {
+                LiveActivityPushCheck()
+            },
             DebugScreen("rec.live.island", "Live Activity in the Dynamic Island") {
                 LiveActivityIslandMock(kind: .screen,
                                        status: .recording(clockStart: Date().addingTimeInterval(-83)))
@@ -151,6 +154,62 @@ private struct LiveActivityIslandMock: View {
         Text(text)
             .font(.footnote.weight(.semibold))
             .foregroundColor(lockScreenText(colorScheme).opacity(0.7))
+    }
+}
+
+/// The broadcast extension's end push, checked where CI can see it: the content state it
+/// sends (encoded by `LiveActivityPush.StoppedState`, a mirror the extension can compile), that
+/// it decodes into the widget's real `RecordingActivityStatus` as "stopped", and the relay body.
+private struct LiveActivityPushCheck: View {
+    @State private var lines: [String] = []
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: Space.s) {
+                Text("Lock Screen end push").font(.srTitle3).foregroundStyle(Color.srText)
+                ForEach(lines.indices, id: \.self) { index in
+                    Text(lines[index])
+                        .font(.system(.footnote, design: .monospaced))
+                        .foregroundStyle(Color.srTextSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .padding(Space.gutter)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .background(Color.srCanvas.ignoresSafeArea())
+        .onAppear { run() }
+    }
+
+    private func run() {
+        // A fixed moment, so the JSON reads the same in every run: stopped at 0:35.
+        let now = Date(timeIntervalSinceReferenceDate: 785_000_000)
+        let state = LiveActivityPush.StoppedState(elapsed: 35, now: now)
+        var out: [String] = []
+        if let data = try? JSONEncoder().encode(state), let json = String(data: data, encoding: .utf8) {
+            out.append("content state: \(json)")
+            if let decoded = try? JSONDecoder().decode(RecordingActivityStatus.self, from: data) {
+                let matches = decoded.phase == .stopped && abs(decoded.elapsed - 35) < 0.001
+                    && abs(decoded.clockStart.timeIntervalSince(state.clockStart)) < 0.001
+                out.append("decodes as RecordingActivityStatus: \(matches ? "OK, stopped at 0:35" : "FAIL")")
+            } else {
+                out.append("decodes as RecordingActivityStatus: FAIL")
+            }
+            let real = RecordingActivityStatus(phase: .stopped, clockStart: state.clockStart, elapsed: 35)
+            if let encoded = try? JSONEncoder().encode(real), let realJSON = String(data: encoded, encoding: .utf8) {
+                out.append("the widget's own type encodes: \(realJSON)")
+            }
+        } else {
+            out.append("content state: FAIL, couldn't encode")
+        }
+        if let body = try? LiveActivityPush.requestBody(token: "00112233445566778899aabbccddeeff", state: state),
+           let text = String(data: body, encoding: .utf8) {
+            out.append("relay body (sample token): \(text)")
+        }
+        out.append("relay: " + LiveActivityPush.endpoints.map(\.absoluteString).joined(separator: ", then "))
+        out.append("token stored now: \(LiveActivityPush.storedToken == nil ? "no" : "yes")")
+        for line in out { DebugTrace.log("push check: \(line)") }
+        lines = out
     }
 }
 #endif

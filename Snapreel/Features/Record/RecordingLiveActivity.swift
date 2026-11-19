@@ -19,10 +19,11 @@ import UIKit
 ///   Snapreel while the screen records takes a short background grace (`beginBackgroundTask`),
 ///   which covers locking the phone straight away (iOS ends a broadcast when the phone locks,
 ///   build 29). The card then freezes as "Screen recording stopped" until Snapreel opens.
-/// - If Snapreel was already suspended (stopped later from the red pill or Control Centre),
-///   nothing can update the card until Snapreel opens and ends it. As a backstop the running
-///   card carries a stale date (`staleAfter`): past it, iOS redraws it without the clock,
-///   asking to open Snapreel to check.
+/// - If Snapreel was already suspended (stopped later from the red pill or Control Centre), the
+///   broadcast extension ends the card through Snapreel's push relay: the screen card is asked
+///   for with a push token, kept in the App Group for the extension (`LiveActivityPush`). The
+///   grace, a stale date on the running card (`staleAfter`: past it, iOS redraws it without the
+///   clock) and ending leftover cards when Snapreel opens stay as fallbacks.
 /// - Voice recordings keep running in the background; the recorder reports start, pause and
 ///   stop (`voiceChanged`).
 @MainActor
@@ -165,6 +166,7 @@ private enum LiveActivityStore {
                 end(activity)
                 continue
             }
+            LiveActivityPush.clear(activityID: activity.id)
             Task {
                 if #available(iOS 16.2, *) {
                     await activity.end(ActivityContent(state: status, staleDate: nil), dismissalPolicy: .default)
@@ -177,22 +179,54 @@ private enum LiveActivityStore {
 
     static func endAll() {
         for activity in RecordingActivity.activities { end(activity) }
+        LiveActivityPush.clear()
     }
 
+    /// The screen recording's card is asked for with a push token, so the broadcast extension
+    /// can end it through the relay when the recording stops while Snapreel is suspended. Where
+    /// pushes aren't available (the simulator, a build without the entitlement) the request
+    /// fails, and the card is asked for again without one. Voice recordings don't need it:
+    /// Snapreel keeps running while one records.
     private static func request(_ kind: RecordingActivityKind, _ status: RecordingActivityStatus, staleDate: Date?) {
         guard ActivityAuthorizationInfo().areActivitiesEnabled else { return }
         let attributes = RecordingActivityAttributes(kind: kind)
         do {
-            if #available(iOS 16.2, *) {
-                _ = try RecordingActivity.request(attributes: attributes,
-                                                  content: ActivityContent(state: status, staleDate: staleDate),
-                                                  pushType: nil)
-            } else {
-                _ = try RecordingActivity.request(attributes: attributes, contentState: status, pushType: nil)
+            if kind == .screen {
+                do {
+                    let activity = try request(attributes, status, staleDate: staleDate, pushType: .token)
+                    observePushToken(activity)
+                    return
+                } catch {
+                    LiveActivityPush.clear()
+                }
             }
+            _ = try request(attributes, status, staleDate: staleDate, pushType: nil)
         } catch {
             // Snapreel isn't in front (the broadcast started from Control Centre while it was in
             // the background), or the system said no. The next `sync` in front tries again.
+        }
+    }
+
+    private static func request(_ attributes: RecordingActivityAttributes, _ status: RecordingActivityStatus,
+                                staleDate: Date?, pushType: PushType?) throws -> RecordingActivity {
+        if #available(iOS 16.2, *) {
+            return try RecordingActivity.request(attributes: attributes,
+                                                 content: ActivityContent(state: status, staleDate: staleDate),
+                                                 pushType: pushType)
+        } else {
+            return try RecordingActivity.request(attributes: attributes, contentState: status, pushType: pushType)
+        }
+    }
+
+    /// Keeps the card's push token (hex) in the App Group for the broadcast extension; iOS may
+    /// change it while the card lives. It is forgotten when the card ends.
+    private static func observePushToken(_ activity: RecordingActivity) {
+        let id = activity.id
+        Task {
+            for await token in activity.pushTokenUpdates {
+                if activity.activityState == .ended || activity.activityState == .dismissed { break }
+                LiveActivityPush.store(token: token, activityID: id)
+            }
         }
     }
 
@@ -207,6 +241,7 @@ private enum LiveActivityStore {
     }
 
     private static func end(_ activity: RecordingActivity) {
+        LiveActivityPush.clear(activityID: activity.id)
         Task {
             if #available(iOS 16.2, *) {
                 await activity.end(nil, dismissalPolicy: .immediate)
