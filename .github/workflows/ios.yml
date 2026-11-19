@@ -144,6 +144,7 @@ jobs:
               mkdir -p "$DIR"
               cp "$RUNNER_TEMP/profile.mobileprovision" "$DIR/$UUID.mobileprovision"
             done
+            echo "$UUID" >> "$RUNNER_TEMP/installed-profiles.txt"
           done
           echo "$ASC_KEY_P8_BASE64" | base64 --decode > "$RUNNER_TEMP/AuthKey_$ASC_KEY_ID.p8"
           echo "KEYCHAIN=$KEYCHAIN" >> "$GITHUB_ENV"
@@ -210,7 +211,15 @@ jobs:
         if: always()
         run: |
           [ -n "${KEYCHAIN:-}" ] && security delete-keychain "$KEYCHAIN" || true
-          rm -f "$RUNNER_TEMP"/AuthKey_*.p8 "$RUNNER_TEMP"/profile.*
+          # The three installed profiles (app, broadcast, Live Activity), not only their temp copies.
+          if [ -f "$RUNNER_TEMP/installed-profiles.txt" ]; then
+            while read -r UUID; do
+              [ -n "$UUID" ] || continue
+              rm -f "$HOME/Library/MobileDevice/Provisioning Profiles/$UUID.mobileprovision"
+              rm -f "$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles/$UUID.mobileprovision"
+            done < "$RUNNER_TEMP/installed-profiles.txt"
+          fi
+          rm -f "$RUNNER_TEMP"/AuthKey_*.p8 "$RUNNER_TEMP"/profile.* "$RUNNER_TEMP/installed-profiles.txt"
 
       - uses: actions/upload-artifact@v4
         if: always()
