@@ -69,7 +69,7 @@ struct RecorderCameraStage: View {
                 Spacer().frame(height: 64)
                 if model.speakerNotesVisible {
                     SpeakerNotesOverlay(text: settings.speakerNotes,
-                                        isRunning: model.stage == .recording)
+                                        isRunning: model.stage == .recording, overPicture: true)
                         .padding(.horizontal, Space.s)
                 }
                 Spacer()
@@ -122,7 +122,7 @@ struct RecorderAudioStage: View {
 
     var body: some View {
         ZStack {
-            LinearGradient(colors: [Color.srInkRaised, Color.srInk], startPoint: .top, endPoint: .bottom)
+            LinearGradient(colors: [Color.srStageRaised, Color.srStage], startPoint: .top, endPoint: .bottom)
             if model.primer != .none {
                 RecorderPermissionPrimer()
             } else {
@@ -135,7 +135,8 @@ struct RecorderAudioStage: View {
         VStack(spacing: Space.l) {
             Spacer().frame(height: 64)
             if model.speakerNotesVisible {
-                SpeakerNotesOverlay(text: settings.speakerNotes, isRunning: model.stage == .recording)
+                SpeakerNotesOverlay(text: settings.speakerNotes, isRunning: model.stage == .recording,
+                                    overPicture: false)
                     .padding(.horizontal, Space.s)
             }
             Spacer(minLength: 0)
@@ -143,11 +144,11 @@ struct RecorderAudioStage: View {
                 Text(Format.clock(model.elapsed))
                     .font(.system(size: 64, weight: .semibold, design: .rounded))
                     .monospacedDigit()
-                    .foregroundStyle(.white)
+                    .foregroundStyle(Color.srStageText)
                     .accessibilityLabel("Recording time \(Format.clock(model.elapsed))")
                 Text(caption)
                     .font(.srSubheadline)
-                    .foregroundStyle(Color.srOnDarkSecondary)
+                    .foregroundStyle(Color.srStageTextSecondary)
                     .multilineTextAlignment(.center)
             }
             RecorderWaveformView(meter: model.meter, isActive: model.stage == .recording)
@@ -156,12 +157,12 @@ struct RecorderAudioStage: View {
             if case .countdown(let remaining) = model.stage {
                 Text("Starting in \(remaining)…")
                     .font(.srHeadline)
-                    .foregroundStyle(Color.srRedGlow)
+                    .foregroundStyle(Color.srStageRed)
             }
             Spacer(minLength: 0)
             Label("Stays on this iPhone", systemImage: "lock.fill")
                 .font(.srFootnote)
-                .foregroundStyle(Color.srOnDarkTertiary)
+                .foregroundStyle(Color.srStageTextTertiary)
                 .padding(.bottom, Space.l)
         }
     }
@@ -189,10 +190,10 @@ struct RecorderPermissionPrimer: View {
             VStack(spacing: Space.s) {
                 Text(title)
                     .font(.srTitle)
-                    .foregroundStyle(.white)
+                    .foregroundStyle(Color.srStageText)
                 Text(message)
                     .font(.srCallout)
-                    .foregroundStyle(Color.srOnDarkSecondary)
+                    .foregroundStyle(Color.srStageTextSecondary)
             }
             .multilineTextAlignment(.center)
             .fixedSize(horizontal: false, vertical: true)
@@ -216,7 +217,7 @@ struct RecorderPermissionPrimer: View {
             .padding(.bottom, Space.xl)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color.srInkRaised)
+        .background(Color.srStageRaised)
     }
 
     private var icons: some View {
@@ -234,8 +235,8 @@ struct RecorderPermissionPrimer: View {
             .font(.system(size: 26, weight: .semibold))
             .foregroundStyle(Color.srRed)
             .frame(width: 72, height: 72)
-            .background(Circle().fill(Color.srInkControl))
-            .overlay(Circle().strokeBorder(Color.srInkRaised, lineWidth: 4))
+            .background(Circle().fill(Color.srStageControl))
+            .overlay(Circle().strokeBorder(Color.srStageRaised, lineWidth: 4))
     }
 
     private var title: String {
@@ -264,10 +265,12 @@ struct RecorderPermissionPrimer: View {
 // MARK: - Speaker notes overlay
 
 /// Your notes over the preview, scrolling slowly while you record. Drag to move through them.
-/// Drawn over the preview only, so they are never in the video.
+/// Drawn over the preview only, so they are never in the video. Over the camera they sit on a
+/// dark scrim; on the voice recorder they're a card that follows the appearance.
 struct SpeakerNotesOverlay: View {
     let text: String
     let isRunning: Bool
+    let overPicture: Bool
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var offset: CGFloat = 0
@@ -279,11 +282,12 @@ struct SpeakerNotesOverlay: View {
         VStack(alignment: .leading, spacing: Space.xxs) {
             Label("Speaker notes", systemImage: "text.alignleft")
                 .font(.srCaption)
-                .foregroundStyle(Color.srOnDarkSecondary)
+                .foregroundStyle(overPicture ? Color.srOnDarkSecondary : Color.srStageTextSecondary)
             notes
         }
         .padding(Space.s)
-        .background(RoundedRectangle(cornerRadius: Radius.l, style: .continuous).fill(Color.black.opacity(0.55)))
+        .background(RoundedRectangle(cornerRadius: Radius.l, style: .continuous)
+            .fill(overPicture ? Color.black.opacity(0.55) : Color.srStageControl))
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Speaker notes")
         .accessibilityValue(text)
@@ -294,7 +298,7 @@ struct SpeakerNotesOverlay: View {
     private var notes: some View {
         Text(text)
             .font(.system(.title3, design: .default, weight: .semibold))
-            .foregroundStyle(.white)
+            .foregroundStyle(overPicture ? Color.white : Color.srStageText)
             .lineSpacing(4)
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)

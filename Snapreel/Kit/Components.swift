@@ -12,7 +12,10 @@ struct EmptyStateView: View {
     let message: String
     var actionTitle: String? = nil
     var action: (() -> Void)? = nil
+    /// On the dark camera picture (fixed dark).
     var onDark = false
+    /// On the recorder or the player, around the picture (follows the appearance).
+    var onStage = false
 
     var body: some View {
         VStack(spacing: Space.m) {
@@ -22,7 +25,7 @@ struct EmptyStateView: View {
                     .padding(.bottom, Space.xs)
             } else if let systemImage {
                 ZStack {
-                    Circle().fill(onDark ? Color.srInkControl : Color.srRedSoft)
+                    Circle().fill(onDark ? Color.srInkControl : onStage ? Color.srStageControl : Color.srRedSoft)
                     Image(systemName: systemImage)
                         .font(.system(size: 26, weight: .semibold))
                         .foregroundStyle(Color.srRed)
@@ -33,10 +36,11 @@ struct EmptyStateView: View {
             VStack(spacing: Space.xs) {
                 Text(title)
                     .font(.srTitle3)
-                    .foregroundStyle(onDark ? Color.srOnDark : Color.srText)
+                    .foregroundStyle(onDark ? Color.srOnDark : onStage ? Color.srStageText : Color.srText)
                 Text(message)
                     .font(.srSubheadline)
-                    .foregroundStyle(onDark ? Color.srOnDarkSecondary : Color.srTextSecondary)
+                    .foregroundStyle(onDark ? Color.srOnDarkSecondary
+                                     : onStage ? Color.srStageTextSecondary : Color.srTextSecondary)
             }
             .multilineTextAlignment(.center)
             .fixedSize(horizontal: false, vertical: true)
@@ -172,13 +176,14 @@ struct UnderlineTabs<Tab: Hashable>: View {
     }
 }
 
-/// Capsule switch for two to three options on dark surfaces ("Notes | Transcript",
-/// "Camera | Screen | Audio").
+/// Capsule switch for two to three options on the recorder and the player ("Notes | Transcript",
+/// "Camera | Screen | Audio"). `onStage` uses the stage colours (ink in Dark mode), otherwise
+/// the app's adaptive ones.
 struct PillSwitch<Option: Hashable>: View {
     let options: [Option]
     @Binding var selection: Option
     let title: (Option) -> String
-    var onDark = true
+    var onStage = true
     @Namespace private var pill
 
     var body: some View {
@@ -191,13 +196,13 @@ struct PillSwitch<Option: Hashable>: View {
                 } label: {
                     Text(title(option))
                         .font(.srSubheadlineStrong)
-                        .foregroundStyle(selected ? (onDark ? Color.srInk : Color.srOnInverse)
-                                                  : (onDark ? Color.srOnDarkSecondary : Color.srTextSecondary))
+                        .foregroundStyle(selected ? (onStage ? Color.srStage : Color.srOnInverse)
+                                                  : (onStage ? Color.srStageTextSecondary : Color.srTextSecondary))
                         .padding(.horizontal, Space.m)
                         .frame(height: 34)
                         .background {
                             if selected {
-                                Capsule().fill(onDark ? Color.white : Color.srInverse)
+                                Capsule().fill(onStage ? Color.srStageText : Color.srInverse)
                                     .matchedGeometryEffect(id: "pill", in: pill)
                             }
                         }
@@ -208,7 +213,7 @@ struct PillSwitch<Option: Hashable>: View {
             }
         }
         .padding(3)
-        .background(Capsule().fill(onDark ? Color.srInkControl : Color.srFill))
+        .background(Capsule().fill(onStage ? Color.srStageControl : Color.srFill))
     }
 }
 
@@ -271,20 +276,21 @@ struct SheetHeader: View {
     var trailingTitle: String? = nil
     var trailingEnabled = true
     var trailingAction: (() -> Void)? = nil
-    var onDark = false
+    /// On a recorder or player sheet (stage colours).
+    var onStage = false
 
     var body: some View {
         ZStack {
             Text(title)
                 .font(.srHeadline)
-                .foregroundStyle(onDark ? Color.srOnDark : Color.srText)
+                .foregroundStyle(onStage ? Color.srStageText : Color.srText)
                 .lineLimit(1)
                 .padding(.horizontal, 72)
             HStack {
                 if let leadingTitle, let leadingAction {
                     Button(leadingTitle, action: leadingAction)
                         .font(.srBody)
-                        .foregroundStyle(onDark ? Color.srOnDarkSecondary : Color.srTextSecondary)
+                        .foregroundStyle(onStage ? Color.srStageTextSecondary : Color.srTextSecondary)
                 }
                 Spacer()
                 if let trailingTitle, let trailingAction {

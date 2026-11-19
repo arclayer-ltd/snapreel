@@ -2,8 +2,9 @@ import SwiftUI
 import UIKit
 
 /// Applies Settings > Appearance to the app's windows. "Match iPhone" leaves the style
-/// unspecified so the system setting shows through; Light and Dark override it. Screens that
-/// are always dark (recorder, player) set their own style on their presentation, so they win.
+/// unspecified so the system setting shows through; Light and Dark override it. Every screen
+/// follows it, the recorder and the player included: none sets its own style. Only the picture
+/// itself (live camera, video, full-screen playback) is drawn dark, with fixed ink colours.
 @MainActor
 enum AppearanceController {
     static func apply(_ mode: AppearanceMode) {

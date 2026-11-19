@@ -1,9 +1,10 @@
 import SwiftUI
 import UIKit
 
-/// Full-screen dark player, presented by the shell while `router.player` is set and not
+/// Full-screen player, presented by the shell while `router.player` is set and not
 /// minimised. Video with its controls at the top; date, title and details below; the Notes /
-/// Transcript switch; reactions and the add-note button docked at the bottom. Playback lives in
+/// Transcript switch; reactions and the add-note button docked at the bottom. It follows the
+/// appearance; only the video area and full-screen playback stay dark. Playback lives in
 /// `PlaybackSession.shared`, so it carries on when the player is minimised.
 struct PlayerScreen: View {
     let presentation: PlayerPresentation
@@ -73,7 +74,7 @@ struct PlayerScreen: View {
 
     var body: some View {
         ZStack {
-            Color.srInk.ignoresSafeArea()
+            Color.srStage.ignoresSafeArea()
             if let video = currentVideo {
                 if isFullscreen {
                     fullscreenLayout(video)
@@ -87,7 +88,6 @@ struct PlayerScreen: View {
             }
         }
         .offset(y: swipeOffset)
-        .preferredColorScheme(.dark)
         .statusBar(hidden: isFullscreen)
         .toast($toast, bottomInset: 120)
         .sheet(item: $sheet, onDismiss: { runFollowUp() }) { item in
@@ -95,7 +95,6 @@ struct PlayerScreen: View {
                 .environmentObject(library)
                 .environmentObject(settings)
                 .environmentObject(router)
-                .preferredColorScheme(.dark)
                 .presentationDragIndicator(.visible)
         }
         .shareVideo($shareTarget)
@@ -128,7 +127,9 @@ struct PlayerScreen: View {
                 videoArea(video, fullscreen: false, insets: EdgeInsets())
                     .frame(height: PlayerLayout.videoHeight(for: video, width: proxy.size.width,
                                                             available: proxy.size.height))
-                    .background(Color.srInkDeep.ignoresSafeArea(edges: .top))
+                    // The band behind the status bar is the page's, so the clock reads in both
+                    // appearances; the video area itself stays dark.
+                    .background(Color.srInkDeep)
                     .simultaneousGesture(swipeToMinimise)
                     // Normally under the details, which are drawn later and so win the touch:
                     // build 25's constant zIndex(1) let the portrait poster's overflow take their
@@ -269,7 +270,7 @@ struct PlayerScreen: View {
                 } label: {
                     Label("Add note", systemImage: "plus")
                         .font(.srSubheadlineStrong)
-                        .foregroundStyle(Color.srRedGlow)
+                        .foregroundStyle(Color.srStageRed)
                 }
                 .buttonStyle(.plain)
             }
@@ -366,7 +367,7 @@ struct PlayerScreen: View {
             }
         case .title:
             if let video = currentVideo {
-                TitleEditorSheet(initialTitle: video.title, heading: "Edit title", onDark: true,
+                TitleEditorSheet(initialTitle: video.title, heading: "Edit title", onStage: true,
                                  onSave: { saveTitle($0) },
                                  onCancel: { sheet = nil })
                     .presentationDetents([.height(220)])
@@ -681,7 +682,7 @@ struct PlayerMissingView: View {
     var body: some View {
         VStack {
             HStack {
-                CircleIconButton(systemName: "chevron.down", label: "Close player", tone: .dark) { onClose() }
+                CircleIconButton(systemName: "chevron.down", label: "Close player", tone: .stage) { onClose() }
                 Spacer()
             }
             .padding(.horizontal, Space.gutter)
@@ -690,7 +691,7 @@ struct PlayerMissingView: View {
             EmptyStateView(systemImage: "film",
                            title: "This recording isn't here any more",
                            message: "It may have been deleted from your library.",
-                           onDark: true)
+                           onStage: true)
             Spacer()
         }
     }

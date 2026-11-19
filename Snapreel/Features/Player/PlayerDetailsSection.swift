@@ -40,21 +40,21 @@ struct PlayerDetailsSection: View {
             Image(systemName: video.kind.systemImage)
         }
         .font(.srFootnote)
-        .foregroundStyle(Color.srOnDarkSecondary)
+        .foregroundStyle(Color.srStageTextSecondary)
     }
 
     private var titleRow: some View {
         HStack(alignment: .top, spacing: Space.xs) {
             Text(video.title)
                 .font(.srTitle3)
-                .foregroundStyle(Color.srOnDark)
+                .foregroundStyle(Color.srStageText)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .accessibilityAddTraits(.isHeader)
-            CircleIconButton(systemName: "square.and.arrow.up", label: "Share", tone: .dark, size: 36) {
+            CircleIconButton(systemName: "square.and.arrow.up", label: "Share", tone: .stage, size: 36) {
                 onShare()
             }
-            CircleIconButton(systemName: "ellipsis", label: "More actions", tone: .dark, size: 36) {
+            CircleIconButton(systemName: "ellipsis", label: "More actions", tone: .stage, size: 36) {
                 onMore()
             }
         }
@@ -81,7 +81,7 @@ struct PlayerDetailsSection: View {
         } label: {
             Label("Give it a title so it's easy to find", systemImage: "character.cursor.ibeam")
                 .font(.srSubheadlineStrong)
-                .foregroundStyle(Color.srRedGlow)
+                .foregroundStyle(Color.srStageRed)
         }
         .buttonStyle(.plain)
     }
@@ -90,7 +90,7 @@ struct PlayerDetailsSection: View {
         HStack(spacing: Space.s) {
             Text(summaryLine)
                 .font(.srSubheadline)
-                .foregroundStyle(Color.srOnDarkSecondary)
+                .foregroundStyle(Color.srStageTextSecondary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.85)
             Spacer(minLength: Space.xs)
@@ -105,7 +105,7 @@ struct PlayerDetailsSection: View {
                         .rotationEffect(.degrees(isExpanded ? 180 : 0))
                 }
                 .font(.srSubheadlineStrong)
-                .foregroundStyle(Color.srRedGlow)
+                .foregroundStyle(Color.srStageRed)
                 .padding(.vertical, Space.xxs)
                 .contentShape(Rectangle())
             }
@@ -134,18 +134,18 @@ struct PlayerDetailsSection: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(PlayerStatsText.plays(video.playCount))
                         .font(.srSubheadlineStrong)
-                        .foregroundStyle(Color.srOnDark)
+                        .foregroundStyle(Color.srStageText)
                     Text(progressLine)
                         .font(.srFootnote)
-                        .foregroundStyle(Color.srOnDarkSecondary)
+                        .foregroundStyle(Color.srStageTextSecondary)
                 }
                 Spacer(minLength: Space.xs)
                 Image(systemName: "chevron.right")
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(Color.srOnDarkTertiary)
+                    .foregroundStyle(Color.srStageTextTertiary)
             }
             .padding(Space.s)
-            .background(RoundedRectangle(cornerRadius: Radius.m, style: .continuous).fill(Color.srInkRaised))
+            .background(RoundedRectangle(cornerRadius: Radius.m, style: .continuous).fill(Color.srStageRaised))
             .contentShape(Rectangle())
         }
         .buttonStyle(PressScaleStyle(scale: 0.98))
@@ -206,7 +206,7 @@ struct PlayerFactsCard: View {
                 tagsRow
             }
             .padding(.horizontal, Space.m)
-            .background(RoundedRectangle(cornerRadius: Radius.l, style: .continuous).fill(Color.srInkRaised))
+            .background(RoundedRectangle(cornerRadius: Radius.l, style: .continuous).fill(Color.srStageRaised))
         }
     }
 
@@ -223,21 +223,21 @@ struct PlayerFactsCard: View {
         VStack(alignment: .leading, spacing: Space.xs) {
             Text("Tags")
                 .font(.srSubheadline)
-                .foregroundStyle(Color.srOnDarkSecondary)
+                .foregroundStyle(Color.srStageTextSecondary)
             if video.tags.isEmpty {
                 Text("No tags yet. Add them from the recording in your Library.")
                     .font(.srFootnote)
-                    .foregroundStyle(Color.srOnDarkTertiary)
+                    .foregroundStyle(Color.srStageTextTertiary)
             } else {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: Space.xs) {
                         ForEach(video.tags, id: \.self) { tag in
                             Text("#\(tag)")
                                 .font(.srCaption)
-                                .foregroundStyle(Color.srOnDark)
+                                .foregroundStyle(Color.srStageText)
                                 .padding(.horizontal, 10)
                                 .padding(.vertical, 6)
-                                .background(Capsule().fill(Color.srInkControl))
+                                .background(Capsule().fill(Color.srStageControl))
                         }
                     }
                 }
@@ -256,16 +256,16 @@ private struct FactRow: View {
     var body: some View {
         HStack(alignment: .firstTextBaseline) {
             Text(title)
-                .foregroundStyle(Color.srOnDarkSecondary)
+                .foregroundStyle(Color.srStageTextSecondary)
             Spacer(minLength: Space.s)
             Text(value)
-                .foregroundStyle(Color.srOnDark)
+                .foregroundStyle(Color.srStageText)
                 .multilineTextAlignment(.trailing)
         }
         .font(.srSubheadline)
         .padding(.vertical, Space.s)
         .overlay(alignment: .bottom) {
-            Rectangle().fill(Color.srInkLine).frame(height: 0.5)
+            Rectangle().fill(Color.srStageLine).frame(height: 0.5)
         }
         .accessibilityElement(children: .combine)
     }
@@ -279,18 +279,18 @@ struct PlayerSummaryBlock: View {
         VStack(alignment: .leading, spacing: Space.xs) {
             Label("Summary", systemImage: "sparkles")
                 .font(.srSubheadlineStrong)
-                .foregroundStyle(Color.srOnDark)
+                .foregroundStyle(Color.srStageText)
             Text(text)
                 .font(.srCallout)
-                .foregroundStyle(Color.srOnDarkSecondary)
+                .foregroundStyle(Color.srStageTextSecondary)
                 .fixedSize(horizontal: false, vertical: true)
             Text("Written on this iPhone from the transcript")
                 .font(.srCaption)
-                .foregroundStyle(Color.srOnDarkTertiary)
+                .foregroundStyle(Color.srStageTextTertiary)
         }
         .padding(Space.m)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: Radius.l, style: .continuous).fill(Color.srInkRaised))
+        .background(RoundedRectangle(cornerRadius: Radius.l, style: .continuous).fill(Color.srStageRaised))
         .accessibilityElement(children: .combine)
     }
 }
@@ -300,14 +300,14 @@ private struct PlayerSummaryPending: View {
     var body: some View {
         HStack(spacing: Space.s) {
             ProgressView()
-                .tint(Color.srOnDarkSecondary)
+                .tint(Color.srStageTextSecondary)
             Text("Writing a summary on this iPhone…")
                 .font(.srSubheadline)
-                .foregroundStyle(Color.srOnDarkSecondary)
+                .foregroundStyle(Color.srStageTextSecondary)
         }
         .padding(Space.m)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: Radius.l, style: .continuous).fill(Color.srInkRaised))
+        .background(RoundedRectangle(cornerRadius: Radius.l, style: .continuous).fill(Color.srStageRaised))
         .accessibilityElement(children: .combine)
     }
 }
@@ -327,18 +327,18 @@ private struct QuickActionChip: View {
             VStack(spacing: 5) {
                 Image(systemName: systemImage)
                     .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(isOn ? Color.srRedGlow : Color.srOnDark)
+                    .foregroundStyle(isOn ? Color.srStageRed : Color.srStageText)
                 Text(title)
                     .font(.srFootnote.weight(.semibold))
                     .lineLimit(1)
                     .minimumScaleFactor(0.75)
             }
-            .foregroundStyle(Color.srOnDark)
+            .foregroundStyle(Color.srStageText)
             .padding(.horizontal, 6)
             .frame(maxWidth: .infinity, minHeight: 58)
-            .background(RoundedRectangle(cornerRadius: Radius.m, style: .continuous).fill(Color.white.opacity(0.09)))
+            .background(RoundedRectangle(cornerRadius: Radius.m, style: .continuous).fill(Color.srStageText.opacity(0.09)))
             .overlay(RoundedRectangle(cornerRadius: Radius.m, style: .continuous)
-                .strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
+                .strokeBorder(Color.srStageText.opacity(0.08), lineWidth: 1))
             .contentShape(RoundedRectangle(cornerRadius: Radius.m, style: .continuous))
         }
         .buttonStyle(PressScaleStyle(scale: 0.95))

@@ -71,14 +71,14 @@ struct TranscriptPanel: View {
                 Image(systemName: "lock.fill")
             }
             .font(.srCaption)
-            .foregroundStyle(Color.srOnDarkTertiary)
+            .foregroundStyle(Color.srStageTextTertiary)
             Spacer(minLength: Space.xs)
             Button {
                 onCopy()
             } label: {
                 Label("Copy", systemImage: "doc.on.doc")
                     .font(.srSubheadlineStrong)
-                    .foregroundStyle(Color.srRedGlow)
+                    .foregroundStyle(Color.srStageRed)
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Copy transcript")
@@ -90,15 +90,15 @@ struct TranscriptPanel: View {
     private var working: some View {
         VStack(spacing: Space.s) {
             ProgressView()
-                .tint(Color.srOnDark)
+                .tint(Color.srStageText)
                 .scaleEffect(1.2)
                 .frame(height: 44)
             Text("Transcribing on this iPhone")
                 .font(.srTitle3)
-                .foregroundStyle(Color.srOnDark)
+                .foregroundStyle(Color.srStageText)
             Text("Keep watching if you like. It takes a minute or two, and we'll let you know when it's ready.")
                 .font(.srSubheadline)
-                .foregroundStyle(Color.srOnDarkSecondary)
+                .foregroundStyle(Color.srStageTextSecondary)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
             if service.activeVideoID == video.id && service.progress > 0 {
@@ -145,7 +145,7 @@ struct TranscriptPanel: View {
     private func message(systemImage: String, title: String, text: String,
                          actionTitle: String, action: @escaping @MainActor () -> Void) -> some View {
         EmptyStateView(systemImage: systemImage, title: title, message: text,
-                       actionTitle: actionTitle, action: { action() }, onDark: true)
+                       actionTitle: actionTitle, action: { action() }, onStage: true)
             .padding(.vertical, Space.l)
     }
 
@@ -185,11 +185,11 @@ private struct TranscriptLineRow: View {
             HStack(alignment: .firstTextBaseline, spacing: Space.s) {
                 Text(Format.stamp(segment.start))
                     .font(.srTimerSmall)
-                    .foregroundStyle(isCurrent ? Color.srRedGlow : Color.srOnDarkTertiary)
+                    .foregroundStyle(isCurrent ? Color.srStageRed : Color.srStageTextTertiary)
                     .frame(width: 44, alignment: .leading)
                 Text(segment.text)
                     .font(.srBody)
-                    .foregroundStyle(isCurrent ? Color.srOnDark : Color.srOnDarkSecondary)
+                    .foregroundStyle(isCurrent ? Color.srStageText : Color.srStageTextSecondary)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -197,7 +197,7 @@ private struct TranscriptLineRow: View {
             .padding(.horizontal, Space.s)
             .background(
                 RoundedRectangle(cornerRadius: Radius.s, style: .continuous)
-                    .fill(isCurrent ? Color.white.opacity(0.08) : Color.clear)
+                    .fill(isCurrent ? Color.srStageText.opacity(0.08) : Color.clear)
             )
             .overlay(alignment: .leading) {
                 if isCurrent {

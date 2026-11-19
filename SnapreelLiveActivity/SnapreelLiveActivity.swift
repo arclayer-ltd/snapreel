@@ -16,9 +16,7 @@ struct SnapreelLiveActivityBundle: WidgetBundle {
 struct RecordingLiveActivityWidget: Widget {
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: RecordingActivityAttributes.self) { context in
-            RecordingActivityLockScreenView(kind: context.attributes.kind, status: context.state)
-                .activityBackgroundTint(RecordingActivityStyle.ink)
-                .activitySystemActionForegroundColor(.white)
+            RecordingActivityLockScreen(kind: context.attributes.kind, status: context.state)
                 .widgetURL(RecordingActivityStyle.url)
         } dynamicIsland: { context in
             DynamicIsland {
@@ -44,5 +42,19 @@ struct RecordingLiveActivityWidget: Widget {
             .widgetURL(RecordingActivityStyle.url)
             .keylineTint(RecordingActivityStyle.red)
         }
+    }
+}
+
+/// The Lock Screen card with a background that matches the appearance (the Lock Screen and its
+/// notifications are light in Light mode and dark in Dark mode).
+private struct RecordingActivityLockScreen: View {
+    let kind: RecordingActivityKind
+    let status: RecordingActivityStatus
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        RecordingActivityLockScreenView(kind: kind, status: status)
+            .activityBackgroundTint(RecordingActivityStyle.background(colorScheme))
+            .activitySystemActionForegroundColor(RecordingActivityStyle.primaryText(colorScheme))
     }
 }

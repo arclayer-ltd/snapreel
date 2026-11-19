@@ -6,12 +6,16 @@ import UIKit
 // Sampled from the app icon (art/icon-1024.png): a record-red ring and dot on near-black.
 // Red is the only accent: primary actions, recording state, selection and the unread dot.
 //
-// Two kinds of colour:
-// - Fixed ink colours (`srInk…`, `srOnDark…`) for the recorder, the player and the splash,
-//   which stay dark in both appearances, like the Camera app and a video player.
-// - Adaptive colours (`srCanvas`, `srSurface`, `srText`…) for everything else. They're light
-//   in Light mode and switch to the ink family in Dark mode, following the iPhone's setting
-//   or Settings > Appearance (`AppearanceMode`).
+// Three kinds of colour:
+// - Adaptive colours (`srCanvas`, `srSurface`, `srText`…) for the tabs, lists, settings and
+//   onboarding. They're light in Light mode and switch to the ink family in Dark mode,
+//   following the iPhone's setting or Settings > Appearance (`AppearanceMode`).
+// - Adaptive stage colours (`srStage…`) for the recorder, the player and their sheets. In
+//   Dark mode they are exactly the ink family, so those screens look as they always did; in
+//   Light mode they are white and light greys with ink text.
+// - Fixed ink colours (`srInk…`, `srOnDark…`) only for what is drawn on the picture itself:
+//   the live camera, the video, full-screen playback, and controls over them with a scrim.
+//   The splash stays ink too.
 
 extension Color {
     init(hex: UInt32, opacity: Double = 1) {
@@ -26,6 +30,13 @@ extension Color {
     init(light: UInt32, dark: UInt32) {
         self.init(UIColor { traits in
             UIColor(hex: traits.userInterfaceStyle == .dark ? dark : light)
+        })
+    }
+
+    /// Same, for colours with transparency.
+    init(lightColor: UIColor, darkColor: UIColor) {
+        self.init(UIColor { traits in
+            traits.userInterfaceStyle == .dark ? darkColor : lightColor
         })
     }
 }
@@ -52,22 +63,58 @@ extension ShapeStyle where Self == Color {
     /// Red text and destructive labels on adaptive surfaces. Light: #D32434. Dark: #FF6E72.
     static var srRedText: Color { Color(light: 0xD32434, dark: 0xFF6E72) }
 
-    // Dark surfaces (icon background)
-    /// #13141B, the icon background. Recorder, player, splash.
+    // Dark surfaces (icon background). Fixed: the picture and what sits on it, and the splash.
+    /// #13141B, the icon background. The splash; the ink the stage uses in Dark mode.
     static var srInk: Color { Color(hex: 0x13141B) }
-    /// #07080C, the icon's darkest corner. Behind video.
+    /// #07080C, the icon's darkest corner. Behind the video and the live camera.
     static var srInkDeep: Color { Color(hex: 0x07080C) }
-    /// #1C1E27, raised cards and sheets on dark.
+    /// #1C1E27, raised cards on dark.
     static var srInkRaised: Color { Color(hex: 0x1C1E27) }
     /// #2A2C37, controls and fields on dark.
     static var srInkControl: Color { Color(hex: 0x2A2C37) }
     /// Hairlines on dark.
     static var srInkLine: Color { Color.white.opacity(0.09) }
 
-    // Text on dark
+    // Text on dark (on the picture, under a scrim)
     static var srOnDark: Color { Color.white }
     static var srOnDarkSecondary: Color { Color.white.opacity(0.72) }
     static var srOnDarkTertiary: Color { Color.white.opacity(0.42) }
+
+    // Stage: the recorder, the player and their sheets, around the picture. Each Dark value is
+    // the ink colour those screens used before they followed the appearance.
+    /// Page behind the recorder and the player. Light: white. Dark: #13141B (ink).
+    static var srStage: Color { Color(light: 0xFFFFFF, dark: 0x13141B) }
+    /// Cards, sheets and the recorder's stage panel. Light: #F4F4F6. Dark: #1C1E27 (ink raised).
+    static var srStageRaised: Color { Color(light: 0xF4F4F6, dark: 0x1C1E27) }
+    /// Round buttons, chips, rows and fields. Light: #E8E9EE. Dark: #2A2C37 (ink control).
+    static var srStageControl: Color { Color(light: 0xE8E9EE, dark: 0x2A2C37) }
+    /// Grouped rows on a stage sheet or panel (recording settings). Light: white.
+    /// Dark: ink control at 55%.
+    static var srStageGroup: Color {
+        Color(lightColor: .white, darkColor: UIColor(hex: 0x2A2C37, alpha: 0.55))
+    }
+    /// Where the picture would be when there is none (picture in picture, saving, can't play).
+    /// Light: #ECECF0. Dark: #07080C (ink deep).
+    static var srStageDeep: Color { Color(light: 0xECECF0, dark: 0x07080C) }
+    /// Hairlines. Light: ink at 10%. Dark: white at 9%.
+    static var srStageLine: Color {
+        Color(lightColor: UIColor(hex: 0x13141B, alpha: 0.1), darkColor: UIColor(white: 1, alpha: 0.09))
+    }
+    /// Primary text and icons. Light: #13141B. Dark: white.
+    static var srStageText: Color { Color(light: 0x13141B, dark: 0xFFFFFF) }
+    /// Light: #5B5E6B. Dark: white at 72%.
+    static var srStageTextSecondary: Color {
+        Color(lightColor: UIColor(hex: 0x5B5E6B), darkColor: UIColor(white: 1, alpha: 0.72))
+    }
+    /// Light: #8F929D. Dark: white at 42%.
+    static var srStageTextTertiary: Color {
+        Color(lightColor: UIColor(hex: 0x8F929D), darkColor: UIColor(white: 1, alpha: 0.42))
+    }
+    /// Red icons and red text on the stage. Light: #D32434 (red deep, readable on white).
+    /// Dark: #FE6262 (red glow).
+    static var srStageRed: Color { Color(light: 0xD32434, dark: 0xFE6262) }
+    /// The ring of the big record button. Light: #CFD0D6. Dark: #E7E7E8 (white at 90% on ink).
+    static var srRecordRing: Color { Color(light: 0xCFD0D6, dark: 0xE7E7E8) }
 
     // Adaptive surfaces (tabs, lists, settings, sheets, onboarding)
     /// Grouped background behind lists and settings. Light: #F4F4F6. Dark: #0E0F14.

@@ -28,16 +28,28 @@ extension DebugCatalog {
 }
 
 /// A stand-in wallpaper: the Live Activity is drawn by iOS over whatever the person chose.
+/// Like Apple's own wallpapers it has a light and a dark version, so the screenshots show
+/// which appearance the card is in.
 private struct LiveActivityWallpaper: View {
+    @Environment(\.colorScheme) private var colorScheme
+
     var body: some View {
-        LinearGradient(colors: [Color(hex: 0x3B2F63), Color(hex: 0x1B2A44), Color(hex: 0x0E1420)],
+        LinearGradient(colors: colorScheme == .dark
+                        ? [Color(hex: 0x3B2F63), Color(hex: 0x1B2A44), Color(hex: 0x0E1420)]
+                        : [Color(hex: 0xC9C3E8), Color(hex: 0xDCE3F2), Color(hex: 0xEEF1F7)],
                        startPoint: .top, endPoint: .bottom)
             .ignoresSafeArea()
     }
 }
 
+/// The Lock Screen's clock and date: white on the dark wallpaper, ink on the light one.
+private func lockScreenText(_ scheme: ColorScheme) -> Color {
+    scheme == .dark ? .white : RecordingActivityStyle.ink
+}
+
 private struct LiveActivityLockScreenMock: View {
     let cards: [(RecordingActivityKind, RecordingActivityStatus)]
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         ZStack {
@@ -55,22 +67,24 @@ private struct LiveActivityLockScreenMock: View {
                 VStack(spacing: 10) {
                     ForEach(Array(cards.enumerated()), id: \.offset) { _, card in
                         RecordingActivityLockScreenView(kind: card.0, status: card.1)
-                            .background(RecordingActivityStyle.ink)
+                            .background(RecordingActivityStyle.background(colorScheme))
                             .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
                     }
                 }
                 .padding(.horizontal, 12)
                 Spacer().frame(height: 120)
             }
-            .foregroundColor(.white)
+            .foregroundColor(lockScreenText(colorScheme))
         }
-        .preferredColorScheme(.dark)
     }
 }
 
+/// The Dynamic Island is black in both appearances (iOS draws it), so only the wallpaper and
+/// the captions around it change.
 private struct LiveActivityIslandMock: View {
     let kind: RecordingActivityKind
     let status: RecordingActivityStatus
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -119,13 +133,12 @@ private struct LiveActivityIslandMock: View {
             }
             .frame(maxWidth: .infinity)
         }
-        .preferredColorScheme(.dark)
     }
 
     private func caption(_ text: String) -> some View {
         Text(text)
             .font(.footnote.weight(.semibold))
-            .foregroundColor(.white.opacity(0.7))
+            .foregroundColor(lockScreenText(colorScheme).opacity(0.7))
     }
 }
 #endif

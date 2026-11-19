@@ -22,7 +22,7 @@ struct NotesPanel: View {
                                message: "Pause on a moment that matters and write it down. Each note keeps its time, so one tap brings you straight back.",
                                actionTitle: "Add a note",
                                action: { onAddNote() },
-                               onDark: true)
+                               onStage: true)
                     .padding(.vertical, Space.l)
             } else {
                 ForEach(notes) { note in
@@ -39,7 +39,7 @@ struct NotesPanel: View {
         VStack(alignment: .leading, spacing: Space.xs) {
             Text("Reactions")
                 .font(.srCaption)
-                .foregroundStyle(Color.srOnDarkTertiary)
+                .foregroundStyle(Color.srStageTextTertiary)
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: Space.xs) {
                     ForEach(reactions) { reaction in
@@ -66,11 +66,11 @@ private struct ReactionChip: View {
                 Text(reaction.emoji).font(.system(size: 17))
                 Text(Format.stamp(reaction.time))
                     .font(.srTimerSmall)
-                    .foregroundStyle(Color.srOnDarkSecondary)
+                    .foregroundStyle(Color.srStageTextSecondary)
             }
             .padding(.horizontal, Space.s)
             .frame(height: 34)
-            .background(Capsule().fill(Color.srInkRaised))
+            .background(Capsule().fill(Color.srStageRaised))
             .contentShape(Capsule())
         }
         .buttonStyle(PressScaleStyle())
@@ -101,14 +101,14 @@ private struct NoteRow: View {
                 stampButton
                 Text(isEdited ? "Edited · \(Format.age(note.updatedAt))" : Format.age(note.createdAt))
                     .font(.srFootnote)
-                    .foregroundStyle(Color.srOnDarkTertiary)
+                    .foregroundStyle(Color.srStageTextTertiary)
                 Spacer(minLength: Space.xs)
                 Menu {
                     menuItems
                 } label: {
                     Image(systemName: "ellipsis")
                         .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(Color.srOnDarkSecondary)
+                        .foregroundStyle(Color.srStageTextSecondary)
                         .frame(width: 32, height: 28)
                         .contentShape(Rectangle())
                 }
@@ -116,12 +116,12 @@ private struct NoteRow: View {
             }
             Text(note.text)
                 .font(.srBody)
-                .foregroundStyle(Color.srOnDark)
+                .foregroundStyle(Color.srStageText)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(Space.m)
-        .background(RoundedRectangle(cornerRadius: Radius.l, style: .continuous).fill(Color.srInkRaised))
+        .background(RoundedRectangle(cornerRadius: Radius.l, style: .continuous).fill(Color.srStageRaised))
         .contextMenu { menuItems }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Note at \(Format.stamp(note.time)). \(note.text)")
@@ -140,7 +140,7 @@ private struct NoteRow: View {
                 Text("Note at \(Format.stamp(note.time))")
                     .font(.srCaption)
             }
-            .foregroundStyle(Color.srRedGlow)
+            .foregroundStyle(Color.srStageRed)
             .padding(.horizontal, 10)
             .padding(.vertical, 5)
             .background(Capsule().fill(Color.srRed.opacity(0.16)))
@@ -194,12 +194,12 @@ struct ReactionDock: View {
             } label: {
                 Image(systemName: "face.smiling")
                     .font(.system(size: 22, weight: .regular))
-                    .foregroundStyle(Color.srOnDarkSecondary)
+                    .foregroundStyle(Color.srStageTextSecondary)
                     .overlay(alignment: .topTrailing) {
                         Image(systemName: "plus.circle.fill")
                             .font(.system(size: 10, weight: .bold))
-                            .foregroundStyle(Color.srOnDark)
-                            .background(Circle().fill(Color.srInk))
+                            .foregroundStyle(Color.srStageText)
+                            .background(Circle().fill(Color.srStage))
                             .offset(x: 4, y: -3)
                     }
                     .frame(width: 44, height: 48)
@@ -208,7 +208,7 @@ struct ReactionDock: View {
             .buttonStyle(PressScaleStyle())
             .accessibilityLabel("More reactions")
             Rectangle()
-                .fill(Color.srInkLine)
+                .fill(Color.srStageLine)
                 .frame(width: 1, height: 26)
                 .padding(.horizontal, Space.xxs)
             Button {
@@ -229,8 +229,8 @@ struct ReactionDock: View {
         .padding(.top, Space.xxs)
         .padding(.bottom, Space.xxs)
         .background(
-            Color.srInk
-                .overlay(alignment: .top) { Rectangle().fill(Color.srInkLine).frame(height: 0.5) }
+            Color.srStage
+                .overlay(alignment: .top) { Rectangle().fill(Color.srStageLine).frame(height: 0.5) }
                 .ignoresSafeArea(edges: .bottom)
         )
     }

@@ -39,7 +39,8 @@ concurrency:
 jobs:
   build:
     runs-on: ${{ inputs.runner || 'xcode-27' }}
-    timeout-minutes: 100
+    # A full Light pass (~60 min) plus a Dark pass over every recorder and player screen (~30 min).
+    timeout-minutes: 140
     env:
       TEAM_ID: N3DBKUVJS5
       BUNDLE_ID: co.arclayer.snapreel

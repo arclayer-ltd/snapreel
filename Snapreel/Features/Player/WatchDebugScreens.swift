@@ -261,7 +261,7 @@ struct WatchDebugHost: View {
 
     var body: some View {
         ZStack {
-            Color.srInk.ignoresSafeArea()
+            Color.srStage.ignoresSafeArea()
             if let presentation, let state {
                 PlayerScreen(presentation: presentation, initial: state)
             }

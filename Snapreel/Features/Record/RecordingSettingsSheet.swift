@@ -8,7 +8,7 @@ struct RecordingSettingsSheet: View {
     var body: some View {
         VStack(spacing: 0) {
             SheetHeader(title: "Recording settings", trailingTitle: "Done",
-                        trailingAction: { dismiss() }, onDark: true)
+                        trailingAction: { dismiss() }, onStage: true)
             ScrollView {
                 VStack(alignment: .leading, spacing: Space.l) {
                     qualitySection
@@ -16,16 +16,15 @@ struct RecordingSettingsSheet: View {
                     togglesSection
                     Label("Recordings stay on this iPhone.", systemImage: "lock.fill")
                         .font(.srFootnote)
-                        .foregroundStyle(Color.srOnDarkTertiary)
+                        .foregroundStyle(Color.srStageTextTertiary)
                         .padding(.horizontal, Space.xxs)
                 }
                 .padding(.horizontal, Space.gutter)
                 .padding(.bottom, Space.xl)
             }
         }
-        .background(Color.srInkRaised.ignoresSafeArea())
+        .background(Color.srStageRaised.ignoresSafeArea())
         .presentationDetents([.medium, .large])
-        .preferredColorScheme(.dark)
     }
 
     private var qualitySection: some View {
@@ -37,8 +36,8 @@ struct RecordingSettingsSheet: View {
                 } label: {
                     HStack(spacing: Space.s) {
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(quality.label).font(.srBody).foregroundStyle(.white)
-                            Text(quality.detail).font(.srFootnote).foregroundStyle(Color.srOnDarkSecondary)
+                            Text(quality.label).font(.srBody).foregroundStyle(Color.srStageText)
+                            Text(quality.detail).font(.srFootnote).foregroundStyle(Color.srStageTextSecondary)
                         }
                         Spacer()
                         if settings.recordingQuality == quality {
@@ -53,7 +52,7 @@ struct RecordingSettingsSheet: View {
                 .buttonStyle(.plain)
                 .accessibilityAddTraits(settings.recordingQuality == quality ? .isSelected : [])
                 if quality != RecordingQuality.allCases.last {
-                    Divider().overlay(Color.srInkLine)
+                    Divider().overlay(Color.srStageLine)
                 }
             }
         }
@@ -70,10 +69,10 @@ struct RecordingSettingsSheet: View {
                     } label: {
                         Text(length == .off ? "Off" : "\(length.rawValue)s")
                             .font(.srSubheadlineStrong)
-                            .foregroundStyle(selected ? Color.srInk : Color.white)
+                            .foregroundStyle(selected ? Color.srStage : Color.srStageText)
                             .frame(maxWidth: .infinity)
                             .frame(height: 38)
-                            .background(Capsule().fill(selected ? Color.white : Color.srInkControl))
+                            .background(Capsule().fill(selected ? Color.srStageText : Color.srStageControl))
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel(length.label)
@@ -89,11 +88,11 @@ struct RecordingSettingsSheet: View {
             DarkToggleRow(title: "Microphone on by default",
                           detail: "Camera recordings include your voice. For screen recordings, switch the microphone on in the system sheet.",
                           isOn: $settings.microphoneOnByDefault)
-            Divider().overlay(Color.srInkLine)
+            Divider().overlay(Color.srStageLine)
             DarkToggleRow(title: "Mirror front camera",
                           detail: "Saves front camera videos the way you see yourself in the preview.",
                           isOn: $settings.mirrorFrontCamera)
-            Divider().overlay(Color.srInkLine)
+            Divider().overlay(Color.srStageLine)
             DarkToggleRow(title: "Show speaker notes",
                           detail: "Your notes float over the camera while you record. They're never in the video.",
                           isOn: $settings.showsSpeakerNotes)
@@ -101,7 +100,7 @@ struct RecordingSettingsSheet: View {
     }
 }
 
-/// Rounded group on dark with a small heading.
+/// Rounded group with a small heading, in the stage colours.
 private struct DarkSettingsSection<Content: View>: View {
     let title: String
     @ViewBuilder let content: () -> Content
@@ -110,14 +109,14 @@ private struct DarkSettingsSection<Content: View>: View {
         VStack(alignment: .leading, spacing: Space.xs) {
             Text(title)
                 .font(.srFootnote)
-                .foregroundStyle(Color.srOnDarkTertiary)
+                .foregroundStyle(Color.srStageTextTertiary)
                 .padding(.horizontal, Space.xxs)
             VStack(alignment: .leading, spacing: 0) {
                 content()
             }
             .padding(.horizontal, Space.m)
             .padding(.vertical, Space.xs)
-            .background(RoundedRectangle(cornerRadius: Radius.l, style: .continuous).fill(Color.srInkControl.opacity(0.55)))
+            .background(RoundedRectangle(cornerRadius: Radius.l, style: .continuous).fill(Color.srStageGroup))
         }
     }
 }
@@ -130,8 +129,8 @@ private struct DarkToggleRow: View {
     var body: some View {
         Toggle(isOn: $isOn) {
             VStack(alignment: .leading, spacing: 2) {
-                Text(title).font(.srBody).foregroundStyle(.white)
-                Text(detail).font(.srFootnote).foregroundStyle(Color.srOnDarkSecondary)
+                Text(title).font(.srBody).foregroundStyle(Color.srStageText)
+                Text(detail).font(.srFootnote).foregroundStyle(Color.srStageTextSecondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
@@ -151,26 +150,26 @@ struct SpeakerNotesSheet: View {
     var body: some View {
         VStack(spacing: 0) {
             SheetHeader(title: "Speaker notes", trailingTitle: "Done",
-                        trailingAction: { dismiss() }, onDark: true)
+                        trailingAction: { dismiss() }, onStage: true)
             VStack(alignment: .leading, spacing: Space.m) {
                 ZStack(alignment: .topLeading) {
                     TextEditor(text: $settings.speakerNotes)
                         .font(.srBody)
-                        .foregroundStyle(.white)
+                        .foregroundStyle(Color.srStageText)
                         .scrollContentBackground(.hidden)
                         .focused($focused)
                         .padding(Space.xs)
                     if settings.speakerNotes.isEmpty {
                         Text("Jot down the points you want to cover. They scroll gently over the camera while you record.")
                             .font(.srBody)
-                            .foregroundStyle(Color.srOnDarkTertiary)
+                            .foregroundStyle(Color.srStageTextTertiary)
                             .padding(.horizontal, Space.s)
                             .padding(.vertical, Space.m)
                             .allowsHitTesting(false)
                     }
                 }
                 .frame(maxHeight: .infinity)
-                .background(RoundedRectangle(cornerRadius: Radius.l, style: .continuous).fill(Color.srInkControl))
+                .background(RoundedRectangle(cornerRadius: Radius.l, style: .continuous).fill(Color.srStageControl))
                 DarkToggleRow(title: "Show while recording",
                               detail: "Only you see them. They're never part of the video.",
                               isOn: $settings.showsSpeakerNotes)
@@ -180,15 +179,14 @@ struct SpeakerNotesSheet: View {
                         settings.speakerNotes = ""
                     }
                     .font(.srSubheadlineStrong)
-                    .foregroundStyle(Color.srRedGlow)
+                    .foregroundStyle(Color.srStageRed)
                 }
             }
             .padding(.horizontal, Space.gutter)
             .padding(.bottom, Space.m)
         }
-        .background(Color.srInkRaised.ignoresSafeArea())
+        .background(Color.srStageRaised.ignoresSafeArea())
         .presentationDetents([.large])
-        .preferredColorScheme(.dark)
         .onChange(of: settings.speakerNotes) { text in
             // Writing notes is a strong hint they should show.
             if !text.isEmpty && !settings.showsSpeakerNotes && text.count == 1 {

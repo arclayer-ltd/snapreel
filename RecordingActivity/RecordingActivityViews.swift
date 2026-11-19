@@ -5,12 +5,23 @@ import SwiftUI
 // screenshots of what the Lock Screen shows.
 
 /// Colours and link for the Live Activity. The widget extension can't see the app's design
-/// tokens (`Kit/Tokens.swift`), so it repeats the two it needs: the record red (#F04850) and the
-/// recorder's ink (#13141B). Like the recorder, it stays dark in both appearances.
+/// tokens (`Kit/Tokens.swift`), so it repeats the ones it needs: the record red (#F04850), the
+/// recorder's ink (#13141B) and the stage's light text colours. The Lock Screen card follows the
+/// appearance like the rest of Snapreel: ink in Dark mode, white in Light mode. The Dynamic
+/// Island is always black (iOS draws it), so its pieces use the dark colours.
 enum RecordingActivityStyle {
     static let red = Color(red: 0xF0 / 255, green: 0x48 / 255, blue: 0x50 / 255)
     static let ink = Color(red: 0x13 / 255, green: 0x14 / 255, blue: 0x1B / 255)
     static let secondary = Color.white.opacity(0.72)
+    /// #5B5E6B, secondary text on the white card.
+    static let secondaryOnLight = Color(red: 0x5B / 255, green: 0x5E / 255, blue: 0x6B / 255)
+
+    /// The Lock Screen card's background.
+    static func background(_ scheme: ColorScheme) -> Color { scheme == .dark ? ink : .white }
+    /// Its title, the running clock and the system's own controls.
+    static func primaryText(_ scheme: ColorScheme) -> Color { scheme == .dark ? .white : ink }
+    /// Its subtitle and a paused clock.
+    static func secondaryText(_ scheme: ColorScheme) -> Color { scheme == .dark ? secondary : secondaryOnLight }
     /// Opens Snapreel on the recording, where Stop is (see `AppLinks`).
     static let url = URL(string: "snapreel://recording")!
 
@@ -86,10 +97,13 @@ struct RecordingActivityMark: View {
     }
 }
 
-/// The Lock Screen (and, on iPhones without the Dynamic Island, the banner at the top).
+/// The Lock Screen (and, on iPhones without the Dynamic Island, the banner at the top). It
+/// follows the appearance; the widget sets the matching background with
+/// `RecordingActivityStyle.background`.
 struct RecordingActivityLockScreenView: View {
     let kind: RecordingActivityKind
     let status: RecordingActivityStatus
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         HStack(spacing: 12) {
@@ -99,19 +113,20 @@ struct RecordingActivityLockScreenView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(RecordingActivityStyle.title(kind, status.phase))
                     .font(.headline)
-                    .foregroundColor(.white)
+                    .foregroundColor(RecordingActivityStyle.primaryText(colorScheme))
                     .lineLimit(1)
                     .minimumScaleFactor(0.75)
                 Text(RecordingActivityStyle.subtitle(status.phase))
                     .font(.subheadline)
-                    .foregroundColor(RecordingActivityStyle.secondary)
+                    .foregroundColor(RecordingActivityStyle.secondaryText(colorScheme))
                     .lineLimit(2)
                     .fixedSize(horizontal: false, vertical: true)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             RecordingActivityClock(status: status)
                 .font(.system(size: 28, weight: .semibold, design: .rounded).monospacedDigit())
-                .foregroundColor(status.phase == .recording ? .white : RecordingActivityStyle.secondary)
+                .foregroundColor(status.phase == .recording ? RecordingActivityStyle.primaryText(colorScheme)
+                                                            : RecordingActivityStyle.secondaryText(colorScheme))
                 .multilineTextAlignment(.trailing)
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)

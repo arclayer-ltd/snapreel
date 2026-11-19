@@ -10,12 +10,12 @@ struct PlayerStatsSheet: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            SheetHeader(title: "Stats", trailingTitle: "Done", trailingAction: { onClose() }, onDark: true)
+            SheetHeader(title: "Stats", trailingTitle: "Done", trailingAction: { onClose() }, onStage: true)
             ScrollView {
                 VStack(alignment: .leading, spacing: Space.m) {
                     Label("Counted on this iPhone. Nobody else sees these.", systemImage: "lock.fill")
                         .font(.srFootnote)
-                        .foregroundStyle(Color.srOnDarkSecondary)
+                        .foregroundStyle(Color.srStageTextSecondary)
                     LazyVGrid(columns: columns, spacing: Space.s) {
                         StatTile(title: "Times played", value: "\(video.playCount)", systemImage: "play.fill")
                         StatTile(title: "Times shared", value: "\(video.shareCount)", systemImage: "square.and.arrow.up")
@@ -26,7 +26,7 @@ struct PlayerStatsSheet: View {
                     facts
                     Text("A play counts each time you start this recording after opening it. Shares count when the share sheet finishes sending. How far through is the furthest point you've reached.")
                         .font(.srFootnote)
-                        .foregroundStyle(Color.srOnDarkTertiary)
+                        .foregroundStyle(Color.srStageTextTertiary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 .padding(.horizontal, Space.gutter)
@@ -34,7 +34,7 @@ struct PlayerStatsSheet: View {
                 .padding(.bottom, Space.xxl)
             }
         }
-        .background(Color.srInkRaised.ignoresSafeArea())
+        .background(Color.srStageRaised.ignoresSafeArea())
     }
 
     private var lastWatched: String {
@@ -47,13 +47,13 @@ struct PlayerStatsSheet: View {
         return VStack(alignment: .leading, spacing: Space.s) {
             Text("How far through")
                 .font(.srSubheadline)
-                .foregroundStyle(Color.srOnDarkSecondary)
+                .foregroundStyle(Color.srStageTextSecondary)
             Text(PlayerStatsText.percent(fraction))
                 .font(.srStat)
-                .foregroundStyle(Color.srOnDark)
+                .foregroundStyle(Color.srStageText)
             GeometryReader { proxy in
                 ZStack(alignment: .leading) {
-                    Capsule().fill(Color.white.opacity(0.12))
+                    Capsule().fill(Color.srStageText.opacity(0.12))
                     Capsule().fill(Color.srRed)
                         .frame(width: max(fraction > 0 ? 8 : 0, proxy.size.width * CGFloat(fraction)))
                 }
@@ -61,11 +61,11 @@ struct PlayerStatsSheet: View {
             .frame(height: 8)
             Text(progressCaption(fraction))
                 .font(.srFootnote)
-                .foregroundStyle(Color.srOnDarkTertiary)
+                .foregroundStyle(Color.srStageTextTertiary)
         }
         .padding(Space.m)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: Radius.l, style: .continuous).fill(Color.srInkControl))
+        .background(RoundedRectangle(cornerRadius: Radius.l, style: .continuous).fill(Color.srStageControl))
         .accessibilityElement(children: .combine)
     }
 
@@ -83,7 +83,7 @@ struct PlayerStatsSheet: View {
             StatFactRow(title: video.kind == .imported ? "Added" : "Recorded", value: Format.dateTime(video.createdAt))
         }
         .padding(.horizontal, Space.m)
-        .background(RoundedRectangle(cornerRadius: Radius.l, style: .continuous).fill(Color.srInkControl))
+        .background(RoundedRectangle(cornerRadius: Radius.l, style: .continuous).fill(Color.srStageControl))
     }
 }
 
@@ -97,16 +97,16 @@ private struct StatTile: View {
         VStack(alignment: .leading, spacing: Space.xs) {
             Label(title, systemImage: systemImage)
                 .font(.srFootnote)
-                .foregroundStyle(Color.srOnDarkSecondary)
+                .foregroundStyle(Color.srStageTextSecondary)
             Text(value)
                 .font(isCompact ? Font.srTitle : Font.srStat)
-                .foregroundStyle(Color.srOnDark)
+                .foregroundStyle(Color.srStageText)
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
         }
         .padding(Space.m)
         .frame(maxWidth: .infinity, minHeight: 104, alignment: .topLeading)
-        .background(RoundedRectangle(cornerRadius: Radius.l, style: .continuous).fill(Color.srInkControl))
+        .background(RoundedRectangle(cornerRadius: Radius.l, style: .continuous).fill(Color.srStageControl))
         .accessibilityElement(children: .combine)
     }
 }
@@ -117,13 +117,13 @@ private struct StatFactRow: View {
 
     var body: some View {
         HStack {
-            Text(title).foregroundStyle(Color.srOnDarkSecondary)
+            Text(title).foregroundStyle(Color.srStageTextSecondary)
             Spacer(minLength: Space.s)
-            Text(value).foregroundStyle(Color.srOnDark).multilineTextAlignment(.trailing)
+            Text(value).foregroundStyle(Color.srStageText).multilineTextAlignment(.trailing)
         }
         .font(.srSubheadline)
         .padding(.vertical, Space.s)
-        .overlay(alignment: .bottom) { Rectangle().fill(Color.srInkLine).frame(height: 0.5) }
+        .overlay(alignment: .bottom) { Rectangle().fill(Color.srStageLine).frame(height: 0.5) }
         .accessibilityElement(children: .combine)
     }
 }

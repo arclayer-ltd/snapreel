@@ -29,7 +29,7 @@ struct PlayerActionsSheet: View {
 
     var body: some View {
         ZStack {
-            Color.srInkRaised.ignoresSafeArea()
+            Color.srStageRaised.ignoresSafeArea()
             if confirmingDelete {
                 deleteConfirmation
                     .transition(.opacity.combined(with: .move(edge: .trailing)))
@@ -48,7 +48,7 @@ struct PlayerActionsSheet: View {
                 .padding(.horizontal, Space.gutter)
                 .padding(.top, Space.l)
                 .padding(.bottom, Space.m)
-            Rectangle().fill(Color.srInkLine).frame(height: 0.5)
+            Rectangle().fill(Color.srStageLine).frame(height: 0.5)
             ScrollView {
                 VStack(spacing: 0) {
                     ActionRow(systemImage: "pencil", title: "Edit title") { onChoose(.editTitle) }
@@ -68,7 +68,7 @@ struct PlayerActionsSheet: View {
                               subtitle: "Plays, shares and how far you got") {
                         onChoose(.stats)
                     }
-                    Rectangle().fill(Color.srInkLine).frame(height: 0.5).padding(.vertical, Space.xs)
+                    Rectangle().fill(Color.srStageLine).frame(height: 0.5).padding(.vertical, Space.xs)
                     ActionRow(systemImage: "trash", title: "Delete recording", isDestructive: true) {
                         Haptics.warning()
                         withAnimation(Motion.standard) { confirmingDelete = true }
@@ -86,14 +86,14 @@ struct PlayerActionsSheet: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text(video.title)
                     .font(.srHeadline)
-                    .foregroundStyle(Color.srOnDark)
+                    .foregroundStyle(Color.srStageText)
                     .lineLimit(2)
                 Text("\(Format.clock(video.duration)) · \(Format.date(video.createdAt))")
                     .font(.srFootnote)
-                    .foregroundStyle(Color.srOnDarkSecondary)
+                    .foregroundStyle(Color.srStageTextSecondary)
             }
             Spacer(minLength: Space.xs)
-            CircleIconButton(systemName: "xmark", label: "Close", tone: .dark, size: 32) { onClose() }
+            CircleIconButton(systemName: "xmark", label: "Close", tone: .stage, size: 32) { onClose() }
         }
     }
 
@@ -112,13 +112,13 @@ struct PlayerActionsSheet: View {
             VStack(spacing: Space.xs) {
                 Text("Delete this recording?")
                     .font(.srTitle)
-                    .foregroundStyle(Color.srOnDark)
+                    .foregroundStyle(Color.srStageText)
                 Text("This removes the video, its notes and transcript from this iPhone.")
                     .font(.srSubheadline)
-                    .foregroundStyle(Color.srOnDarkSecondary)
+                    .foregroundStyle(Color.srStageTextSecondary)
                 Text("\u{201C}\(video.title)\u{201D}")
                     .font(.srFootnote)
-                    .foregroundStyle(Color.srOnDarkTertiary)
+                    .foregroundStyle(Color.srStageTextTertiary)
                     .lineLimit(1)
                     .padding(.top, Space.xxs)
             }
@@ -154,20 +154,20 @@ private struct ActionRow: View {
             HStack(spacing: Space.s) {
                 Image(systemName: systemImage)
                     .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(isDestructive ? Color.srRed : Color.srOnDark)
+                    .foregroundStyle(isDestructive ? Color.srRed : Color.srStageText)
                     .frame(width: 36, height: 36)
                     .background(
                         RoundedRectangle(cornerRadius: 10, style: .continuous)
-                            .fill(isDestructive ? Color.srRed.opacity(0.16) : Color.srInkControl)
+                            .fill(isDestructive ? Color.srRed.opacity(0.16) : Color.srStageControl)
                     )
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title)
                         .font(.srBody)
-                        .foregroundStyle(isDestructive ? Color.srRedGlow : Color.srOnDark)
+                        .foregroundStyle(isDestructive ? Color.srStageRed : Color.srStageText)
                     if let subtitle {
                         Text(subtitle)
                             .font(.srFootnote)
-                            .foregroundStyle(Color.srOnDarkTertiary)
+                            .foregroundStyle(Color.srStageTextTertiary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }

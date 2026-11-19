@@ -16,10 +16,10 @@ struct RecorderModeChooser: View {
             VStack(spacing: Space.xs) {
                 Text("What do you want to record?")
                     .font(.srTitle)
-                    .foregroundStyle(.white)
+                    .foregroundStyle(Color.srStageText)
                 Text("Nothing turns on until you pick one.")
                     .font(.srCallout)
-                    .foregroundStyle(Color.srOnDarkSecondary)
+                    .foregroundStyle(Color.srStageTextSecondary)
             }
             .multilineTextAlignment(.center)
             .padding(.horizontal, Space.l)
@@ -33,7 +33,7 @@ struct RecorderModeChooser: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(
-            LinearGradient(colors: [Color.srInkRaised, Color.srInk], startPoint: .top, endPoint: .bottom)
+            LinearGradient(colors: [Color.srStageRaised, Color.srStage], startPoint: .top, endPoint: .bottom)
         )
     }
 
@@ -44,36 +44,36 @@ struct RecorderModeChooser: View {
             HStack(spacing: Space.s) {
                 Image(systemName: Self.symbol(mode))
                     .font(.system(size: 20, weight: .semibold))
-                    .foregroundStyle(Color.srRedGlow)
+                    .foregroundStyle(Color.srStageRed)
                     .frame(width: 48, height: 48)
                     .background(Circle().fill(Color.srRed.opacity(0.16)))
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: Space.xs) {
                         Text(mode.label)
                             .font(.srHeadline)
-                            .foregroundStyle(.white)
+                            .foregroundStyle(Color.srStageText)
                         if mode == settings.lastRecordMode {
                             Text("Last used")
                                 .font(.srCaption)
-                                .foregroundStyle(Color.srOnDarkSecondary)
+                                .foregroundStyle(Color.srStageTextSecondary)
                                 .padding(.horizontal, 7)
                                 .padding(.vertical, 2)
-                                .background(Capsule().fill(Color.white.opacity(0.1)))
+                                .background(Capsule().fill(Color.srStageText.opacity(0.1)))
                         }
                     }
                     Text(Self.detail(mode))
                         .font(.srSubheadline)
-                        .foregroundStyle(Color.srOnDarkSecondary)
+                        .foregroundStyle(Color.srStageTextSecondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 Spacer(minLength: Space.xs)
                 Image(systemName: "chevron.right")
                     .font(.system(size: 14, weight: .bold))
-                    .foregroundStyle(Color.srOnDarkTertiary)
+                    .foregroundStyle(Color.srStageTextTertiary)
             }
             .padding(Space.s)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(RoundedRectangle(cornerRadius: Radius.l, style: .continuous).fill(Color.srInkControl))
+            .background(RoundedRectangle(cornerRadius: Radius.l, style: .continuous).fill(Color.srStageControl))
             .contentShape(RoundedRectangle(cornerRadius: Radius.l, style: .continuous))
         }
         .buttonStyle(PressScaleStyle(scale: 0.97))
@@ -111,15 +111,15 @@ struct RecorderChooserFooter: View {
             } label: {
                 Label("Import a video from Photos", systemImage: "photo.on.rectangle")
                     .font(.srSubheadlineStrong)
-                    .foregroundStyle(.white)
+                    .foregroundStyle(Color.srStageText)
                     .padding(.horizontal, Space.m)
                     .frame(height: 44)
-                    .background(Capsule().fill(Color.srInkControl))
+                    .background(Capsule().fill(Color.srStageControl))
             }
             .buttonStyle(PressScaleStyle())
             Text("Pick one above to start")
                 .font(.srFootnote)
-                .foregroundStyle(Color.srOnDarkTertiary)
+                .foregroundStyle(Color.srStageTextTertiary)
         }
         .frame(maxWidth: .infinity)
         .frame(height: 92 + 40 + Space.s)
@@ -143,11 +143,11 @@ struct MinimizedRecordingBar: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(isPaused ? "Recording paused" : "Recording your voice")
                     .font(.srSubheadlineStrong)
-                    .foregroundStyle(Color.srOnDark)
+                    .foregroundStyle(Color.srStageText)
                     .lineLimit(1)
                 Text(Format.clock(model.elapsed))
                     .font(.srTimerSmall)
-                    .foregroundStyle(Color.srOnDarkSecondary)
+                    .foregroundStyle(Color.srStageTextSecondary)
             }
             Spacer(minLength: Space.xxs)
             Button {
@@ -156,7 +156,7 @@ struct MinimizedRecordingBar: View {
             } label: {
                 Image(systemName: isPaused ? "play.fill" : "pause.fill")
                     .font(.system(size: 17, weight: .bold))
-                    .foregroundStyle(Color.white)
+                    .foregroundStyle(Color.srStageText)
                     .frame(width: 40, height: 40)
                     .contentShape(Rectangle())
             }
@@ -180,7 +180,7 @@ struct MinimizedRecordingBar: View {
         .padding(.leading, Space.xs)
         .padding(.trailing, Space.xs)
         .padding(.vertical, Space.xs)
-        .background(RoundedRectangle(cornerRadius: Radius.l, style: .continuous).fill(Color.srInk))
+        .background(RoundedRectangle(cornerRadius: Radius.l, style: .continuous).fill(Color.srStage))
         .clipShape(RoundedRectangle(cornerRadius: Radius.l, style: .continuous))
         .shadow(color: Color.black.opacity(0.22), radius: 14, y: 6)
         .contentShape(RoundedRectangle(cornerRadius: Radius.l, style: .continuous))
@@ -210,7 +210,7 @@ private struct RecordingPulse: View {
                 .fill(Color.srRed.opacity(0.25))
                 .scaleEffect(isLive && expanded && !reduceMotion ? 1 : 0.6)
             Circle()
-                .fill(isLive ? Color.srRed : Color.srOnDarkTertiary)
+                .fill(isLive ? Color.srRed : Color.srStageTextTertiary)
                 .frame(width: 14, height: 14)
         }
         .animation(isLive && !reduceMotion ? Animation.easeInOut(duration: 0.9).repeatForever(autoreverses: true) : Animation.default,

@@ -126,7 +126,7 @@ struct RecorderWaveformView: View {
     }
 
     private func barColor(index: Int, count: Int) -> Color {
-        guard isActive else { return Color.white.opacity(0.18) }
+        guard isActive else { return Color.srStageText.opacity(0.18) }
         // Older bars fade a little so the newest sound stands out.
         let age = Double(count - index) / Double(count)
         return Color.srRed.opacity(1 - age * 0.45)

@@ -14,7 +14,7 @@ struct EmojiPickerSheet: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            SheetHeader(title: "Reactions", leadingTitle: "Close", leadingAction: { onClose() }, onDark: true)
+            SheetHeader(title: "Reactions", leadingTitle: "Close", leadingAction: { onClose() }, onStage: true)
             searchField
                 .padding(.horizontal, Space.gutter)
                 .padding(.bottom, Space.s)
@@ -35,7 +35,7 @@ struct EmojiPickerSheet: View {
                 }
             }
         }
-        .background(Color.srInkRaised.ignoresSafeArea())
+        .background(Color.srStageRaised.ignoresSafeArea())
     }
 
     // MARK: - Search
@@ -43,10 +43,10 @@ struct EmojiPickerSheet: View {
     private var searchField: some View {
         HStack(spacing: Space.xs) {
             Image(systemName: "magnifyingglass")
-                .foregroundStyle(Color.srOnDarkTertiary)
+                .foregroundStyle(Color.srStageTextTertiary)
             TextField("Search, like party or heart", text: $query)
                 .font(.srBody)
-                .foregroundStyle(Color.srOnDark)
+                .foregroundStyle(Color.srStageText)
                 .autocorrectionDisabled()
                 .textInputAutocapitalization(.never)
                 .submitLabel(.search)
@@ -55,14 +55,14 @@ struct EmojiPickerSheet: View {
                     query = ""
                 } label: {
                     Image(systemName: "xmark.circle.fill")
-                        .foregroundStyle(Color.srOnDarkTertiary)
+                        .foregroundStyle(Color.srStageTextTertiary)
                 }
                 .accessibilityLabel("Clear search")
             }
         }
         .padding(.horizontal, Space.s)
         .frame(height: 40)
-        .background(RoundedRectangle(cornerRadius: Radius.m, style: .continuous).fill(Color.srInkControl))
+        .background(RoundedRectangle(cornerRadius: Radius.m, style: .continuous).fill(Color.srStageControl))
     }
 
     @ViewBuilder private var results: some View {
@@ -70,7 +70,7 @@ struct EmojiPickerSheet: View {
         if found.isEmpty {
             Text("No reactions match \u{201C}\(query)\u{201D}.")
                 .font(.srSubheadline)
-                .foregroundStyle(Color.srOnDarkSecondary)
+                .foregroundStyle(Color.srStageTextSecondary)
                 .frame(maxWidth: .infinity)
                 .padding(.top, Space.xxl)
         } else {
@@ -94,10 +94,10 @@ struct EmojiPickerSheet: View {
                     } label: {
                         Label(category.shortTitle, systemImage: category.symbol)
                             .font(.srCaption)
-                            .foregroundStyle(selected ? Color.srInk : Color.srOnDarkSecondary)
+                            .foregroundStyle(selected ? Color.srStage : Color.srStageTextSecondary)
                             .padding(.horizontal, Space.s)
                             .frame(height: 32)
-                            .background(Capsule().fill(selected ? Color.white : Color.srInkControl))
+                            .background(Capsule().fill(selected ? Color.srStageText : Color.srStageControl))
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel(category.title)
@@ -127,7 +127,7 @@ struct EmojiPickerSheet: View {
         VStack(alignment: .leading, spacing: Space.xs) {
             Text(title)
                 .font(.srCaption)
-                .foregroundStyle(Color.srOnDarkTertiary)
+                .foregroundStyle(Color.srStageTextTertiary)
                 .padding(.horizontal, Space.xs)
                 .accessibilityAddTraits(.isHeader)
             grid(emoji)

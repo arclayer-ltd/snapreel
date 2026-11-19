@@ -92,9 +92,10 @@ extension ButtonStyle where Self == SRButtonStyle {
     static var srSecondaryCompact: SRButtonStyle { SRButtonStyle(kind: .secondary, fullWidth: false, compact: true) }
 }
 
-/// Round icon button. `.light` sits on white/canvas, `.dark` on ink or over video.
+/// Round icon button. `.light` sits on white/canvas, `.stage` on the recorder and the player
+/// (light or dark with the appearance), `.glass` over the camera or the video.
 struct CircleIconButton: View {
-    enum Tone { case light, dark, glass, red }
+    enum Tone { case light, stage, glass, red }
 
     let systemName: String
     let label: String
@@ -121,14 +122,15 @@ struct CircleIconButton: View {
     private var foreground: Color {
         switch tone {
         case .light: return .srText
-        case .dark, .glass, .red: return .white
+        case .stage: return .srStageText
+        case .glass, .red: return .white
         }
     }
 
     private var fill: Color {
         switch tone {
         case .light: return .srFill
-        case .dark: return .srInkControl
+        case .stage: return .srStageControl
         case .glass: return Color.black.opacity(0.38)
         case .red: return .srRed
         }
@@ -154,7 +156,7 @@ struct RecordButtonShape: View {
     var body: some View {
         ZStack {
             Circle()
-                .strokeBorder(Color.white.opacity(0.9), lineWidth: diameter * 0.06)
+                .strokeBorder(Color.srRecordRing, lineWidth: diameter * 0.06)
             RoundedRectangle(cornerRadius: isRecording ? diameter * 0.1 : diameter * 0.4, style: .continuous)
                 .fill(Color.srRed)
                 .frame(width: isRecording ? diameter * 0.38 : diameter * 0.8,

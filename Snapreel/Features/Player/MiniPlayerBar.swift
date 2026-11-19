@@ -30,7 +30,7 @@ struct MiniPlayerBar: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(video.title)
                     .font(.srSubheadlineStrong)
-                    .foregroundStyle(Color.srOnDark)
+                    .foregroundStyle(Color.srStageText)
                     .lineLimit(1)
                 MiniPlayerTime(clock: session.clock, duration: video.duration,
                                isPlaying: session.isPlaying && session.videoID == videoID,
@@ -44,7 +44,7 @@ struct MiniPlayerBar: View {
             } label: {
                 Image(systemName: session.isPlaying && session.videoID == videoID ? "pause.fill" : "play.fill")
                     .font(.system(size: 18, weight: .bold))
-                    .foregroundStyle(Color.white)
+                    .foregroundStyle(Color.srStageText)
                     .frame(width: 40, height: 40)
                     .contentShape(Rectangle())
             }
@@ -56,7 +56,7 @@ struct MiniPlayerBar: View {
             } label: {
                 Image(systemName: "xmark")
                     .font(.system(size: 15, weight: .bold))
-                    .foregroundStyle(Color.srOnDarkSecondary)
+                    .foregroundStyle(Color.srStageTextSecondary)
                     .frame(width: 36, height: 40)
                     .contentShape(Rectangle())
             }
@@ -66,7 +66,7 @@ struct MiniPlayerBar: View {
         .padding(.leading, Space.xs)
         .padding(.trailing, Space.xxs)
         .padding(.vertical, Space.xs)
-        .background(RoundedRectangle(cornerRadius: Radius.l, style: .continuous).fill(Color.srInk))
+        .background(RoundedRectangle(cornerRadius: Radius.l, style: .continuous).fill(Color.srStage))
         .overlay(alignment: .bottom) {
             MiniPlayerProgress(clock: session.clock, duration: video.duration)
                 .padding(.horizontal, Space.m)
@@ -90,7 +90,7 @@ struct MiniPlayerBar: View {
         } else if session.isPictureInPictureActive {
             Image(systemName: "pip")
                 .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(Color.srOnDarkTertiary)
+                .foregroundStyle(Color.srStageTextTertiary)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if session.videoID == videoID {
             PlayerSurface(session: session, gravity: .resizeAspectFill)
@@ -126,7 +126,7 @@ private struct MiniPlayerTime: View {
     var body: some View {
         Text(line)
             .font(.srTimerSmall)
-            .foregroundStyle(Color.srOnDarkSecondary)
+            .foregroundStyle(Color.srStageTextSecondary)
             .lineLimit(1)
     }
 
@@ -145,7 +145,7 @@ private struct MiniPlayerProgress: View {
         GeometryReader { proxy in
             let fraction = duration > 0 ? min(1, max(0, clock.time / duration)) : 0
             ZStack(alignment: .leading) {
-                Capsule().fill(Color.white.opacity(0.12))
+                Capsule().fill(Color.srStageText.opacity(0.12))
                 Capsule().fill(Color.srRed).frame(width: proxy.size.width * CGFloat(fraction))
             }
         }

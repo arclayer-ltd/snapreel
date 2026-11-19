@@ -177,7 +177,8 @@ struct PhotosVideoChip: View {
 // MARK: - Status card
 
 /// Floating card along the bottom edge: "Saving to Photos…" with a spinner, then
-/// "Saved to Photos" with Open Photos. Dark so it reads over light lists and the player alike.
+/// "Saved to Photos" with Open Photos. Follows the appearance like the screen under it, with a
+/// hairline and a shadow so it lifts off lists and the player alike.
 @MainActor
 struct PhotosStatusCard: View {
     let video: Video
@@ -190,12 +191,12 @@ struct PhotosStatusCard: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(isSaved ? "Saved to Photos" : "Saving to Photos\u{2026}")
                     .font(.srSubheadlineStrong)
-                    .foregroundStyle(Color.srOnDark)
+                    .foregroundStyle(Color.srText)
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
                 Text(video.title)
                     .font(.srFootnote)
-                    .foregroundStyle(Color.srOnDarkSecondary)
+                    .foregroundStyle(Color.srTextSecondary)
                     .lineLimit(1)
             }
             .accessibilityElement(children: .combine)
@@ -204,9 +205,9 @@ struct PhotosStatusCard: View {
         }
         .padding(Space.s)
         .frame(maxWidth: 440)
-        .background(RoundedRectangle(cornerRadius: Radius.l, style: .continuous).fill(Color.srInkRaised))
+        .background(RoundedRectangle(cornerRadius: Radius.l, style: .continuous).fill(Color.srSurface))
         .overlay(RoundedRectangle(cornerRadius: Radius.l, style: .continuous)
-            .strokeBorder(Color.white.opacity(0.1), lineWidth: 1))
+            .strokeBorder(Color.srLine, lineWidth: 1))
         .shadow(color: Color.black.opacity(0.22), radius: 18, x: 0, y: 8)
     }
 
@@ -232,18 +233,18 @@ struct PhotosStatusCard: View {
             } label: {
                 Text("Open Photos")
                     .font(.srSubheadlineStrong)
-                    .foregroundStyle(Color.srInk)
+                    .foregroundStyle(Color.srOnInverse)
                     .lineLimit(1)
                     .fixedSize()
                     .padding(.horizontal, Space.s)
                     .frame(height: 34)
-                    .background(Capsule().fill(Color.white))
+                    .background(Capsule().fill(Color.srInverse))
             }
             .buttonStyle(PressScaleStyle())
             .accessibilityHint("Opens the Photos app")
         } else {
             ProgressView()
-                .tint(Color.white)
+                .tint(Color.srText)
                 .padding(.trailing, Space.xs)
                 .accessibilityHidden(true)
         }

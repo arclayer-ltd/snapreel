@@ -196,7 +196,8 @@ struct IntroSlidePage: View {
 }
 
 /// Small pieces of Snapreel's own interface floating beside each intro character: the
-/// recording pill, a folder with a tag, and the places a file can go.
+/// recording pill, a folder with a tag, and the places a file can go. They follow the
+/// appearance, like the screens they come from.
 struct IntroCallout: View {
     let index: Int
 
@@ -233,9 +234,9 @@ struct IntroCallout: View {
                 ForEach(["rectangle.on.rectangle", "video.fill", "waveform"], id: \.self) { symbol in
                     Image(systemName: symbol)
                         .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(Color.srOnDark)
+                        .foregroundStyle(Color.srText)
                         .frame(width: 30, height: 30)
-                        .background(Circle().fill(Color.srInkControl))
+                        .background(Circle().fill(Color.srFill))
                 }
             }
         }
@@ -250,10 +251,10 @@ struct IntroCallout: View {
                 VStack(alignment: .leading, spacing: 1) {
                     Text("Product")
                         .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(Color.srOnDark)
+                        .foregroundStyle(Color.srText)
                     Text("3 recordings")
                         .font(.system(size: 11))
-                        .foregroundStyle(Color.srOnDarkSecondary)
+                        .foregroundStyle(Color.srTextSecondary)
                 }
             }
             HStack(spacing: 4) {
@@ -261,12 +262,12 @@ struct IntroCallout: View {
                 Text("Note at 0:14")
             }
             .font(.system(size: 10, weight: .semibold))
-            .foregroundStyle(Color.srRedGlow)
+            .foregroundStyle(Color.srRedText)
         }
         .padding(10)
-        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Color.srInkRaised))
-        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Color.white.opacity(0.1)))
-        .shadow(color: Color.black.opacity(0.3), radius: 14, y: 6)
+        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Color.srSurface))
+        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Color.srLine))
+        .shadow(color: Color.black.opacity(0.18), radius: 14, y: 6)
     }
 
     private var destinations: some View {
@@ -274,14 +275,14 @@ struct IntroCallout: View {
             ForEach(["dot.radiowaves.left.and.right", "message.fill", "envelope.fill", "photo.on.rectangle"], id: \.self) { symbol in
                 Image(systemName: symbol)
                     .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(Color.white)
+                    .foregroundStyle(symbol == "photo.on.rectangle" ? Color.white : Color.srText)
                     .frame(width: 30, height: 30)
-                    .background(Circle().fill(symbol == "photo.on.rectangle" ? Color.srRed : Color.srInkControl))
+                    .background(Circle().fill(symbol == "photo.on.rectangle" ? Color.srRed : Color.srFill))
             }
         }
         .padding(6)
-        .background(Capsule().fill(Color.srInkRaised))
-        .overlay(Capsule().strokeBorder(Color.white.opacity(0.1)))
-        .shadow(color: Color.black.opacity(0.3), radius: 14, y: 6)
+        .background(Capsule().fill(Color.srSurface))
+        .overlay(Capsule().strokeBorder(Color.srLine))
+        .shadow(color: Color.black.opacity(0.18), radius: 14, y: 6)
     }
 }

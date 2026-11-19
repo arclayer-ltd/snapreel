@@ -60,14 +60,14 @@ struct NoteComposerSheet: View {
         VStack(spacing: Space.s) {
             header
             Rectangle()
-                .fill(Color.white.opacity(0.08))
+                .fill(Color.srStageText.opacity(0.08))
                 .frame(height: 1)
             field
             if isEditing { editActions }
             Spacer(minLength: 0)
         }
         .padding(.top, Space.xs)
-        .background(Color.srInkRaised.ignoresSafeArea())
+        .background(Color.srStageRaised.ignoresSafeArea())
         .onAppear { focused = true }
     }
 
@@ -76,13 +76,13 @@ struct NoteComposerSheet: View {
             VStack(spacing: 2) {
                 Text(isEditing ? "Edit note at \(Format.stamp(time))" : "Note at \(Format.stamp(time))")
                     .font(.srHeadline)
-                    .foregroundStyle(Color.srOnDark)
+                    .foregroundStyle(Color.srStageText)
                 Text(isEditing ? "Saved on this iPhone" : "Playback is paused")
                     .font(.srCaption)
-                    .foregroundStyle(Color.srOnDarkTertiary)
+                    .foregroundStyle(Color.srStageTextTertiary)
             }
             HStack {
-                CircleIconButton(systemName: "xmark", label: "Cancel", tone: .dark, size: 32) {
+                CircleIconButton(systemName: "xmark", label: "Cancel", tone: .stage, size: 32) {
                     onCancel()
                 }
                 Spacer()
@@ -95,7 +95,7 @@ struct NoteComposerSheet: View {
         HStack(alignment: .bottom, spacing: Space.xs) {
             TextField(isEditing ? "Your note" : "What stands out at this moment?", text: $text, axis: .vertical)
                 .font(.srBody)
-                .foregroundStyle(Color.srOnDark)
+                .foregroundStyle(Color.srStageText)
                 .lineLimit(1...5)
                 .focused($focused)
                 .submitLabel(.done)
@@ -109,9 +109,9 @@ struct NoteComposerSheet: View {
                 } label: {
                     Image(systemName: "arrow.up")
                         .font(.system(size: 16, weight: .bold))
-                        .foregroundStyle(Color.white)
+                        .foregroundStyle(canSave ? Color.white : Color.srStageTextTertiary)
                         .frame(width: 34, height: 34)
-                        .background(Circle().fill(canSave ? Color.srRed : Color.srInkLine))
+                        .background(Circle().fill(canSave ? Color.srRed : Color.srStageLine))
                 }
                 .buttonStyle(PressScaleStyle())
                 .disabled(!canSave)
@@ -121,7 +121,7 @@ struct NoteComposerSheet: View {
         .padding(.leading, Space.m)
         .padding(.trailing, isEditing ? Space.m : Space.xs)
         .padding(.vertical, Space.xs)
-        .background(RoundedRectangle(cornerRadius: Radius.l, style: .continuous).fill(Color.srInkControl))
+        .background(RoundedRectangle(cornerRadius: Radius.l, style: .continuous).fill(Color.srStageControl))
         .padding(.horizontal, Space.gutter)
     }
 
@@ -133,7 +133,7 @@ struct NoteComposerSheet: View {
             } label: {
                 Label("Delete note", systemImage: "trash")
                     .font(.srSubheadlineStrong)
-                    .foregroundStyle(Color.srRedGlow)
+                    .foregroundStyle(Color.srStageRed)
             }
             .buttonStyle(.plain)
             Spacer()

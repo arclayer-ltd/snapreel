@@ -165,7 +165,9 @@ struct PlayerVideoArea: View {
 // MARK: - Controls
 
 /// Top bar, centre transport and scrubber. `.minimal` keeps only the way out (minimise or
-/// leave full screen), for state messages and picture in picture.
+/// leave full screen), for state messages and picture in picture. There's no picture under
+/// `.minimal`, so it has no scrim and its button follows the appearance; `.full` sits on the
+/// video, so its scrims and glass buttons stay dark.
 struct PlayerControlsOverlay: View {
     enum Mode { case full, minimal }
 
@@ -196,9 +198,11 @@ struct PlayerControlsOverlay: View {
 
     private var scrims: some View {
         VStack(spacing: 0) {
-            LinearGradient(colors: [Color.black.opacity(0.55), Color.black.opacity(0)],
-                           startPoint: .top, endPoint: .bottom)
-                .frame(height: 96)
+            if mode == .full {
+                LinearGradient(colors: [Color.black.opacity(0.55), Color.black.opacity(0)],
+                               startPoint: .top, endPoint: .bottom)
+                    .frame(height: 96)
+            }
             Spacer(minLength: 0)
             if mode == .full {
                 LinearGradient(colors: [Color.black.opacity(0), Color.black.opacity(0.6)],
@@ -214,7 +218,7 @@ struct PlayerControlsOverlay: View {
         HStack(spacing: Space.xs) {
             CircleIconButton(systemName: isFullscreen ? "arrow.down.right.and.arrow.up.left" : "chevron.down",
                              label: isFullscreen ? "Leave full screen" : "Minimise player",
-                             tone: .glass, size: 38) {
+                             tone: mode == .full ? .glass : .stage, size: 38) {
                 if isFullscreen { actions.toggleFullscreen() } else { actions.minimise() }
             }
             if mode == .full { speedPill }
@@ -487,21 +491,21 @@ struct SpeedMenu: View {
         VStack(alignment: .leading, spacing: 0) {
             Text("Playback speed")
                 .font(.srCaption)
-                .foregroundStyle(Color.srOnDarkTertiary)
+                .foregroundStyle(Color.srStageTextTertiary)
                 .padding(.horizontal, Space.m)
                 .padding(.top, Space.s)
                 .padding(.bottom, Space.xxs)
             ForEach(PlaybackSpeed.rates, id: \.self) { rate in
                 row(rate)
                 if rate != PlaybackSpeed.rates.last {
-                    Rectangle().fill(Color.srInkLine).frame(height: 0.5).padding(.leading, Space.m)
+                    Rectangle().fill(Color.srStageLine).frame(height: 0.5).padding(.leading, Space.m)
                 }
             }
         }
         .padding(.bottom, Space.xxs)
         .frame(width: 216)
-        .background(RoundedRectangle(cornerRadius: Radius.m, style: .continuous).fill(Color.srInkRaised))
-        .overlay(RoundedRectangle(cornerRadius: Radius.m, style: .continuous).strokeBorder(Color.srInkLine, lineWidth: 0.5))
+        .background(RoundedRectangle(cornerRadius: Radius.m, style: .continuous).fill(Color.srStageRaised))
+        .overlay(RoundedRectangle(cornerRadius: Radius.m, style: .continuous).strokeBorder(Color.srStageLine, lineWidth: 0.5))
         .shadow(color: Color.black.opacity(0.45), radius: 20, y: 8)
     }
 
@@ -513,7 +517,7 @@ struct SpeedMenu: View {
             HStack {
                 Text(PlaybackSpeed.label(rate))
                     .font(selected ? Font.srHeadline : Font.srBody)
-                    .foregroundStyle(Color.srOnDark)
+                    .foregroundStyle(Color.srStageText)
                 Spacer()
                 if selected {
                     Image(systemName: "checkmark")
@@ -643,17 +647,17 @@ struct PictureInPicturePlaceholder: View {
 
     var body: some View {
         ZStack {
-            Color.srInkDeep
+            Color.srStageDeep
             VStack(spacing: Space.s) {
                 Image(systemName: "pip")
                     .font(.system(size: 40, weight: .light))
-                    .foregroundStyle(Color.srOnDarkTertiary)
+                    .foregroundStyle(Color.srStageTextTertiary)
                 Text("Playing in picture in picture")
                     .font(.srSubheadlineStrong)
-                    .foregroundStyle(Color.srOnDark)
+                    .foregroundStyle(Color.srStageText)
                 Text("Carry on with anything else. The video stays on top.")
                     .font(.srFootnote)
-                    .foregroundStyle(Color.srOnDarkSecondary)
+                    .foregroundStyle(Color.srStageTextSecondary)
                     .multilineTextAlignment(.center)
                 Button {
                     onRestore()
@@ -680,17 +684,17 @@ struct PlayerStateMessage: View {
 
     var body: some View {
         ZStack {
-            Color.srInkDeep
+            Color.srStageDeep
             VStack(spacing: Space.xs) {
                 Image(systemName: systemImage)
                     .font(.system(size: 26, weight: .semibold))
-                    .foregroundStyle(Color.srRedGlow)
+                    .foregroundStyle(Color.srStageRed)
                 Text(title)
                     .font(.srHeadline)
-                    .foregroundStyle(Color.srOnDark)
+                    .foregroundStyle(Color.srStageText)
                 Text(message)
                     .font(.srFootnote)
-                    .foregroundStyle(Color.srOnDarkSecondary)
+                    .foregroundStyle(Color.srStageTextSecondary)
                     .lineLimit(3)
                 HStack(spacing: Space.s) {
                     if let primaryTitle, let primary {
@@ -717,16 +721,16 @@ struct PlayerSavingMessage: View {
 
     var body: some View {
         ZStack {
-            Color.srInkDeep
+            Color.srStageDeep
             VStack(spacing: Space.s) {
-                ProgressRing(progress: progress, lineWidth: 4)
+                ProgressRing(progress: progress, lineWidth: 4, track: Color.srStageText.opacity(0.25))
                     .frame(width: 44, height: 44)
                 Text("Still saving")
                     .font(.srHeadline)
-                    .foregroundStyle(Color.srOnDark)
+                    .foregroundStyle(Color.srStageText)
                 Text("It plays here as soon as it's in your library. You can close the player meanwhile.")
                     .font(.srFootnote)
-                    .foregroundStyle(Color.srOnDarkSecondary)
+                    .foregroundStyle(Color.srStageTextSecondary)
                     .multilineTextAlignment(.center)
             }
             .padding(.horizontal, Space.xxl)

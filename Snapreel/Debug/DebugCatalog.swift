@@ -173,7 +173,7 @@ struct KitGallery: View {
                     .srCard()
                 PillSwitch(options: RecordMode.allCases, selection: $mode, title: { $0.label })
                     .padding()
-                    .background(Color.srInk)
+                    .background(Color.srStage)
                 ToastView(message: ToastMessage(text: "Saved to Photos"))
             }
             .padding(Space.gutter)

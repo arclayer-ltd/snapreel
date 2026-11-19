@@ -59,14 +59,13 @@ struct RecordingReviewView: View {
         .padding(.top, Space.xs)
         .padding(.bottom, Space.xs)
         .sheet(isPresented: $editsTitle) {
-            TitleEditorSheet(initialTitle: video.needsTitle ? "" : video.title, heading: "Title", onDark: true,
+            TitleEditorSheet(initialTitle: video.needsTitle ? "" : video.title, heading: "Title", onStage: true,
                              onSave: { title in
                                  model.renameRecording(video.id, to: title)
                                  editsTitle = false
                              },
                              onCancel: { editsTitle = false })
                 .presentationDetents([.height(220)])
-                .preferredColorScheme(.dark)
         }
         .confirmationDialog("Delete this recording?", isPresented: $confirmsDelete, titleVisibility: .visible) {
             Button("Delete recording", role: .destructive) { model.deleteRecording(video.id) }
@@ -78,17 +77,17 @@ struct RecordingReviewView: View {
 
     private func actions(_ video: Video) -> some View {
         HStack(spacing: 0) {
-            ReviewActionButton(systemImage: "trash", title: "Delete", tint: Color.srRedGlow) {
+            ReviewActionButton(systemImage: "trash", title: "Delete", tint: Color.srStageRed) {
                 confirmsDelete = true
             }
-            ReviewActionButton(systemImage: "character.cursor.ibeam", title: "Title", tint: .white) {
+            ReviewActionButton(systemImage: "character.cursor.ibeam", title: "Title", tint: Color.srStageText) {
                 editsTitle = true
             }
-            ReviewActionButton(systemImage: "square.and.arrow.up", title: "Share", tint: .white) {
+            ReviewActionButton(systemImage: "square.and.arrow.up", title: "Share", tint: Color.srStageText) {
                 shareTarget = library.video(video.id)
             }
             if !video.isAudioOnly {
-                ReviewActionButton(systemImage: "square.and.arrow.down", title: "Save to Photos", tint: .white) {
+                ReviewActionButton(systemImage: "square.and.arrow.down", title: "Save to Photos", tint: Color.srStageText) {
                     photosTarget = library.video(video.id)
                 }
             }
@@ -102,15 +101,15 @@ private struct ReviewNoteBanner: View {
     var body: some View {
         HStack(alignment: .top, spacing: Space.xs) {
             Image(systemName: "exclamationmark.circle.fill")
-                .foregroundStyle(Color.srRedGlow)
+                .foregroundStyle(Color.srStageRed)
             Text(text)
                 .font(.srFootnote)
-                .foregroundStyle(.white)
+                .foregroundStyle(Color.srStageText)
                 .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 0)
         }
         .padding(Space.s)
-        .background(RoundedRectangle(cornerRadius: Radius.m, style: .continuous).fill(Color.srInkControl))
+        .background(RoundedRectangle(cornerRadius: Radius.m, style: .continuous).fill(Color.srStageControl))
         .accessibilityElement(children: .combine)
     }
 }
@@ -129,19 +128,19 @@ private struct ReviewTitleBlock: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(video.needsTitle ? "Add a title" : video.title)
                         .font(.srTitle3)
-                        .foregroundStyle(video.needsTitle ? Color.srOnDarkSecondary : Color.white)
+                        .foregroundStyle(video.needsTitle ? Color.srStageTextSecondary : Color.srStageText)
                         .lineLimit(2)
                         .multilineTextAlignment(.leading)
                     Text(details)
                         .font(.srFootnote)
-                        .foregroundStyle(Color.srOnDarkTertiary)
+                        .foregroundStyle(Color.srStageTextTertiary)
                 }
                 Spacer(minLength: Space.xs)
                 Image(systemName: "pencil")
                     .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(Color.srOnDarkSecondary)
+                    .foregroundStyle(Color.srStageTextSecondary)
                     .frame(width: 34, height: 34)
-                    .background(Circle().fill(Color.srInkControl))
+                    .background(Circle().fill(Color.srStageControl))
             }
         }
         .buttonStyle(.plain)
@@ -172,10 +171,10 @@ private struct ReviewActionButton: View {
                     .font(.system(size: 19, weight: .semibold))
                     .foregroundStyle(tint)
                     .frame(width: 52, height: 52)
-                    .background(Circle().fill(Color.srInkControl))
+                    .background(Circle().fill(Color.srStageControl))
                 Text(title)
                     .font(.srCaption)
-                    .foregroundStyle(Color.srOnDarkSecondary)
+                    .foregroundStyle(Color.srStageTextSecondary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.75)
             }

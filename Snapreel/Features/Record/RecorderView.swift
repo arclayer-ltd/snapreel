@@ -65,7 +65,7 @@ private struct RecorderScreen: View {
 
     var body: some View {
         ZStack {
-            Color.srInk.ignoresSafeArea()
+            Color.srStage.ignoresSafeArea()
             content
         }
         .offset(y: swipeOffset)
@@ -77,7 +77,6 @@ private struct RecorderScreen: View {
                 withAnimation(SwipeDismiss.springBack) { swipeOffset = 0 }
             }
         }
-        .preferredColorScheme(.dark)
         .modifier(RecorderPresentations(pickedItem: $pickedItem))
         .modifier(RecorderEvents())
         .toast($model.toast, bottomInset: 150)
@@ -310,15 +309,21 @@ private struct RecorderCaptureLayout: View {
     }
 }
 
-/// Close on the left, the timer in the middle, mode tools on the right.
+/// Close on the left, the timer in the middle, mode tools on the right. Over the live camera
+/// the buttons are glass (dark, on the picture); everywhere else they follow the appearance.
 private struct RecorderTopBar: View {
     @EnvironmentObject private var model: RecorderModel
     let close: @MainActor () -> Void
 
+    /// The camera picture is behind the bar (not the chooser, a primer or another mode).
+    private var tone: CircleIconButton.Tone {
+        model.mode == .camera && model.primer == .none && !model.isChoosingMode ? .glass : .stage
+    }
+
     var body: some View {
         ZStack {
             HStack(spacing: Space.xs) {
-                CircleIconButton(systemName: "xmark", label: "Close recorder", tone: .glass, size: 40) { close() }
+                CircleIconButton(systemName: "xmark", label: "Close recorder", tone: tone, size: 40) { close() }
                 Spacer()
                 tools
             }
@@ -349,33 +354,33 @@ private struct RecorderTopBar: View {
             if model.primer == .none && !capturing {
                 CircleIconButton(systemName: model.recordsCameraSound ? "mic.fill" : "mic.slash.fill",
                                  label: model.recordsCameraSound ? "Microphone on" : "Microphone off",
-                                 tone: .glass, size: 40) { model.toggleMicrophone() }
+                                 tone: tone, size: 40) { model.toggleMicrophone() }
             }
             if !capturing {
-                CircleIconButton(systemName: "square.and.pencil", label: "Speaker notes", tone: .glass, size: 40) {
+                CircleIconButton(systemName: "square.and.pencil", label: "Speaker notes", tone: tone, size: 40) {
                     model.sheet = .notes
                 }
-                CircleIconButton(systemName: "gearshape", label: "Recording settings", tone: .glass, size: 40) {
+                CircleIconButton(systemName: "gearshape", label: "Recording settings", tone: tone, size: 40) {
                     model.sheet = .settings
                 }
             }
         case .audio:
             if !capturing {
-                CircleIconButton(systemName: "square.and.pencil", label: "Speaker notes", tone: .glass, size: 40) {
+                CircleIconButton(systemName: "square.and.pencil", label: "Speaker notes", tone: tone, size: 40) {
                     model.sheet = .notes
                 }
-                CircleIconButton(systemName: "gearshape", label: "Recording settings", tone: .glass, size: 40) {
+                CircleIconButton(systemName: "gearshape", label: "Recording settings", tone: tone, size: 40) {
                     model.sheet = .settings
                 }
             }
         case .screen:
             if model.screenStep == .broadcast {
-                CircleIconButton(systemName: "questionmark", label: "How screen recording works", tone: .glass, size: 40) {
+                CircleIconButton(systemName: "questionmark", label: "How screen recording works", tone: tone, size: 40) {
                     model.showTutorial()
                 }
             }
             if model.screenStep != .inProgress {
-                CircleIconButton(systemName: "gearshape", label: "Recording settings", tone: .glass, size: 40) {
+                CircleIconButton(systemName: "gearshape", label: "Recording settings", tone: tone, size: 40) {
                     model.sheet = .settings
                 }
             }
@@ -475,7 +480,7 @@ private struct RecorderControlsRow: View {
             Color.clear.frame(width: 76, height: 76)
         } else if model.stage == .finishing {
             ProgressView()
-                .tint(.white)
+                .tint(Color.srStageText)
                 .frame(width: 76, height: 76)
                 .accessibilityLabel("Finishing the recording")
         } else {
@@ -507,8 +512,8 @@ private struct RecorderControlsRow: View {
                 ZStack {
                     RecordButtonShape(isRecording: true, diameter: 76)
                     if model.isStoppingBroadcast {
-                        Circle().fill(Color.srInk.opacity(0.6))
-                        ProgressView().tint(.white)
+                        Circle().fill(Color.srStage.opacity(0.6))
+                        ProgressView().tint(Color.srStageText)
                     }
                 }
                 .frame(width: 76, height: 76)
@@ -551,14 +556,14 @@ private struct RecorderSideButton: View {
                 Image(systemName: systemName)
                     .font(.system(size: 18, weight: .semibold))
                     .frame(width: 44, height: 44)
-                    .background(Circle().fill(Color.srInkControl))
+                    .background(Circle().fill(Color.srStageControl))
                 Text(title)
                     .font(.srCaption)
-                    .foregroundStyle(Color.srOnDarkSecondary)
+                    .foregroundStyle(Color.srStageTextSecondary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
             }
-            .foregroundStyle(.white)
+            .foregroundStyle(Color.srStageText)
         }
         .buttonStyle(PressScaleStyle())
         .accessibilityElement(children: .ignore)
@@ -576,7 +581,7 @@ private struct RecorderModeRow: View {
             if model.stage.isCapturing || model.stage == .finishing || isScreenRecording {
                 Text(statusText)
                     .font(.srSubheadlineStrong)
-                    .foregroundStyle(Color.srOnDarkSecondary)
+                    .foregroundStyle(Color.srStageTextSecondary)
                     .transition(.opacity)
             } else {
                 PillSwitch(options: RecordMode.allCases, selection: modeBinding, title: { $0.label })

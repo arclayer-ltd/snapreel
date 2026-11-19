@@ -18,7 +18,7 @@ struct RecordingSavingView: View {
                 content(video)
             } else {
                 EmptyStateView(systemImage: "questionmark.folder", title: "This recording is gone",
-                               message: "It may have been deleted.", onDark: true)
+                               message: "It may have been deleted.", onStage: true)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -62,7 +62,7 @@ struct RecordingSavingView: View {
             stateIcon("checkmark.circle.fill")
             Text("Saved to your library")
                 .font(.srTitle)
-                .foregroundStyle(.white)
+                .foregroundStyle(Color.srStageText)
             Spacer()
             Button("Continue") { model.savingFinished(videoID) }
                 .buttonStyle(.srPrimary)
@@ -77,11 +77,11 @@ struct RecordingSavingView: View {
         VStack(spacing: Space.l) {
             Spacer()
             ZStack {
-                ProgressRing(progress: progress, lineWidth: 8)
+                ProgressRing(progress: progress, lineWidth: 8, track: Color.srStageText.opacity(0.25))
                 Text("\(Int((progress * 100).rounded()))%")
                     .font(.system(.title2, design: .rounded, weight: .bold))
                     .monospacedDigit()
-                    .foregroundStyle(.white)
+                    .foregroundStyle(Color.srStageText)
             }
             .frame(width: 128, height: 128)
             .accessibilityElement(children: .ignore)
@@ -89,10 +89,10 @@ struct RecordingSavingView: View {
             VStack(spacing: Space.xs) {
                 Text("Saving your recording")
                     .font(.srTitle)
-                    .foregroundStyle(.white)
+                    .foregroundStyle(Color.srStageText)
                 Text("This only takes a moment. If you close the recorder, saving carries on, and picks up next time if Snapreel is closed.")
                     .font(.srCallout)
-                    .foregroundStyle(Color.srOnDarkSecondary)
+                    .foregroundStyle(Color.srStageTextSecondary)
             }
             .multilineTextAlignment(.center)
             .fixedSize(horizontal: false, vertical: true)
@@ -112,10 +112,10 @@ struct RecordingSavingView: View {
             VStack(spacing: Space.xs) {
                 Text("Couldn't save this recording")
                     .font(.srTitle)
-                    .foregroundStyle(.white)
+                    .foregroundStyle(Color.srStageText)
                 Text(reason)
                     .font(.srCallout)
-                    .foregroundStyle(Color.srOnDarkSecondary)
+                    .foregroundStyle(Color.srStageTextSecondary)
             }
             .multilineTextAlignment(.center)
             .fixedSize(horizontal: false, vertical: true)
@@ -140,15 +140,15 @@ struct RecordingSavingView: View {
             VStack(spacing: Space.xs) {
                 Text("Your iPhone is full")
                     .font(.srTitle)
-                    .foregroundStyle(.white)
+                    .foregroundStyle(Color.srStageText)
                 Text("Snapreel needs about \(Format.bytes(needed)) free to save this recording. It's kept safe until then. Free up some space, then try again.")
                     .font(.srCallout)
-                    .foregroundStyle(Color.srOnDarkSecondary)
+                    .foregroundStyle(Color.srStageTextSecondary)
                 // Shown when it explains the problem (always, on a phone that is really full).
                 if DiskSpace.available < needed {
                     Text("Free now: \(Format.bytes(DiskSpace.available))")
                         .font(.srFootnote)
-                        .foregroundStyle(Color.srOnDarkTertiary)
+                        .foregroundStyle(Color.srStageTextTertiary)
                         .padding(.top, Space.xxs)
                 }
             }
@@ -174,7 +174,7 @@ struct RecordingSavingView: View {
             .font(.system(size: 30, weight: .semibold))
             .foregroundStyle(Color.srRed)
             .frame(width: 80, height: 80)
-            .background(Circle().fill(Color.srInkControl))
+            .background(Circle().fill(Color.srStageControl))
             .accessibilityHidden(true)
     }
 }
@@ -190,20 +190,20 @@ struct RecorderImportProgressView: View {
         VStack(spacing: Space.l) {
             Spacer()
             ZStack {
-                ProgressRing(progress: progress, lineWidth: 8)
+                ProgressRing(progress: progress, lineWidth: 8, track: Color.srStageText.opacity(0.25))
                 Image(systemName: "photo.on.rectangle")
                     .font(.system(size: 30, weight: .semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(Color.srStageText)
             }
             .frame(width: 128, height: 128)
             .accessibilityHidden(true)
             VStack(spacing: Space.xs) {
                 Text("Copying your video")
                     .font(.srTitle)
-                    .foregroundStyle(.white)
+                    .foregroundStyle(Color.srStageText)
                 Text("\(Int((progress * 100).rounded()))% · The original stays in Photos.")
                     .font(.srCallout)
-                    .foregroundStyle(Color.srOnDarkSecondary)
+                    .foregroundStyle(Color.srStageTextSecondary)
                     .monospacedDigit()
             }
             .multilineTextAlignment(.center)

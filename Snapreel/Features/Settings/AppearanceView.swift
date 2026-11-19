@@ -7,7 +7,7 @@ struct AppearanceView: View {
 
     var body: some View {
         ScrollView {
-            SettingsGroup(footnote: "The recorder and the player stay dark in every mode, so what you film and watch is easy to see.") {
+            SettingsGroup(footnote: "Every screen follows this, the recorder and the player too. Only the video and the camera picture stay dark, like in the Camera and Photos apps.") {
                 ForEach(Array(AppearanceMode.allCases.enumerated()), id: \.element) { index, mode in
                     if index > 0 { SettingsDivider() }
                     row(mode)

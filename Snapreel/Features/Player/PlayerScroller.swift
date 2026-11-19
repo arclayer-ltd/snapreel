@@ -63,7 +63,7 @@ final class PlayerScrollerController: UIViewController, UIScrollViewDelegate {
         scrollView.contentInsetAdjustmentBehavior = .never
         scrollView.alwaysBounceVertical = true
         scrollView.showsHorizontalScrollIndicator = false
-        scrollView.indicatorStyle = .white
+        scrollView.indicatorStyle = .default
         scrollView.delegate = self
         view.addSubview(scrollView)
 
@@ -173,7 +173,6 @@ struct PlayerScrollerRoot: View {
             .onPreferenceChange(PlayerScrollerHeightKey.self) { height in relay.onHeight?(height) }
             .onPreferenceChange(PlayerPanelTopKey.self) { top in relay.onPanelTop?(top) }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-            .environment(\.colorScheme, .dark)
     }
 }
 

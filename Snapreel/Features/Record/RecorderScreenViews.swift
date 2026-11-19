@@ -9,7 +9,7 @@ struct RecorderScreenStage: View {
 
     var body: some View {
         ZStack {
-            Color.srInkRaised
+            Color.srStageRaised
             switch model.screenStep {
             case .tutorial: ScreenTutorialView()
             case .broadcast: BroadcastStepView()
@@ -48,7 +48,7 @@ struct ScreenTutorialView: View {
                 Spacer()
                 Text("Screen recording · \(model.tutorialPage + 1) of \(tutorialCards.count)")
                     .font(.srFootnote)
-                    .foregroundStyle(Color.srOnDarkTertiary)
+                    .foregroundStyle(Color.srStageTextTertiary)
                 Spacer()
             }
             .padding(.top, 70)
@@ -74,7 +74,7 @@ struct ScreenTutorialView: View {
                 if !isLastCard {
                     Button("Skip") { model.finishTutorial() }
                         .font(.srSubheadlineStrong)
-                        .foregroundStyle(Color.srOnDarkSecondary)
+                        .foregroundStyle(Color.srStageTextSecondary)
                         .padding(.trailing, Space.m)
                 }
                 Button {
@@ -91,7 +91,7 @@ struct ScreenTutorialView: View {
                             .font(.system(size: 13, weight: .bold))
                     }
                     .font(.srSubheadlineStrong)
-                    .foregroundStyle(Color.srOnDark)
+                    .foregroundStyle(Color.srStageText)
                 }
             }
             .frame(height: 36)
@@ -136,10 +136,10 @@ struct ScreenTutorialView: View {
             VStack(spacing: Space.xs) {
                 Text(card.title)
                     .font(.srTitle)
-                    .foregroundStyle(.white)
+                    .foregroundStyle(Color.srStageText)
                 Text(card.message)
                     .font(.srCallout)
-                    .foregroundStyle(Color.srOnDarkSecondary)
+                    .foregroundStyle(Color.srStageTextSecondary)
             }
             .multilineTextAlignment(.center)
             .fixedSize(horizontal: false, vertical: true)
@@ -153,7 +153,7 @@ struct ScreenTutorialView: View {
         HStack(spacing: 8) {
             ForEach(tutorialCards) { card in
                 Capsule()
-                    .fill(card.id == model.tutorialPage ? Color.srRed : Color.white.opacity(0.25))
+                    .fill(card.id == model.tutorialPage ? Color.srRed : Color.srStageText.opacity(0.25))
                     .frame(width: card.id == model.tutorialPage ? 20 : 7, height: 7)
             }
         }
@@ -169,9 +169,9 @@ private struct TutorialIllustration: View {
     var body: some View {
         ZStack(alignment: .top) {
             RoundedRectangle(cornerRadius: 34, style: .continuous)
-                .fill(Color.srInk)
+                .fill(Color.srStage)
                 .overlay(RoundedRectangle(cornerRadius: 34, style: .continuous)
-                    .strokeBorder(Color.white.opacity(0.16), lineWidth: 3))
+                    .strokeBorder(Color.srStageText.opacity(0.16), lineWidth: 3))
                 .frame(width: 150, height: 230)
             switch step {
             case 0: StartSketch()
@@ -192,32 +192,32 @@ private struct StartSketch: View {
         VStack(spacing: 10) {
             Image(systemName: "record.circle")
                 .font(.system(size: 26, weight: .regular))
-                .foregroundStyle(Color.white.opacity(0.85))
+                .foregroundStyle(Color.srStageText.opacity(0.85))
             HStack(spacing: 6) {
                 Image("BrandMark").resizable().scaledToFit().frame(width: 18, height: 18)
                     .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
-                Text("Snapreel").font(.system(size: 12, weight: .semibold)).foregroundStyle(.white)
+                Text("Snapreel").font(.system(size: 12, weight: .semibold)).foregroundStyle(Color.srStageText)
                     .lineLimit(1).fixedSize()
                 Spacer(minLength: 2)
                 Image(systemName: "checkmark").font(.system(size: 11, weight: .bold)).foregroundStyle(Color.srRed)
             }
             .padding(.horizontal, 8)
             .frame(height: 32)
-            .background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(Color.white.opacity(0.08)))
+            .background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(Color.srStageText.opacity(0.08)))
             Capsule().fill(Color.srRed).frame(height: 26)
                 .overlay(Capsule().fill(Color.white.opacity(0.9)).frame(width: 48, height: 5))
             HStack {
                 ZStack {
-                    Circle().fill(Color.white.opacity(0.14)).frame(width: 30, height: 30)
-                    Image(systemName: "mic.fill").font(.system(size: 13, weight: .semibold)).foregroundStyle(.white)
+                    Circle().fill(Color.srStageText.opacity(0.14)).frame(width: 30, height: 30)
+                    Image(systemName: "mic.fill").font(.system(size: 13, weight: .semibold)).foregroundStyle(Color.srStageText)
                 }
-                .overlay(Circle().strokeBorder(Color.srRedGlow, lineWidth: 2).frame(width: 38, height: 38))
+                .overlay(Circle().strokeBorder(Color.srStageRed, lineWidth: 2).frame(width: 38, height: 38))
                 Spacer()
             }
         }
         .padding(10)
         .frame(width: 140)
-        .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color.srInkControl))
+        .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color.srStageControl))
         .padding(.top, 36)
     }
 }
@@ -236,22 +236,22 @@ private struct StopSketch: View {
                 .frame(height: 18)
                 .background(Capsule().fill(Color.srRed))
                 .overlay(
-                    Circle().strokeBorder(Color.srRedGlow.opacity(0.7), lineWidth: 2)
+                    Circle().strokeBorder(Color.srStageRed.opacity(0.7), lineWidth: 2)
                         .frame(width: 46, height: 46)
                 )
                 Spacer()
-                RoundedRectangle(cornerRadius: 2).fill(Color.white.opacity(0.5)).frame(width: 18, height: 8)
+                RoundedRectangle(cornerRadius: 2).fill(Color.srStageText.opacity(0.5)).frame(width: 18, height: 8)
             }
             .padding(.horizontal, 14)
             .padding(.top, 14)
             VStack(alignment: .leading, spacing: 6) {
-                RoundedRectangle(cornerRadius: 4).fill(Color.white.opacity(0.18)).frame(width: 90, height: 8)
-                RoundedRectangle(cornerRadius: 4).fill(Color.white.opacity(0.12)).frame(width: 60, height: 8)
+                RoundedRectangle(cornerRadius: 4).fill(Color.srStageText.opacity(0.18)).frame(width: 90, height: 8)
+                RoundedRectangle(cornerRadius: 4).fill(Color.srStageText.opacity(0.12)).frame(width: 60, height: 8)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 18)
             ZStack {
-                Circle().strokeBorder(Color.white.opacity(0.85), lineWidth: 3).frame(width: 46, height: 46)
+                Circle().strokeBorder(Color.srStageText.opacity(0.85), lineWidth: 3).frame(width: 46, height: 46)
                 RoundedRectangle(cornerRadius: 4).fill(Color.srRed).frame(width: 18, height: 18)
             }
         }
@@ -267,25 +267,25 @@ private struct ShareSketch: View {
                 Image("BrandMark").resizable().scaledToFit().frame(width: 22, height: 22)
                     .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
                 VStack(alignment: .leading, spacing: 4) {
-                    RoundedRectangle(cornerRadius: 3).fill(Color.white.opacity(0.85)).frame(width: 80, height: 6)
-                    RoundedRectangle(cornerRadius: 3).fill(Color.white.opacity(0.4)).frame(width: 110, height: 6)
+                    RoundedRectangle(cornerRadius: 3).fill(Color.srStageText.opacity(0.85)).frame(width: 80, height: 6)
+                    RoundedRectangle(cornerRadius: 3).fill(Color.srStageText.opacity(0.4)).frame(width: 110, height: 6)
                 }
                 Spacer(minLength: 0)
             }
             .padding(10)
             .frame(width: 196)
-            .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Color.srInkControl))
-            .shadow(color: .black.opacity(0.4), radius: 10, y: 4)
+            .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Color.srStageControl))
+            .shadow(color: .black.opacity(0.25), radius: 10, y: 4)
             .padding(.top, 22)
             HStack(spacing: 6) {
                 Image(systemName: "character.cursor.ibeam").font(.system(size: 11, weight: .semibold))
-                RoundedRectangle(cornerRadius: 3).fill(Color.white.opacity(0.5)).frame(width: 64, height: 6)
+                RoundedRectangle(cornerRadius: 3).fill(Color.srStageText.opacity(0.5)).frame(width: 64, height: 6)
                 Spacer(minLength: 0)
             }
-            .foregroundStyle(.white)
+            .foregroundStyle(Color.srStageText)
             .padding(.horizontal, 10)
             .frame(width: 124, height: 28)
-            .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color.white.opacity(0.1)))
+            .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color.srStageText.opacity(0.1)))
             ZStack {
                 Circle().fill(Color.srRed).frame(width: 42, height: 42)
                 Image(systemName: "square.and.arrow.up").font(.system(size: 17, weight: .semibold)).foregroundStyle(.white)
@@ -311,10 +311,10 @@ struct BroadcastStepView: View {
                     .padding(.bottom, Space.xxs)
                 Text("Record your screen")
                     .font(.srDisplay)
-                    .foregroundStyle(.white)
+                    .foregroundStyle(Color.srStageText)
                 Text("Snapreel records everything on this iPhone's screen until you stop, in any app.")
                     .font(.srCallout)
-                    .foregroundStyle(Color.srOnDarkSecondary)
+                    .foregroundStyle(Color.srStageTextSecondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
             VStack(alignment: .leading, spacing: Space.m) {
@@ -341,7 +341,7 @@ struct BroadcastStepView: View {
                 Spacer()
                 Label("Tap record below to start", systemImage: "arrow.down")
                     .font(.srFootnote)
-                    .foregroundStyle(Color.srOnDarkTertiary)
+                    .foregroundStyle(Color.srStageTextTertiary)
                 Spacer()
             }
             .padding(.bottom, Space.m)
@@ -359,12 +359,12 @@ private struct BroadcastPoint: View {
         HStack(alignment: .top, spacing: Space.s) {
             Image(systemName: systemImage)
                 .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(Color.srRedGlow)
+                .foregroundStyle(Color.srStageRed)
                 .frame(width: 34, height: 34)
-                .background(Circle().fill(Color.srInkControl))
+                .background(Circle().fill(Color.srStageControl))
             VStack(alignment: .leading, spacing: 2) {
-                Text(title).font(.srSubheadlineStrong).foregroundStyle(.white)
-                Text(message).font(.srFootnote).foregroundStyle(Color.srOnDarkSecondary)
+                Text(title).font(.srSubheadlineStrong).foregroundStyle(Color.srStageText)
+                Text(message).font(.srFootnote).foregroundStyle(Color.srStageTextSecondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
@@ -385,15 +385,15 @@ struct ScreenUnavailableView: View {
                 .font(.system(size: 28, weight: .semibold))
                 .foregroundStyle(Color.srRed)
                 .frame(width: 72, height: 72)
-                .background(Circle().fill(Color.srInkControl))
+                .background(Circle().fill(Color.srStageControl))
                 .accessibilityHidden(true)
             VStack(spacing: Space.xs) {
                 Text(model.screenFailure == nil ? "Screen recording can't start right now" : "Screen recording stopped")
                     .font(.srTitle3)
-                    .foregroundStyle(.white)
+                    .foregroundStyle(Color.srStageText)
                 Text(model.screenFailure ?? "iPhone doesn't record the screen while it's showing on another display, using AirPlay or CarPlay, or when Screen Time doesn't allow it.")
                     .font(.srSubheadline)
-                    .foregroundStyle(Color.srOnDarkSecondary)
+                    .foregroundStyle(Color.srStageTextSecondary)
             }
             .multilineTextAlignment(.center)
             .fixedSize(horizontal: false, vertical: true)
@@ -405,7 +405,7 @@ struct ScreenUnavailableView: View {
                     fix("hourglass", "In Settings › Screen Time › Content & Privacy Restrictions, allow Screen Recording.")
                 }
                 .padding(Space.m)
-                .background(RoundedRectangle(cornerRadius: Radius.l, style: .continuous).fill(Color.srInkControl.opacity(0.6)))
+                .background(RoundedRectangle(cornerRadius: Radius.l, style: .continuous).fill(Color.srStageGroup))
                 .padding(.horizontal, Space.l)
             }
             Button("Try again") { model.dismissScreenFailure() }
@@ -418,11 +418,11 @@ struct ScreenUnavailableView: View {
         HStack(alignment: .top, spacing: Space.s) {
             Image(systemName: systemImage)
                 .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(Color.srRedGlow)
+                .foregroundStyle(Color.srStageRed)
                 .frame(width: 22)
             Text(text)
                 .font(.srFootnote)
-                .foregroundStyle(Color.srOnDarkSecondary)
+                .foregroundStyle(Color.srStageTextSecondary)
                 .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 0)
         }
@@ -447,10 +447,10 @@ struct ScreenRecordingProgressView: View {
             VStack(spacing: Space.xs) {
                 Text(model.isStoppingBroadcast ? "Stopping…" : "Snapreel is recording your screen")
                     .font(.srTitle)
-                    .foregroundStyle(.white)
+                    .foregroundStyle(Color.srStageText)
                 Text(guidance)
                     .font(.srCallout)
-                    .foregroundStyle(Color.srOnDarkSecondary)
+                    .foregroundStyle(Color.srStageTextSecondary)
             }
             .multilineTextAlignment(.center)
             .fixedSize(horizontal: false, vertical: true)
@@ -483,16 +483,16 @@ struct ScreenRecordingProgressView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text("On your Lock Screen")
                     .font(.srSubheadlineStrong)
-                    .foregroundStyle(.white)
+                    .foregroundStyle(Color.srStageText)
                 Text("Snapreel keeps the timer there, and in the Dynamic Island on newer iPhones. Tap it to come back and stop.")
                     .font(.srFootnote)
-                    .foregroundStyle(Color.srOnDarkSecondary)
+                    .foregroundStyle(Color.srStageTextSecondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: 0)
         }
         .padding(Space.s)
-        .background(RoundedRectangle(cornerRadius: Radius.l, style: .continuous).fill(Color.srInkControl))
+        .background(RoundedRectangle(cornerRadius: Radius.l, style: .continuous).fill(Color.srStageControl))
         .padding(.horizontal, Space.l)
         .accessibilityElement(children: .combine)
     }
@@ -508,10 +508,10 @@ struct ScreenRecordingProgressView: View {
                 Text(model.isStoppingBroadcast ? "Stopping…" : "Stop recording")
                     .font(.srHeadline)
             }
-            .foregroundStyle(Color.white)
+            .foregroundStyle(Color.srStageText)
             .padding(.horizontal, Space.l)
             .frame(height: 48)
-            .overlay(Capsule().strokeBorder(Color.white.opacity(0.55), lineWidth: 1.5))
+            .overlay(Capsule().strokeBorder(Color.srStageText.opacity(0.55), lineWidth: 1.5))
             .contentShape(Capsule())
         }
         .buttonStyle(PressScaleStyle())
@@ -540,10 +540,10 @@ struct ScreenRecordingProgressView: View {
             Text(on ? "Microphone on" : "Microphone off. Your voice isn't being recorded.")
         }
         .font(.srFootnote)
-        .foregroundStyle(on ? Color.white : Color.srOnDarkSecondary)
+        .foregroundStyle(on ? Color.srStageText : Color.srStageTextSecondary)
         .padding(.horizontal, Space.s)
         .padding(.vertical, Space.xs)
-        .background(Capsule().fill(Color.srInkControl))
+        .background(Capsule().fill(Color.srStageControl))
         .accessibilityElement(children: .combine)
     }
 }

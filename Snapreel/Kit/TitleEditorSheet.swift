@@ -5,7 +5,8 @@ import SwiftUI
 struct TitleEditorSheet: View {
     let initialTitle: String
     var heading = "Title"
-    var onDark = false
+    /// From the recorder or the player: stage colours, which follow the appearance like the rest.
+    var onStage = false
     let onSave: (String) -> Void
     let onCancel: () -> Void
 
@@ -13,11 +14,11 @@ struct TitleEditorSheet: View {
     @FocusState private var focused: Bool
     private let limit = 120
 
-    init(initialTitle: String, heading: String = "Title", onDark: Bool = false,
+    init(initialTitle: String, heading: String = "Title", onStage: Bool = false,
          onSave: @escaping (String) -> Void, onCancel: @escaping () -> Void) {
         self.initialTitle = initialTitle
         self.heading = heading
-        self.onDark = onDark
+        self.onStage = onStage
         self.onSave = onSave
         self.onCancel = onCancel
         _text = State(initialValue: initialTitle)
@@ -30,11 +31,11 @@ struct TitleEditorSheet: View {
             SheetHeader(title: heading,
                         leadingTitle: "Cancel", leadingAction: onCancel,
                         trailingTitle: "Save", trailingEnabled: !trimmed.isEmpty,
-                        trailingAction: save, onDark: onDark)
+                        trailingAction: save, onStage: onStage)
             HStack(spacing: Space.xs) {
                 TextField("Give it a name people will recognise", text: $text, axis: .vertical)
                     .font(.srBody)
-                    .foregroundStyle(onDark ? Color.srOnDark : Color.srText)
+                    .foregroundStyle(onStage ? Color.srStageText : Color.srText)
                     .lineLimit(1...3)
                     .focused($focused)
                     .submitLabel(.done)
@@ -48,26 +49,26 @@ struct TitleEditorSheet: View {
                         text = ""
                     } label: {
                         Image(systemName: "xmark.circle.fill")
-                            .foregroundStyle(onDark ? Color.srOnDarkTertiary : Color.srTextTertiary)
+                            .foregroundStyle(onStage ? Color.srStageTextTertiary : Color.srTextTertiary)
                     }
                     .accessibilityLabel("Clear title")
                 }
             }
             .padding(Space.m)
             .background(RoundedRectangle(cornerRadius: Radius.m, style: .continuous)
-                .fill(onDark ? Color.srInkControl : Color.srFill))
+                .fill(onStage ? Color.srStageControl : Color.srFill))
             .padding(.horizontal, Space.gutter)
             HStack {
                 Spacer()
                 Text("\(text.count)/\(limit)")
                     .font(.srCaption)
-                    .foregroundStyle(onDark ? Color.srOnDarkTertiary : Color.srTextTertiary)
+                    .foregroundStyle(onStage ? Color.srStageTextTertiary : Color.srTextTertiary)
             }
             .padding(.horizontal, Space.gutter)
             .padding(.top, Space.xs)
             Spacer(minLength: 0)
         }
-        .background((onDark ? Color.srInkRaised : Color.srSurface).ignoresSafeArea())
+        .background((onStage ? Color.srStageRaised : Color.srSurface).ignoresSafeArea())
         .onAppear { focused = true }
     }
 
