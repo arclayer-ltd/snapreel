@@ -122,6 +122,7 @@ crash_count() { find "$REPORTS" -name "Snapreel*" 2>/dev/null | wc -l | tr -d ' 
 TAB=$'\t'
 : > "$OUT/../crashes.txt"
 : > "$OUT/../not-ready.txt"
+: > "$OUT/../debug-trace.txt"
 COUNT=0
 # "|| [ -n "$ID" ]" keeps the last line when the list has no trailing newline.
 is_ready() { [ "$(cat "$CONTAINER/Documents/debug-ready.txt" 2>/dev/null)" = "$1" ]; }
@@ -157,7 +158,7 @@ while IFS="$TAB" read -r ID WAIT TITLE FLAG || [ -n "${ID:-}" ]; do
     CONTAINER=$(xcrun simctl get_app_container "$DEVICE" "$BUNDLE" data 2>/dev/null)
   fi
   BEFORE=$(crash_count)
-  rm -f "$CONTAINER/Documents/debug-ready.txt"
+  rm -f "$CONTAINER/Documents/debug-ready.txt" "$CONTAINER/Documents/debug-trace.txt"
   xcrun simctl launch "$DEVICE" "$BUNDLE" -screen "$ID" > /dev/null 2>&1
   # Wait (up to 30 s) until the app reports the screen has appeared, then the screen's own
   # delay. A launch that never reports ready gets one more try before it is recorded.
@@ -170,6 +171,10 @@ while IFS="$TAB" read -r ID WAIT TITLE FLAG || [ -n "${ID:-}" ]; do
   sleep "$(python3 -c "print(max(1.2, float('$WAIT')))")"
   xcrun simctl io "$DEVICE" screenshot "$OUT/$ID.png" > /dev/null 2>&1
   sleep 0.5
+  # Values the screen logged for CI (DebugTrace in the app), up to the screenshot.
+  if [ -s "$CONTAINER/Documents/debug-trace.txt" ]; then
+    { echo "== $ID"; tail -n 40 "$CONTAINER/Documents/debug-trace.txt"; } >> "$OUT/../debug-trace.txt"
+  fi
   if [ "$(crash_count)" != "$BEFORE" ]; then
     echo "${ID}${TAB}${TITLE}${TAB}crashed" >> "$OUT/../crashes.txt"
   fi

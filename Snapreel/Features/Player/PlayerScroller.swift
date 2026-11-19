@@ -35,10 +35,10 @@ final class PlayerScrollerController: UIViewController, UIScrollViewDelegate {
     private var contentHeight: CGFloat = 0
     private var onPulledDown: (@MainActor () -> Void)?
 
-    // Opening on the panel. Build 25 asked from PlayerScreen 0.3 s after appearing, with the
-    // panel's position passed back through PlayerScreen's state; in CI the page still opened
-    // at the top. Now the controller hears the position itself and keeps the panel at the top
-    // while the content settles, until the person scrolls or `panelHold` has passed.
+    // Opening on the panel: the controller hears where the panel starts (`PlayerPanelTopKey`)
+    // and keeps it at the top while the content settles, until the person scrolls or
+    // `panelHold` has passed. Builds 25 and 26 opened at the top: the key's reduce let the
+    // panel body after the header reset the position to 0 (see `PlayerPanelTopKey`).
     private var holdsPanel: Bool
     private var panelTop: CGFloat = 0
     private var panelHeldSince: Date?
@@ -94,6 +94,9 @@ final class PlayerScrollerController: UIViewController, UIScrollViewDelegate {
     }
 
     private func panelTopChanged(_ top: CGFloat) {
+        #if DEBUG
+        DebugTrace.log("player panel: top \(top), holds \(holdsPanel)")
+        #endif
         guard top.isFinite, abs(top - panelTop) > 0.5 else { return }
         panelTop = top
         if holdsPanel { view.setNeedsLayout() }
@@ -124,6 +127,11 @@ final class PlayerScrollerController: UIViewController, UIScrollViewDelegate {
             holdsPanel = false
             return
         }
+        #if DEBUG
+        DebugTrace.log("player hold: panelTop \(panelTop), contentHeight \(contentHeight), "
+                       + "visible \(scrollView.bounds.height), maxOffset \(maxOffset), "
+                       + "offset \(scrollView.contentOffset.y)")
+        #endif
         guard contentHeight > 0, panelTop > 0, !scrollView.isTracking else { return }
         let y = min(panelTop, maxOffset)
         if abs(scrollView.contentOffset.y - y) > 0.5 { scrollView.contentOffset.y = y }
@@ -176,7 +184,11 @@ private struct PlayerScrollerHeightKey: PreferenceKey {
 
 /// Where the Notes / Transcript switch sits in the scroll content (points from its top), for
 /// "open on the panel".
+///
+/// Siblings without a value of their own still pass the default (0) to `reduce`, so it must
+/// keep the largest, not the last: with `value = nextValue()` (builds 25 and 26) the panel body
+/// after the header reset the position to 0 and the player never moved.
 struct PlayerPanelTopKey: PreferenceKey {
     static let defaultValue: CGFloat = 0
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
 }
