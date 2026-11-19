@@ -85,13 +85,28 @@ struct RecordingReviewView: View {
                 editsTitle = true
             }
             ReviewActionButton(systemImage: "square.and.arrow.up", title: "Share", tint: Color.srStageText) {
-                shareTarget = library.video(video.id)
+                whenFinished(video.id) { shareTarget = library.video(video.id) }
             }
             if !video.isAudioOnly {
                 ReviewActionButton(systemImage: "square.and.arrow.down", title: "Save to Photos", tint: Color.srStageText) {
-                    photosTarget = library.video(video.id)
+                    whenFinished(video.id) { photosTarget = library.video(video.id) }
                 }
             }
+        }
+    }
+
+    /// Review opens before a screen recording's two sound tracks are mixed into one. Sharing or
+    /// saving waits for that, so the file that leaves Snapreel has all its sound.
+    private func whenFinished(_ id: UUID, _ action: @escaping @MainActor () -> Void) {
+        guard RecordingSaver.shared.isProcessing(id) else {
+            action()
+            return
+        }
+        model.toast = ToastMessage(text: "Finishing the sound…", systemImage: "waveform")
+        Task { @MainActor in
+            await RecordingSaver.shared.waitUntilFinished(id)
+            model.toast = nil
+            action()
         }
     }
 }
@@ -199,6 +214,7 @@ private struct ReviewPlayerView: View {
     let autoplay: Bool
     let startAt: Double?
     @StateObject private var player: RecorderReviewPlayer
+    @State private var isOnScreen = false
 
     init(video: Video, url: URL, autoplay: Bool, startAt: Double? = nil) {
         self.video = video
@@ -236,10 +252,24 @@ private struct ReviewPlayerView: View {
         .onTapGesture { player.toggle() }
         .animation(Motion.quick, value: player.isPlaying)
         .onAppear {
+            isOnScreen = true
             if let startAt { player.seek(to: startAt) }
-            if autoplay { player.play() }
+            guard autoplay else { return }
+            if video.isAudioOnly {
+                // The bars are ready before the sound starts: from the take itself, or read
+                // from the file (a fraction of a second).
+                Task { @MainActor in
+                    _ = await AudioEnvelope.load(url)
+                    if isOnScreen { player.play() }
+                }
+            } else {
+                player.play()
+            }
         }
-        .onDisappear { player.stop() }
+        .onDisappear {
+            isOnScreen = false
+            player.stop()
+        }
         .onReceive(NotificationCenter.default.publisher(for: .AVPlayerItemDidPlayToEndTime,
                                                          object: player.player.currentItem)) { _ in
             player.reachedEnd()

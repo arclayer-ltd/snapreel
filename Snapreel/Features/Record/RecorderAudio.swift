@@ -151,16 +151,35 @@ struct AudioEnvelope {
     }
 
     @MainActor private static var cache: [URL: AudioEnvelope] = [:]
+    @MainActor private static var reading: [URL: Task<[CGFloat]?, Never>] = [:]
 
-    /// Reads `url`'s first audio track off the main thread. Nil when it has no sound to read.
+    /// A voice take's levels as metered while recording, for the file it was saved to: its
+    /// review draws the bars at once, without reading the file back.
     @MainActor
-    static func load(_ url: URL) async -> AudioEnvelope? {
+    static func seed(_ url: URL, levels: [CGFloat]) {
+        guard !levels.isEmpty else { return }
+        cache[url] = AudioEnvelope(levels: levels)
+    }
+
+    /// Already known (seeded, or read before), so a view can draw it on its first frame.
+    @MainActor
+    static func cached(_ url: URL) -> AudioEnvelope? {
         #if DEBUG
-        // The fixture files have no voice in them; screenshots get a speech-like envelope.
         if AppEnvironment.shared.debugScreenID != nil { return sample }
         #endif
-        if let cached = cache[url] { return cached }
-        let levels = await Task.detached(priority: .utility) { await AudioEnvelope.read(url) }.value
+        return cache[url]
+    }
+
+    /// Reads `url`'s first audio track (AAC from AVAudioRecorder, or a movie's sound) off the
+    /// main thread, once: callers asking at the same time share the read. Nil when it has no
+    /// sound to read.
+    @MainActor
+    static func load(_ url: URL) async -> AudioEnvelope? {
+        if let known = cached(url) { return known }
+        let task = reading[url] ?? Task.detached(priority: .userInitiated) { await AudioEnvelope.read(url) }
+        reading[url] = task
+        let levels = await task.value
+        reading[url] = nil
         guard let levels, !levels.isEmpty else { return nil }
         let envelope = AudioEnvelope(levels: levels)
         cache[url] = envelope
@@ -169,7 +188,7 @@ struct AudioEnvelope {
 
     /// 16-bit PCM of the first channel, averaged over 0.1 s windows, with the recorder's
     /// mapping from decibels (-50 dB is silent, 0 dB full), so playback looks like recording.
-    private static func read(_ url: URL) async -> [CGFloat]? {
+    static func read(_ url: URL) async -> [CGFloat]? {
         let asset = AVURLAsset(url: url)
         guard let track = try? await asset.loadTracks(withMediaType: .audio).first,
               let reader = try? AVAssetReader(asset: asset) else { return nil }
@@ -255,6 +274,14 @@ struct AudioPlaybackBars: View {
 
     @State private var envelope: AudioEnvelope?
 
+    init(url: URL, player: AVPlayer, isPlaying: Bool, time: Double) {
+        self.url = url
+        self.player = player
+        self.isPlaying = isPlaying
+        self.time = time
+        _envelope = State(initialValue: AudioEnvelope.cached(url))
+    }
+
     var body: some View {
         ZStack {
             LinearGradient(colors: [Color.srStageRaised, Color.srStage], startPoint: .top, endPoint: .bottom)
@@ -264,7 +291,9 @@ struct AudioPlaybackBars: View {
             .padding(.horizontal, Space.l)
             .padding(.vertical, Space.xl)
         }
-        .task(id: url) { envelope = await AudioEnvelope.load(url) }
+        .task(id: url) {
+            if envelope == nil { envelope = await AudioEnvelope.load(url) }
+        }
         .accessibilityHidden(true)
     }
 

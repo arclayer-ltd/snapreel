@@ -20,12 +20,12 @@ final class Notifier {
     }
 
     /// Adds a feed row and, if allowed, shows a local notification. `userInfo["videoID"]`
-    /// lets a tap open the video.
-    func post(_ kind: NotificationKind, title: String, body: String, videoID: UUID? = nil) {
+    /// lets a tap open the video. `alert: false` adds the feed row only.
+    func post(_ kind: NotificationKind, title: String, body: String, videoID: UUID? = nil, alert: Bool = true) {
         let item = AppNotification(kind: kind, videoID: videoID, title: title, body: body, createdAt: Date())
         library?.appendNotification(item)
 
-        guard deliversSystemNotifications, settings?.isNotificationEnabled(kind) ?? true else { return }
+        guard alert, deliversSystemNotifications, settings?.isNotificationEnabled(kind) ?? true else { return }
         let content = UNMutableNotificationContent()
         content.title = title
         content.body = body

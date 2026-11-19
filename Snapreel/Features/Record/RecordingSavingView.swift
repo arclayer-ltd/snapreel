@@ -4,6 +4,8 @@ import UniformTypeIdentifiers
 
 /// Saving progress, then failed (Retry, Delete) or out of space (Free up space, Retry, Delete).
 /// Watches the video's state in the library and moves on to review when it is ready.
+/// It stays out of sight for the first 0.3 s of a save (`RecorderModel.savingSince`): most saves
+/// finish sooner, and go straight to review without a flash of this screen.
 struct RecordingSavingView: View {
     let videoID: UUID
     let close: @MainActor () -> Void
@@ -11,6 +13,7 @@ struct RecordingSavingView: View {
     @EnvironmentObject private var model: RecorderModel
     @EnvironmentObject private var library: Library
     @State private var confirmsDelete = false
+    @State private var isRevealed = false
 
     var body: some View {
         Group {
@@ -22,6 +25,12 @@ struct RecordingSavingView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .opacity(isRevealed || model.isStatic ? 1 : 0)
+        .task(id: videoID) {
+            let wait = model.savingSince.addingTimeInterval(0.3).timeIntervalSinceNow
+            if wait > 0 { try? await Task.sleep(nanoseconds: UInt64(wait * 1_000_000_000)) }
+            withAnimation(.easeOut(duration: 0.15)) { isRevealed = true }
+        }
         .onAppear { checkReady() }
         .onChange(of: library.video(videoID)?.state) { _ in checkReady() }
         .confirmationDialog("Delete this recording?", isPresented: $confirmsDelete, titleVisibility: .visible) {

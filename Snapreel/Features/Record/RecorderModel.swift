@@ -119,11 +119,20 @@ final class RecorderModel: ObservableObject {
     @Published var stage: RecorderStage = .idle {
         didSet {
             guard stage != oldValue else { return }
+            if case .saving = stage, oldValue != .finishing { savingSince = Date() }
             watchSaving()
-            // Reviewed once: nothing hands this recording to a recorder again.
-            if case .review(let id) = stage, !isStatic { RecorderInbox.shared.markReviewed(id) }
+            guard !isStatic else { return }
+            // Reviewed once: the coordinator stores it and nothing hands it over again.
+            switch stage {
+            case .review(let id): ReviewCoordinator.shared.reviewShown(id, library: library)
+            case .saving(let id): ReviewCoordinator.shared.reviewStarted(id)
+            default: break
+            }
         }
     }
+    /// When saving started. The saving screen stays out of sight for its first 0.3 s, so a
+    /// quick save goes straight to review.
+    @Published private(set) var savingSince = Date()
     @Published var elapsed: TimeInterval = 0
     @Published var cameraPermission: PermissionState
     @Published var microphonePermission: PermissionState
@@ -158,6 +167,17 @@ final class RecorderModel: ObservableObject {
     private let audio = RecorderAudioEngine()
 
     private var countdownTask: Task<Void, Never>?
+    /// Done, ✕, a swipe or Delete-and-close started the recorder's way out. It keeps drawing
+    /// until it has gone, but takes no new review (`ReviewCoordinator` waits for it to go).
+    private(set) var isClosing = false
+    /// Visible and staying: a review handed over now is seen.
+    var acceptsReviews: Bool { isVisible && !isClosing && !isMinimized }
+    /// The take being saved while the recorder still says "Finishing up…" (`beginSaving`).
+    private var savingID: UUID?
+    private var savingScreenTask: Task<Void, Never>?
+    /// The voice take's loudness on the playback grid (`AudioEnvelope.step`), so its review
+    /// draws moving bars at once, without reading the file back.
+    private var levelHistory: [CGFloat] = []
     private var clockTask: Task<Void, Never>?
     private var screenTask: Task<Void, Never>?
     private var importTask: Task<Void, Never>?
@@ -209,6 +229,28 @@ final class RecorderModel: ObservableObject {
             initialReviewPanel = preset.reviewPanel
             cameraState = preset.cameraStill == nil ? .starting : .running
             if let levels = preset.levels { meter.show(levels) }
+        }
+        if preset == nil, let review = ReviewCoordinator.shared.pendingReview(for: launch.id),
+           let video = library.video(review.id) {
+            // Presented for a review (`ReviewCoordinator.offer`): open straight on it.
+            isChoosingMode = false
+            reviewNote = review.note
+            stage = video.state.isReady ? .review(review.id) : .saving(review.id)
+        }
+    }
+
+    /// The review (or the save before it) of `id` is what the recorder shows.
+    func isShowingReview(of id: UUID) -> Bool {
+        stage == .review(id) || stage == .saving(id) || savingID == id
+    }
+
+    /// For the review trace: "chooser", "review 1A2B", "saving 1A2B", or the mode and stage.
+    var traceDescription: String {
+        if isChoosingMode { return "chooser" }
+        switch stage {
+        case .review(let id): return "review \(ReviewCoordinator.short(id))"
+        case .saving(let id): return "saving \(ReviewCoordinator.short(id))"
+        default: return "\(mode) \(stage)"
         }
     }
 
@@ -263,7 +305,15 @@ final class RecorderModel: ObservableObject {
     func appear() {
         guard !isVisible else { return }
         isVisible = true
+        isClosing = false
         guard !isStatic else { return }
+        ReviewCoordinator.shared.recorderAppeared(self)
+        // Opened on a review: the observer didn't run for the stage set in init.
+        if case .review(let id) = stage { ReviewCoordinator.shared.reviewShown(id, library: library) }
+        if case .saving(let id) = stage {
+            ReviewCoordinator.shared.reviewStarted(id)
+            watchSaving()
+        }
         if isMinimized {
             // Back from the bar above the tab bar: everything is still running.
             isMinimized = false
@@ -286,7 +336,9 @@ final class RecorderModel: ObservableObject {
 
     func disappear() {
         isVisible = false
-        guard !isStatic, !isMinimized else { return }
+        guard !isStatic else { return }
+        ReviewCoordinator.shared.recorderDisappeared(self)
+        guard !isMinimized else { return }
         countdownTask?.cancel()
         clockTask?.cancel()
         screenTask?.cancel()
@@ -314,6 +366,7 @@ final class RecorderModel: ObservableObject {
     /// Swiped down mid audio recording: hand the take to the bar above the tab bar.
     func minimize() {
         guard canMinimize else { return }
+        isClosing = true
         isMinimized = true
         router.minimizeRecorder(self)
     }
@@ -328,10 +381,12 @@ final class RecorderModel: ObservableObject {
         }
         if stage.isCountingDown { cancelCountdown() }
         if case .importing = stage { cancelImport() }
+        isClosing = true
         return true
     }
 
     func discardAndClose() {
+        isClosing = true
         discardCapture()
     }
 
@@ -346,6 +401,9 @@ final class RecorderModel: ObservableObject {
         guard !isStatic else { return }
         // A save that finished while Snapreel was away: go straight to review.
         if case .saving(let id) = stage, library.video(id)?.state.isReady == true {
+            savingFinished(id)
+        }
+        if stage == .finishing, let id = savingID, library.video(id)?.state.isReady == true {
             savingFinished(id)
         }
         let camera = Permissions.currentState(.camera)
@@ -557,6 +615,7 @@ final class RecorderModel: ObservableObject {
         RecordingSaver.shared.activeCaptureFiles.insert(fileName)
         captureStartedAt = Date()
         accumulated = 0
+        levelHistory = []
         segmentStart = Date()
         elapsed = 0
         stage = .recording
@@ -613,6 +672,7 @@ final class RecorderModel: ObservableObject {
             stage = .idle
             return
         }
+        ReviewTiming.mark(id, "stop")
         stage = .finishing
         let createdAt = captureStartedAt
         switch mode {
@@ -624,6 +684,9 @@ final class RecorderModel: ObservableObject {
             }
         case .audio:
             audio.stop()
+            // Review draws the bars from what was metered while recording, straight away.
+            AudioEnvelope.seed(library.media.videoURL(fileName), levels: levelHistory)
+            levelHistory = []
             let url = library.media.staging.appendingPathComponent(fileName)
             captureEnded(.finished(url), id: id, fileName: fileName, kind: .audio, createdAt: createdAt)
         case .screen:
@@ -638,9 +701,10 @@ final class RecorderModel: ObservableObject {
         captureFileName = nil
         switch result {
         case .finished, .partial:
+            ReviewTiming.mark(id, "file closed")
             RecordingSaver.shared.begin(RecordingSaveRequest(id: id, kind: kind, createdAt: createdAt, fileName: fileName),
                                         library: library)
-            stage = .saving(id)
+            beginSaving(id)
             camera.stopRunning()
         case .failed(let message, let outOfSpace):
             stage = .idle
@@ -696,7 +760,12 @@ final class RecorderModel: ObservableObject {
             if Int(now) != Int(elapsed) { elapsed = now }
         }
         if mode == .audio {
-            meter.push(stage == .recording ? audio.level() : 0)
+            let level = stage == .recording ? audio.level() : 0
+            meter.push(level)
+            if stage == .recording, let segmentStart {
+                let index = Int((accumulated + Date().timeIntervalSince(segmentStart)) / AudioEnvelope.step)
+                while levelHistory.count <= index { levelHistory.append(level) }
+            }
         }
         // Stop before the disk fills so the recording can still be saved.
         if stage == .recording, Date().timeIntervalSince(lastSpaceCheck) > 5 {
@@ -756,7 +825,7 @@ final class RecorderModel: ObservableObject {
     private func broadcastDidFinish() {
         refreshBroadcast()
         isStoppingBroadcast = false
-        PendingImports.importFinishedBroadcasts(into: library)
+        PendingImports.importFinishedBroadcasts(into: library, source: .extensionFinished)
         if screenFailure != nil { Haptics.warning() }
     }
 
@@ -881,26 +950,48 @@ final class RecorderModel: ObservableObject {
 
     // MARK: - Saving and review
 
-    /// A recording to review arrived (a screen recording finished, or the app was opened from
-    /// its notification).
-    func takeReview(_ id: UUID) {
-        let inbox = RecorderInbox.shared
-        inbox.reviewRequest = nil
-        guard !inbox.hasReviewed(id) else {
-            inbox.reviewNote = nil
-            return
+    /// The recording being saved or reviewed here, if any.
+    private var reviewingID: UUID? {
+        switch stage {
+        case .review(let id), .saving(let id): return id
+        default: return savingID
         }
-        guard !stage.isCapturing, stage != .finishing, let video = library.video(id) else { return }
-        inbox.markReviewed(id)
+    }
+
+    /// `ReviewCoordinator` hands over a finished recording (a screen recording, or one whose
+    /// notification was tapped). False while a take is running here.
+    @discardableResult
+    func showReview(_ id: UUID, note: String?) -> Bool {
+        guard !stage.isCapturing, stage != .finishing, let video = library.video(id) else { return false }
         if stage.isCountingDown { cancelCountdown() }
         if case .importing = stage { cancelImport() }
-        reviewNote = inbox.reviewNote
-        inbox.reviewNote = nil
+        reviewNote = note
+        isChoosingMode = false
         if video.kind == .screen && mode != .screen {
             mode = .screen
         }
         camera.stopRunning()
+        savingID = nil
         stage = video.state.isReady ? .review(id) : .saving(id)
+        return true
+    }
+
+    /// A camera or voice take was handed to the saver. The first part of saving (moving the
+    /// file and reading its length) usually takes a fraction of a second, so the recorder keeps
+    /// saying "Finishing up…" and goes straight to review; only a save still running after
+    /// 0.3 s gets the saving screen.
+    private func beginSaving(_ id: UUID) {
+        savingID = id
+        savingSince = Date()
+        if stage != .finishing { stage = .finishing }
+        watchSaving()
+        savingScreenTask?.cancel()
+        savingScreenTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            guard let self, self.savingID == id, self.stage == .finishing else { return }
+            self.savingID = nil
+            self.stage = .saving(id)
+        }
     }
 
     /// Moves on to review as soon as the video being saved is ready.
@@ -911,7 +1002,15 @@ final class RecorderModel: ObservableObject {
     /// which can miss it when the save finishes while Snapreel is in the background or the
     /// screen is still being presented. The model now watches the library itself.
     private func watchSaving() {
-        guard case .saving(let id) = stage, !isStatic else {
+        let watched: UUID?
+        if case .saving(let id) = stage {
+            watched = id
+        } else if stage == .finishing {
+            watched = savingID
+        } else {
+            watched = nil
+        }
+        guard let id = watched, !isStatic else {
             savingWatch = nil
             return
         }
@@ -929,9 +1028,11 @@ final class RecorderModel: ObservableObject {
         }
     }
 
-    /// The saving screen saw the video become ready.
+    /// The video being saved is ready (seen by the model's own watch or the saving screen).
     func savingFinished(_ id: UUID) {
-        guard stage == .saving(id) else { return }
+        guard stage == .saving(id) || (stage == .finishing && savingID == id) else { return }
+        savingID = nil
+        savingScreenTask?.cancel()
         Haptics.success()
         stage = .review(id)
     }
@@ -944,7 +1045,9 @@ final class RecorderModel: ObservableObject {
     /// Delete from review or from a failed save: back to the recorder for another take.
     func deleteRecording(_ id: UUID) {
         RecordingSaver.shared.discard(id, library: library)
-        RecorderInbox.shared.clear()
+        ReviewCoordinator.shared.reviewEnded(id)
+        savingID = nil
+        savingScreenTask?.cancel()
         reviewNote = nil
         stage = .idle
         toast = ToastMessage(text: "Recording deleted", systemImage: "trash.fill")
@@ -959,13 +1062,15 @@ final class RecorderModel: ObservableObject {
     /// Done in review. The recorder closes; the shell shows the toast.
     func finishReview() {
         Haptics.success()
-        RecorderInbox.shared.clear()
+        isClosing = true
+        ReviewCoordinator.shared.reviewEnded(reviewingID)
         router.showToast("Saved to your library")
     }
 
     /// Leave saving running in the background and close.
     func closeWhileSaving() {
-        RecorderInbox.shared.clear()
+        isClosing = true
+        ReviewCoordinator.shared.reviewEnded(reviewingID)
         router.showToast("Still saving. It'll be in your library in a moment.", systemImage: "arrow.down.circle.fill")
     }
 }

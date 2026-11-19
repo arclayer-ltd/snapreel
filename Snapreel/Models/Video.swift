@@ -120,6 +120,9 @@ struct Video: Identifiable, Codable, Hashable {
 
     var transcriptStatus: TranscriptStatus = .notStarted
     var state: VideoState = .ready
+    /// When its review (after recording) was shown. Set once; a recording is never offered for
+    /// review again, also after a relaunch (`ReviewCoordinator`). Nil for older recordings.
+    var reviewedAt: Date?
 
     var isAudioOnly: Bool { kind == .audio || pixelWidth == 0 }
     var isPortrait: Bool { pixelHeight > pixelWidth }

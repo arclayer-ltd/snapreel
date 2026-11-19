@@ -13,6 +13,13 @@ struct RecordingSaveRequest {
 /// Moves recordings into the library. A `Video` row exists from the first moment (state
 /// `.saving`), so a save interrupted by Snapreel closing shows up next launch and is finished
 /// by `PendingImports.resumeInterruptedSaves`. Failures become `.failed` with a plain reason.
+///
+/// Review comes first. A save is `.ready` as soon as the file is in the library (moved, never
+/// copied) and its length and size are read, which takes a fraction of a second. What can wait
+/// happens after review is up: a screen recording's two sound tracks are mixed into one (the
+/// slow part, it reads the whole movie), the thumbnail is made off the main thread, and the
+/// "saved" notification and transcript follow. Share and Save to Photos in review wait for that
+/// (`waitUntilFinished`). Builds up to 30 did all of it before review.
 @MainActor
 final class RecordingSaver {
     static let shared = RecordingSaver()
@@ -21,10 +28,20 @@ final class RecordingSaver {
     static func reminderKey(_ id: UUID) -> String { "needs-title-\(id.uuidString)" }
 
     private var inFlight = Set<UUID>()
+    private var waiters: [UUID: [CheckedContinuation<Void, Never>]] = [:]
     /// Staging files the recorder is writing right now; never treated as leftovers.
     var activeCaptureFiles = Set<String>()
 
     func isProcessing(_ id: UUID) -> Bool { inFlight.contains(id) }
+
+    /// Returns once everything for `id` is done, including the work after review (a screen
+    /// recording's sound mixing), so a shared or saved file is the finished one.
+    func waitUntilFinished(_ id: UUID) async {
+        guard inFlight.contains(id) else { return }
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            waiters[id, default: []].append(continuation)
+        }
+    }
 
     /// Adds the row and starts saving.
     func begin(_ request: RecordingSaveRequest, library: Library) {
@@ -78,6 +95,7 @@ final class RecordingSaver {
                 self.markFailed(id, error: error, library: library)
             }
             self.inFlight.remove(id)
+            for waiter in self.waiters.removeValue(forKey: id) ?? [] { waiter.resume() }
         }
     }
 
@@ -87,19 +105,16 @@ final class RecordingSaver {
         let staged = library.media.staging.appendingPathComponent(video.fileName)
         let destination = library.media.videoURL(video.fileName)
         if DiskSpace.available < 20_000_000 { throw RecordingSaveError.noSpace }
-        setProgress(id, 0.1, library: library)
 
+        // 1. Ready for review: the file into the library (a move on the same volume), then its
+        //    length, size and picture size.
         if fm.fileExists(atPath: staged.path) {
-            if video.kind == .screen {
-                await mixAudioTracksIfNeeded(staged, id: id, library: library)
-            }
             if fm.fileExists(atPath: destination.path) { try fm.removeItem(at: destination) }
             try fm.moveItem(at: staged, to: destination)
         } else if !fm.fileExists(atPath: destination.path) {
             throw RecordingSaveError.missingFile
         }
-        setProgress(id, 0.7, library: library)
-
+        ReviewTiming.mark(id, "moved")
         let info: MediaInfo
         do {
             info = try await MediaInspector.inspect(destination)
@@ -107,17 +122,6 @@ final class RecordingSaver {
             throw RecordingSaveError.unreadable
         }
         guard info.duration >= 0.3, info.hasVideo || info.hasAudio else { throw RecordingSaveError.empty }
-        setProgress(id, 0.85, library: library)
-
-        var thumbnailName: String?
-        if info.hasVideo,
-           let image = try? await MediaInspector.thumbnail(for: destination, at: min(0.5, info.duration / 2)) {
-            thumbnailName = try? MediaInspector.writeThumbnail(image, named: id.uuidString, in: library.media.thumbnails)
-            if let thumbnailName {
-                ThumbnailCache.shared.remove(library.media.thumbnailURL(thumbnailName))
-            }
-        }
-
         guard library.video(id) != nil else {
             // Deleted while saving.
             try? fm.removeItem(at: destination)
@@ -128,16 +132,41 @@ final class RecordingSaver {
             video.fileSize = info.fileSize
             video.pixelWidth = info.pixelWidth
             video.pixelHeight = info.pixelHeight
-            video.thumbnailFileName = thumbnailName
             video.state = .ready
+        }
+        ReviewTiming.mark(id, "read")
+
+        // 2. After review is up: the library card's frame, then (screen recordings) one sound track.
+        if info.hasVideo {
+            let started = Date()
+            let thumbnails = library.media.thumbnails
+            let at = min(0.5, info.duration / 2)
+            let name = await Task.detached(priority: .utility) {
+                await RecordingSaver.makeThumbnail(for: destination, at: at, named: id.uuidString, in: thumbnails)
+            }.value
+            if let name, library.video(id) != nil {
+                ThumbnailCache.shared.remove(library.media.thumbnailURL(name))
+                library.update(id) { $0.thumbnailFileName = name }
+                ReviewTiming.after(id, "thumbnail", seconds: Date().timeIntervalSince(started))
+            }
+        }
+        if video.kind == .screen {
+            let started = Date()
+            if await mixAudioTracksIfNeeded(destination, id: id, library: library) {
+                ReviewTiming.after(id, "sound mixed", seconds: Date().timeIntervalSince(started))
+                library.update(id) { $0.fileSize = MediaInspector.fileSize(destination) }
+            }
         }
         if let saved = library.video(id) {
             announce(saved, library: library)
         }
     }
 
-    private func setProgress(_ id: UUID, _ progress: Double, library: Library) {
-        library.update(id) { $0.state = .saving(progress: min(0.99, max(0, progress))) }
+    /// The frame for the library card, made and written as a JPEG away from the main thread.
+    nonisolated private static func makeThumbnail(for url: URL, at seconds: Double, named name: String,
+                                                  in directory: URL) async -> String? {
+        guard let image = try? await MediaInspector.thumbnail(for: url, at: seconds) else { return nil }
+        return try? MediaInspector.writeThumbnail(image, named: name, in: directory)
     }
 
     private func markFailed(_ id: UUID, error: Error, library: Library) {
@@ -155,16 +184,18 @@ final class RecordingSaver {
         library.update(id) { $0.state = .failed(reason: reason, outOfSpace: outOfSpace) }
     }
 
-    /// Feed row, local notification, the one-hour title reminder and the transcript.
+    /// Feed row, local notification, the one-hour title reminder and the transcript. A recording
+    /// whose review was already shown gets the feed row only: the person has just seen it.
     private func announce(_ video: Video, library: Library) {
+        let alert = video.reviewedAt == nil
         if video.kind == .imported {
             Notifier.shared.post(.importFinished, title: "Import finished",
                                  body: "Your video was copied from Photos and is in your library.",
-                                 videoID: video.id)
+                                 videoID: video.id, alert: alert)
         } else {
             Notifier.shared.post(.recordingSaved, title: "\(video.kind.label) recording saved",
                                  body: "\(Format.clock(video.duration)) recording is in your library.",
-                                 videoID: video.id)
+                                 videoID: video.id, alert: alert)
         }
         if video.needsTitle {
             Notifier.shared.schedule(.needsTitle, key: Self.reminderKey(video.id),
@@ -177,21 +208,24 @@ final class RecordingSaver {
 
     /// Screen recordings arrive with app sound and microphone on separate tracks. Mix them into
     /// one so every player, app and the transcript hear both. Keeps the original on any problem.
-    private func mixAudioTracksIfNeeded(_ url: URL, id: UUID, library: Library) async {
-        guard DiskSpace.hasRoom(for: MediaInspector.fileSize(url)) else { return }
-        let mixed = url.deletingLastPathComponent().appendingPathComponent("\(id.uuidString)-mixed.mov")
-        let succeeded = await RecordingAudioMixer.mix(url, into: mixed) { [weak self] fraction in
-            self?.setProgress(id, 0.1 + 0.55 * fraction, library: library)
-        }
+    /// Runs after review is up (Snapreel's own players play both tracks meanwhile); the mixed
+    /// file is written in staging and swapped in, so a player holding the old one carries on.
+    /// True when the file was replaced.
+    private func mixAudioTracksIfNeeded(_ url: URL, id: UUID, library: Library) async -> Bool {
+        guard DiskSpace.hasRoom(for: MediaInspector.fileSize(url)) else { return false }
+        let mixed = library.media.staging.appendingPathComponent("\(id.uuidString)-mixed.mov")
+        let succeeded = await RecordingAudioMixer.mix(url, into: mixed) { _ in }
         let fm = FileManager.default
-        if succeeded {
-            do {
-                _ = try fm.replaceItemAt(url, withItemAt: mixed)
-            } catch {
-                try? fm.removeItem(at: mixed)
-            }
-        } else {
+        guard succeeded, library.video(id) != nil, fm.fileExists(atPath: url.path) else {
             try? fm.removeItem(at: mixed)
+            return false
+        }
+        do {
+            _ = try fm.replaceItemAt(url, withItemAt: mixed)
+            return true
+        } catch {
+            try? fm.removeItem(at: mixed)
+            return false
         }
     }
 

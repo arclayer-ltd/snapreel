@@ -1,11 +1,25 @@
 #if DEBUG
+import AVFoundation
 import SwiftUI
 import UIKit
 
 extension DebugCatalog {
     /// Session B owns this list: recorder, permissions, camera, screen, audio, import, review, saving.
     static var recordScreens: [DebugScreen] {
-        cameraScreens + screenModeScreens + reviewScreens + build23Screens + liveActivityScreens
+        cameraScreens + screenModeScreens + reviewScreens + build23Screens + liveActivityScreens + handoffScreens
+    }
+
+    /// Build 30 (owner, 20 November): reviews shown twice or not at all, and slow. The drill runs
+    /// the real hand-offs and logs them; the check reads a real AAC file and times the saver.
+    private static var handoffScreens: [DebugScreen] {
+        [
+            .shell("rec.handoff", "Review hand-offs [each recording reviewed once]", tab: .library, wait: 14) { router, library in
+                ReviewHandoffDrill.start(router: router, library: library)
+            },
+            DebugScreen("rec.savecheck", "Audio bars from AAC, and save timing", wait: 6) {
+                ReviewSaveCheckView()
+            },
+        ]
     }
 
     /// Build 23 (owner's phone videos, 2026-11-19): the chooser, swipe down and the minimised
@@ -303,6 +317,177 @@ enum RecordDebug {
             library.update(id) { $0.state = state }
         }
         return recorder(.screen) { $0.stage = .saving(id) }
+    }
+}
+
+// MARK: - Review hand-offs and save timing (builds 29 and 30: reviews shown twice or not at all)
+
+/// Runs the real hand-off paths for the same recordings in different orders, also while the
+/// recorder is closing, and logs each one (DebugTrace). CI's debug-trace.txt must show one
+/// "review shown" per recording, and the last tap on record opening the chooser.
+@MainActor
+enum ReviewHandoffDrill {
+    static func start(router: AppRouter, library: Library) {
+        Task { @MainActor in await run(router: router, library: library) }
+    }
+
+    private static func run(router: AppRouter, library: Library) async {
+        guard let sample = library.videos.first(where: { $0.state.isReady && !$0.isAudioOnly }) else {
+            return DebugTrace.log("drill: no sample recording")
+        }
+        let movie = library.fileURL(for: sample)
+        await wait(1.5)
+
+        // 1. Recorder closed: the finished signal, the app-active import and the notification
+        //    tap for one recording, back to back.
+        let first = drop(movie)
+        DebugTrace.log("drill 1 \(ReviewCoordinator.short(first)): signal, import, tap")
+        PendingImports.importFinishedBroadcasts(into: library, source: .extensionFinished)
+        PendingImports.importFinishedBroadcasts(into: library, source: .appActive)
+        PendingImports.openReviewFromNotification(broadcastID: first, library: library)
+        await wait(2.5)
+
+        // 2. Done, and while the recorder is closing: the first one again, and a new one in
+        //    another order (tap, signal, import).
+        let second = drop(movie)
+        DebugTrace.log("drill 2 \(ReviewCoordinator.short(second)): Done, then while closing tap, signal, import")
+        tapDone(router)
+        ReviewCoordinator.shared.offer(first, note: nil, source: .appActive, presentIfClosed: true,
+                                       library: library, router: router)
+        PendingImports.openReviewFromNotification(broadcastID: second, library: library)
+        PendingImports.importFinishedBroadcasts(into: library, source: .extensionFinished)
+        PendingImports.importFinishedBroadcasts(into: library, source: .appActive)
+        await wait(3)
+        PendingImports.openReviewFromNotification(broadcastID: second, library: library)
+        await wait(0.5)
+
+        // 3. Done, then the record button: "What do you want to record?", nothing waiting.
+        DebugTrace.log("drill 3: Done, then record")
+        tapDone(router)
+        await wait(1.2)
+        router.record()
+        await wait(2)
+        let reviewed = [first, second].map { library.video($0)?.reviewedAt == nil ? "no" : "yes" }
+        let shows = ReviewCoordinator.shared.visibleRecorder?.traceDescription ?? "nothing"
+        DebugTrace.log("drill end: reviewed \(reviewed.joined(separator: ", ")); the recorder shows \(shows)")
+    }
+
+    /// A finished screen recording in the App Group inbox, as the broadcast extension leaves it.
+    private static func drop(_ movie: URL) -> UUID {
+        let id = UUID()
+        let ext = movie.pathExtension.isEmpty ? "mov" : movie.pathExtension
+        let name = "\(id.uuidString).\(ext)"
+        try? FileManager.default.copyItem(at: movie, to: AppGroup.inboxURL.appendingPathComponent(name))
+        let manifest = InboxRecording(id: id, movieFileName: name, createdAt: Date().addingTimeInterval(-20),
+                                      finishedAt: Date(), microphoneEnabled: true)
+        if let data = try? JSONEncoder.snapreel.encode(manifest) {
+            try? data.write(to: InboxRecording.manifestURL(for: id), options: .atomic)
+        }
+        return id
+    }
+
+    /// What review's Done does: the model's part, then the cover closes.
+    private static func tapDone(_ router: AppRouter) {
+        ReviewCoordinator.shared.visibleRecorder?.finishReview()
+        router.recorder = nil
+    }
+
+    private static func wait(_ seconds: Double) async {
+        try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+    }
+}
+
+/// Writes a 3-second AAC .m4a the way AVAudioRecorder does (loud, silent, quiet), reads it
+/// back with `AudioEnvelope`, and times the saver on it as a voice take and on the sample movie
+/// as a camera take (stop to ready). Results on screen and in debug-trace.txt.
+struct ReviewSaveCheckView: View {
+    @EnvironmentObject private var library: Library
+    @State private var lines: [String] = []
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Space.s) {
+            Text("Audio bars and save timing").font(.srTitle3).foregroundStyle(Color.srText)
+            ForEach(lines, id: \.self) { line in
+                Text(line).font(.srFootnote).foregroundStyle(Color.srTextSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(Space.gutter)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(Color.srCanvas.ignoresSafeArea())
+        .task { await run() }
+    }
+
+    private func report(_ line: String) {
+        lines.append(line)
+        DebugTrace.log(line)
+    }
+
+    private func run() async {
+        let fm = FileManager.default
+        let voice = fm.temporaryDirectory.appendingPathComponent("envelope-check.m4a")
+        guard Self.writeTestVoice(to: voice) else { return report("AAC: couldn't write the test file") }
+        guard let levels = await AudioEnvelope.read(voice), !levels.isEmpty else {
+            return report("AAC: FAIL, no levels read")
+        }
+        func average(_ range: Range<Int>) -> CGFloat {
+            let slice = levels[min(range.lowerBound, levels.count)..<min(range.upperBound, levels.count)]
+            return slice.isEmpty ? 0 : slice.reduce(0, +) / CGFloat(slice.count)
+        }
+        let loud = average(2..<8), silent = average(12..<18), quiet = average(22..<28)
+        let ok = loud > 0.6 && silent < 0.1 && quiet > 0.12 && quiet < 0.55
+        report(String(format: "AAC: %@, %ld values; loud %.2f, silent %.2f, quiet %.2f",
+                      ok ? "OK" : "FAIL", levels.count, loud, silent, quiet))
+
+        // Saver timing: a voice take (the AAC file) and a camera take (the sample movie).
+        await timeSave(kind: .audio, file: voice, ext: "m4a")
+        if let sample = library.videos.first(where: { $0.state.isReady && !$0.isAudioOnly }) {
+            await timeSave(kind: .camera, file: library.fileURL(for: sample), ext: library.fileURL(for: sample).pathExtension)
+        }
+    }
+
+    /// Stop to ready through `RecordingSaver`, as after a real take (minus closing the file).
+    private func timeSave(kind: RecordingKind, file: URL, ext: String) async {
+        let id = UUID()
+        let name = "\(id.uuidString).\(ext)"
+        try? FileManager.default.copyItem(at: file, to: library.media.staging.appendingPathComponent(name))
+        let started = Date()
+        ReviewTiming.mark(id, "stop", at: started)
+        ReviewTiming.mark(id, "file closed", at: started)
+        RecordingSaver.shared.begin(RecordingSaveRequest(id: id, kind: kind, createdAt: started, fileName: name),
+                                    library: library)
+        for _ in 0..<500 where library.video(id)?.state.isReady != true {
+            try? await Task.sleep(nanoseconds: 10_000_000)
+        }
+        let ready = library.video(id)?.state.isReady == true
+        ReviewTiming.mark(id, "ready seen")
+        report(String(format: "%@ save: %@ in %.2f s", kind.label, ready ? "ready" : "NOT ready",
+                      Date().timeIntervalSince(started)))
+        ReviewTiming.finish(id, kind: kind)
+    }
+
+    /// 1 s of a loud tone, 1 s of silence, 1 s of a quiet tone, as mono AAC in .m4a (44.1 kHz,
+    /// the recorder's own settings). The file is closed when this returns.
+    private static func writeTestVoice(to url: URL) -> Bool {
+        try? FileManager.default.removeItem(at: url)
+        let settings: [String: Any] = [
+            AVFormatIDKey: Int(kAudioFormatMPEG4AAC),
+            AVSampleRateKey: 44_100,
+            AVNumberOfChannelsKey: 1,
+        ]
+        guard let file = try? AVAudioFile(forWriting: url, settings: settings,
+                                          commonFormat: .pcmFormatFloat32, interleaved: false) else { return false }
+        let frames = AVAudioFrameCount(44_100)
+        for amplitude in [0.5, 0.0, 0.05] {
+            guard let buffer = AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: frames),
+                  let channel = buffer.floatChannelData?[0] else { return false }
+            buffer.frameLength = frames
+            for index in 0..<Int(frames) {
+                channel[index] = Float(amplitude * sin(2 * Double.pi * 440 * Double(index) / 44_100))
+            }
+            do { try file.write(from: buffer) } catch { return false }
+        }
+        return true
     }
 }
 #endif

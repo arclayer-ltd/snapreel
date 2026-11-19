@@ -57,18 +57,22 @@ struct DeviceDetails {
     let system: String
     let app: String
     let freeSpace: String
+    /// How long the last recordings took from Stop to review, step by step (`ReviewTiming`).
+    var recentSaves: [String] = []
 
     @MainActor
     static func current() -> DeviceDetails {
         DeviceDetails(model: modelIdentifier(),
                       system: "\(UIDevice.current.systemName) \(UIDevice.current.systemVersion)",
                       app: "Snapreel \(AppInfo.version) (\(AppInfo.build))",
-                      freeSpace: "\(Format.bytes(DiskSpace.available)) free")
+                      freeSpace: "\(Format.bytes(DiskSpace.available)) free",
+                      recentSaves: ReviewTiming.recent)
     }
 
     /// One line per detail, as they appear in the email.
     var lines: [String] {
-        ["Device: \(model)", "System: \(system)", "App: \(app)", "Storage: \(freeSpace)"]
+        let device = ["Device: \(model)", "System: \(system)", "App: \(app)", "Storage: \(freeSpace)"]
+        return recentSaves.isEmpty ? device : device + ["Recent saves (seconds):"] + recentSaves
     }
 
     /// "iPhone16,1" on a device; the simulated model in the simulator.

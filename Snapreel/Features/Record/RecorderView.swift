@@ -247,9 +247,6 @@ private struct RecorderEvents: ViewModifier {
         content
             .onAppear { model.appear() }
             .onDisappear { model.disappear() }
-            .onReceive(RecorderInbox.shared.$reviewRequest) { id in
-                if let id { model.takeReview(id) }
-            }
             .onReceive(NotificationCenter.default.publisher(for: UIApplication.willResignActiveNotification)) { _ in
                 model.appWillResignActive()
             }
