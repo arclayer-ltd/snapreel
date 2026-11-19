@@ -160,7 +160,7 @@ struct AudioEnvelope {
         if AppEnvironment.shared.debugScreenID != nil { return sample }
         #endif
         if let cached = cache[url] { return cached }
-        let levels = await Task.detached(priority: .utility) { await read(url) }.value
+        let levels = await Task.detached(priority: .utility) { await AudioEnvelope.read(url) }.value
         guard let levels, !levels.isEmpty else { return nil }
         let envelope = AudioEnvelope(levels: levels)
         cache[url] = envelope
