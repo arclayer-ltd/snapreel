@@ -5,7 +5,35 @@ import UIKit
 extension DebugCatalog {
     /// Session B owns this list: recorder, permissions, camera, screen, audio, import, review, saving.
     static var recordScreens: [DebugScreen] {
-        cameraScreens + screenModeScreens + reviewScreens
+        cameraScreens + screenModeScreens + reviewScreens + build23Screens
+    }
+
+    /// Build 23 (owner's phone videos, 2026-11-19): the chooser, swipe down, the minimised
+    /// voice recording and the floating button's preview.
+    private static var build23Screens: [DebugScreen] {
+        [
+            DebugScreen("rec.chooser", "Recorder [choose what to record]") {
+                RecordDebug.recorder(.camera) { $0.choosingMode = true }
+            },
+            .shell("rec.swipe", "Recorder [swiped down, voice recording]", tab: .home) { router, _ in
+                router.recorder = RecorderLaunch(mode: .audio)
+            },
+            .shell("rec.minimized", "Voice recording in the bar above the tab bar", tab: .home) { router, library in
+                router.minimizedRecorder = RecordDebug.minimizedRecording(router: router, library: library)
+            },
+            .shell("rec.minimized.paused", "Voice recording in the bar [paused]", tab: .library) { router, library in
+                router.minimizedRecorder = RecordDebug.minimizedRecording(router: router, library: library,
+                                                                          paused: true)
+            },
+            DebugScreen("rec.screen.floater", "Screen recording in progress [floating button]") {
+                RecordDebug.recorder(.screen) {
+                    $0.showsTutorial = false
+                    $0.broadcast = BroadcastState(status: .recording, recordingID: UUID(),
+                                                  startedAt: Date().addingTimeInterval(-12),
+                                                  updatedAt: Date(), microphoneEnabled: false)
+                }
+            },
+        ]
     }
 
     private static var cameraScreens: [DebugScreen] {
@@ -213,6 +241,33 @@ enum RecordDebug {
         preset.showsTutorial = false
         change(&preset)
         return RecorderView(launch: RecorderLaunch(mode: mode), preset: preset)
+    }
+
+    /// The recorder the shell presents (`RecorderView(launch:)`), for debug ids that show it
+    /// over the tab shell. Nil for every other screen and in normal use.
+    static func shellCoverPreset() -> RecorderPreset? {
+        guard AppEnvironment.shared.debugScreenID == "rec.swipe" else { return nil }
+        var preset = RecorderPreset()
+        preset.cameraPermission = .granted
+        preset.microphonePermission = .granted
+        preset.showsTutorial = false
+        preset.stage = .recording
+        preset.elapsed = 42
+        preset.levels = levels
+        preset.swipeOffset = 230
+        return preset
+    }
+
+    /// A voice recording carrying on in the bar above the tab bar (no microphone in use).
+    static func minimizedRecording(router: AppRouter, library: Library, paused: Bool = false) -> RecorderModel {
+        var preset = RecorderPreset()
+        preset.cameraPermission = .granted
+        preset.microphonePermission = .granted
+        preset.stage = paused ? .paused : .recording
+        preset.elapsed = paused ? 95 : 42
+        preset.levels = levels
+        return RecorderModel(launch: RecorderLaunch(mode: .audio), library: library,
+                             settings: AppEnvironment.shared.settings, router: router, preset: preset)
     }
 
     /// A drawn stand-in for the camera picture (the simulator has no camera).

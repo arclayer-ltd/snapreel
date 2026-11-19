@@ -49,7 +49,9 @@ struct PlayerVideoArea: View {
                 PictureInPicturePlaceholder(onRestore: { actions.restoreFromPictureInPicture() })
             }
             ReactionBurstLayer(bursts: bursts)
+            // The auto-hide sets controlsVisible without a transaction; the fade is scoped here.
             controls
+                .animation(Motion.standard, value: controlsVisible)
             if overlay == .speed {
                 Color.black.opacity(0.35)
                     .contentShape(Rectangle())

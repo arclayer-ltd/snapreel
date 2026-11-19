@@ -31,6 +31,14 @@ struct PlayerScreen: View {
     @State private var photosTarget: Video?
     @State private var hasStarted = false
     @State private var fullscreenRotation: Double = 90
+    /// How far the page has been dragged down towards minimising.
+    @State private var swipeOffset: CGFloat = 0
+    @State private var isSwipeMinimising = false
+    @GestureState private var isSwiping = false
+    /// Where the video ends on screen, so a pull of the details past it can be measured.
+    @State private var videoBottom: CGFloat = 0
+    /// Pulling down to minimise only counts once the page has settled after opening.
+    @State private var isPullArmed = false
 
     init(presentation: PlayerPresentation) {
         var initial = PlayerInitialState()
@@ -39,6 +47,14 @@ struct PlayerScreen: View {
             initial.panel = .transcript
             initial.scrollsToPanel = true
         }
+        #if DEBUG
+        if AppEnvironment.shared.debugScreenID == "video.swipe" {
+            // Held part-way through a swipe down, over the tab shell it minimises into.
+            initial.autoplay = false
+            initial.position = 4
+            initial.swipeOffset = 210
+        }
+        #endif
         self.init(presentation: presentation, initial: initial)
     }
 
@@ -52,6 +68,7 @@ struct PlayerScreen: View {
         _sheet = State(initialValue: initial.sheet)
         _showsPiPPlaceholder = State(initialValue: initial.showsPictureInPicturePlaceholder)
         _showsResume = State(initialValue: initial.showsResumePill)
+        _swipeOffset = State(initialValue: initial.swipeOffset)
         let pinned: [ReactionBurst] = initial.pinnedBurst.map { [ReactionBurst(emoji: $0, isPinned: true)] } ?? []
         _bursts = State(initialValue: pinned)
     }
@@ -73,6 +90,7 @@ struct PlayerScreen: View {
                 PlayerMissingView(onClose: { closePlayer() })
             }
         }
+        .offset(y: swipeOffset)
         .preferredColorScheme(.dark)
         .statusBar(hidden: isFullscreen)
         .toast($toast, bottomInset: 120)
@@ -94,24 +112,49 @@ struct PlayerScreen: View {
         .onChange(of: session.isPlaying) { playing in
             if playing { withAnimation(Motion.quick) { showsResume = false } }
         }
+        .onChange(of: isSwiping) { swiping in
+            // A drag that was cancelled (not ended) still has to spring back.
+            if !swiping && !isSwipeMinimising && swipeOffset > 0 {
+                withAnimation(SwipeDismiss.springBack) { swipeOffset = 0 }
+            }
+        }
         .task(id: autoHideKey) { await autoHideControls() }
     }
 
     // MARK: - Layouts
 
+    /// The video sits in the scroll view's top inset and the reaction dock in its bottom inset,
+    /// so the details and notes always scroll in the space between them and can't end up
+    /// parked behind the video. Drag the video down (or pull the details down past the top)
+    /// to minimise.
     private func standardLayout(_ video: Video) -> some View {
         GeometryReader { proxy in
-            VStack(spacing: 0) {
-                videoArea(video, fullscreen: false, insets: EdgeInsets())
-                    .frame(height: PlayerLayout.videoHeight(for: video, width: proxy.size.width,
-                                                            available: proxy.size.height))
-                    .background(Color.srInkDeep.ignoresSafeArea(edges: .top))
-                    .zIndex(1)
-                belowVideo(video)
-                ReactionDock(onReact: { react($0) },
-                             onMore: { openEmojiPicker() },
-                             onAddNote: { openComposer() })
-            }
+            belowVideo(video)
+                .safeAreaInset(edge: .top, spacing: 0) {
+                    videoArea(video, fullscreen: false, insets: EdgeInsets())
+                        .frame(height: PlayerLayout.videoHeight(for: video, width: proxy.size.width,
+                                                                available: proxy.size.height))
+                        .background(Color.srInkDeep.ignoresSafeArea(edges: .top))
+                        .background(GeometryReader { area in
+                            Color.clear.preference(key: PinnedHeaderBottomKey.self,
+                                                   value: area.frame(in: .global).maxY)
+                        })
+                        .simultaneousGesture(swipeToMinimise)
+                }
+                .safeAreaInset(edge: .bottom, spacing: 0) {
+                    ReactionDock(onReact: { react($0) },
+                                 onMore: { openEmojiPicker() },
+                                 onAddNote: { openComposer() })
+                        .overlay(alignment: .top) {
+                            resumePill.alignmentGuide(.top) { $0[.bottom] }
+                        }
+                }
+                .onPreferenceChange(PinnedHeaderBottomKey.self) { videoBottom = $0 }
+                .onPreferenceChange(ScrollContentTopKey.self) { top in pulled(by: top - videoBottom) }
+        }
+        .task {
+            try? await Task.sleep(nanoseconds: 700_000_000)
+            isPullArmed = true
         }
     }
 
@@ -161,6 +204,10 @@ struct PlayerScreen: View {
                 .padding(.horizontal, Space.gutter)
                 .padding(.top, Space.m)
                 .padding(.bottom, Space.xxxl)
+                .background(GeometryReader { content in
+                    Color.clear.preference(key: ScrollContentTopKey.self,
+                                           value: content.frame(in: .global).minY)
+                })
             }
             .onAppear {
                 guard initial.scrollsToPanel else { return }
@@ -170,10 +217,50 @@ struct PlayerScreen: View {
                 }
             }
         }
-        .overlay(alignment: .bottom) { resumePill }
     }
 
     private static let panelAnchor = "player.panel"
+
+    // MARK: - Swipe down to minimise
+
+    /// Drag the video down: the page follows the finger, and letting go far enough (or with a
+    /// flick) minimises the player into the bar above the tab bar.
+    private var swipeToMinimise: some Gesture {
+        DragGesture(minimumDistance: 14, coordinateSpace: .global)
+            .updating($isSwiping) { _, swiping, _ in swiping = true }
+            .onChanged { value in
+                guard !isSwipeMinimising, overlay == nil else { return }
+                if swipeOffset == 0 && !SwipeDismiss.isDownward(value) { return }
+                swipeOffset = max(0, value.translation.height)
+            }
+            .onEnded { value in
+                guard !isSwipeMinimising, swipeOffset > 0 else { return }
+                if SwipeDismiss.commits(value) {
+                    minimiseBySwipe()
+                } else {
+                    withAnimation(SwipeDismiss.springBack) { swipeOffset = 0 }
+                }
+            }
+    }
+
+    /// The details were pulled down past the bottom of the video (the top of the scroll view).
+    /// At rest the two edges meet, so `distance` is how far past the top they've been pulled.
+    private func pulled(by distance: CGFloat) {
+        guard isPullArmed, videoBottom > 0, distance > SwipeDismiss.pull,
+              !isSwipeMinimising, swipeOffset == 0, sheet == nil, !isFullscreen else { return }
+        minimiseBySwipe()
+    }
+
+    private func minimiseBySwipe() {
+        isSwipeMinimising = true
+        Haptics.tap()
+        overlay = nil
+        withAnimation(SwipeDismiss.slideAway) { swipeOffset = SwipeDismiss.offscreen }
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 180_000_000)
+            router.minimizePlayer()
+        }
+    }
 
     private func details(_ video: Video) -> some View {
         PlayerDetailsSection(video: video,
@@ -439,7 +526,9 @@ struct PlayerScreen: View {
         guard controlsVisible, session.isPlaying, overlay == nil, !UIAccessibility.isVoiceOverRunning else { return }
         try? await Task.sleep(nanoseconds: 3_000_000_000)
         guard !Task.isCancelled, session.isPlaying, overlay == nil else { return }
-        withAnimation(Motion.standard) { controlsVisible = false }
+        // Not wrapped in withAnimation: the fade is scoped to the controls (PlayerVideoArea), so
+        // nothing else on the page animates while someone is scrolling the notes.
+        controlsVisible = false
     }
 
     // MARK: - Reactions

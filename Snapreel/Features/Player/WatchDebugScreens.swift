@@ -190,6 +190,11 @@ extension DebugCatalog {
             .shell("video.mini", "Mini player", tab: .home) { router, _ in
                 router.player = PlayerPresentation(videoID: checkout, startAt: 4, isMinimized: true)
             },
+            // Build 23: the player follows a swipe down on the video and minimises; the tab
+            // shell shows through above it.
+            .shell("video.swipe", "Player [swiped down to minimise]", tab: .home) { router, _ in
+                router.player = PlayerPresentation(videoID: checkout, startAt: 4)
+            },
         ]
     }
 

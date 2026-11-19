@@ -93,6 +93,10 @@ struct RecorderPreset {
     var levels: [CGFloat]?
     var confirmsRestart = false
     var reviewPanel: RecorderReviewPanel?
+    /// Shows the "What do you want to record?" chooser (opened without a mode).
+    var choosingMode: Bool?
+    /// Holds the recorder part-way through a swipe down.
+    var swipeOffset: CGFloat = 0
 }
 
 /// The recorder's state and actions. One per open recorder.
@@ -106,6 +110,9 @@ final class RecorderModel: ObservableObject {
     var isStatic: Bool { preset != nil }
 
     @Published var mode: RecordMode
+    /// Opened without a mode (the tab bar's record button, "Start a recording"): nothing runs,
+    /// not even the camera, until the person picks Camera, Screen or Audio.
+    @Published private(set) var isChoosingMode: Bool
     @Published var stage: RecorderStage = .idle
     @Published var elapsed: TimeInterval = 0
     @Published var cameraPermission: PermissionState
@@ -136,7 +143,8 @@ final class RecorderModel: ObservableObject {
     var initialReviewPanel: RecorderReviewPanel?
 
     let meter = RecorderAudioMeter()
-    let camera = RecorderCameraEngine()
+    /// Shared: one capture session for the app's lifetime (see `RecorderCameraEngine`).
+    let camera = RecorderCameraEngine.shared
     private let audio = RecorderAudioEngine()
 
     private var countdownTask: Task<Void, Never>?
@@ -152,6 +160,11 @@ final class RecorderModel: ObservableObject {
     private var captureFileName: String?
     private var lastSpaceCheck = Date.distantPast
     private var isVisible = false
+    /// When the system broadcast sheet was last opened from Snapreel's record button.
+    private var broadcastPickerOpenedAt: Date?
+    /// The recorder was swiped down mid audio recording; the take carries on from the bar
+    /// above the tab bar, so closing the screen mustn't stop anything.
+    private(set) var isMinimized = false
 
     init(launch: RecorderLaunch, library: Library, settings: AppSettings, router: AppRouter,
          preset: RecorderPreset?) {
@@ -161,6 +174,7 @@ final class RecorderModel: ObservableObject {
         self.router = router
         self.preset = preset
         mode = launch.mode ?? settings.lastRecordMode
+        isChoosingMode = preset?.choosingMode ?? (launch.mode == nil && !launch.startsWithImport && !launch.resumesMinimized)
         cameraPermission = preset?.cameraPermission ?? Permissions.currentState(.camera)
         microphonePermission = preset?.microphonePermission ?? Permissions.currentState(.microphone)
         cameraSide = preset?.cameraSide ?? settings.defaultCamera
@@ -168,6 +182,11 @@ final class RecorderModel: ObservableObject {
         broadcast = preset?.broadcast ?? BroadcastStateStore.read()
         showsTutorial = preset?.showsTutorial ?? !settings.hasSeenScreenTutorial
         tutorialPage = preset?.tutorialPage ?? 0
+        if isChoosingMode && preset == nil && isBroadcastLive {
+            // A screen recording is running: show it rather than asking what to record.
+            mode = .screen
+            isChoosingMode = false
+        }
         if let preset {
             stage = preset.stage ?? .idle
             elapsed = preset.elapsed
@@ -232,6 +251,12 @@ final class RecorderModel: ObservableObject {
         guard !isVisible else { return }
         isVisible = true
         guard !isStatic else { return }
+        if isMinimized {
+            // Back from the bar above the tab bar: everything is still running.
+            isMinimized = false
+            if router.minimizedRecorder === self { router.minimizedRecorder = nil }
+            return
+        }
         signalObservers = [
             BroadcastSignalObserver(.started) { [weak self] in
                 Task { @MainActor in self?.broadcastDidStart() }
@@ -248,7 +273,7 @@ final class RecorderModel: ObservableObject {
 
     func disappear() {
         isVisible = false
-        guard !isStatic else { return }
+        guard !isStatic, !isMinimized else { return }
         countdownTask?.cancel()
         clockTask?.cancel()
         screenTask?.cancel()
@@ -256,6 +281,28 @@ final class RecorderModel: ObservableObject {
         camera.shutDown()
         signalObservers = []
         UIApplication.shared.isIdleTimerDisabled = false
+    }
+
+    // MARK: - Choosing a mode and minimising
+
+    /// The person picked what to record from the chooser.
+    func chooseMode(_ newMode: RecordMode) {
+        guard isChoosingMode else { return }
+        Haptics.selection()
+        mode = newMode
+        settings.lastRecordMode = newMode
+        isChoosingMode = false
+        enterMode()
+    }
+
+    /// Only a voice recording can keep going with the recorder out of sight.
+    var canMinimize: Bool { !isStatic && mode == .audio && stage.isCapturing }
+
+    /// Swiped down mid audio recording: hand the take to the bar above the tab bar.
+    func minimize() {
+        guard canMinimize else { return }
+        isMinimized = true
+        router.minimizeRecorder(self)
     }
 
     /// Close button. Returns true when the recorder can close now.
@@ -318,6 +365,10 @@ final class RecorderModel: ObservableObject {
     /// Starts what the current mode needs and stops what it doesn't.
     private func enterMode() {
         guard !isStatic else { return }
+        if isChoosingMode {
+            camera.stopRunning()
+            return
+        }
         if mode == .camera && stage.showsCaptureControls {
             startCamera()
         } else {
@@ -660,13 +711,24 @@ final class RecorderModel: ObservableObject {
         refreshBroadcast()
         settings.hasSeenScreenTutorial = true
         showsTutorial = false
-        if mode != .screen && stage == .idle {
+        if isChoosingMode {
+            mode = .screen
+            isChoosingMode = false
+            enterMode()
+        } else if mode != .screen && stage == .idle {
             switchMode(to: .screen)
         }
+        // iOS leaves its broadcast sheet up after the countdown; close it so the recorder's
+        // "Snapreel is recording your screen" page (and the floating button) shows.
+        let openedRecently = broadcastPickerOpenedAt.map { Date().timeIntervalSince($0) < 180 } ?? false
+        BroadcastPickerSheet.dismissIfShowing(openedFromSnapreel: openedRecently)
+        broadcastPickerOpenedAt = nil
+        if settings.showsRecordingFloater { ScreenRecordingFloater.shared.arm() }
     }
 
     private func broadcastDidFinish() {
         refreshBroadcast()
+        ScreenRecordingFloater.shared.disarm()
         isStoppingBroadcast = false
         PendingImports.importFinishedBroadcasts(into: library)
         if screenFailure != nil { Haptics.warning() }
@@ -674,6 +736,7 @@ final class RecorderModel: ObservableObject {
 
     /// The picker's own button was tapped (the system sheet is opening).
     func broadcastPickerTapped() {
+        broadcastPickerOpenedAt = Date()
         Haptics.firm()
         if !settings.hasSeenScreenTutorial { settings.hasSeenScreenTutorial = true }
     }

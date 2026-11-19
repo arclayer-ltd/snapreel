@@ -435,6 +435,9 @@ struct ScreenUnavailableView: View {
 /// Shown when Snapreel is open while the screen is being recorded.
 struct ScreenRecordingProgressView: View {
     @EnvironmentObject private var model: RecorderModel
+    @EnvironmentObject private var settings: AppSettings
+
+    private var showsFloater: Bool { ScreenRecordingFloater.isSupported && settings.showsRecordingFloater }
 
     var body: some View {
         VStack(spacing: Space.l) {
@@ -446,7 +449,7 @@ struct ScreenRecordingProgressView: View {
                 Text(model.isStoppingBroadcast ? "Stopping…" : "Snapreel is recording your screen")
                     .font(.srTitle)
                     .foregroundStyle(.white)
-                Text("Go to any app and show what you need to. When you're done, tap Stop recording or the red pill at the top of the screen.")
+                Text(guidance)
                     .font(.srCallout)
                     .foregroundStyle(Color.srOnDarkSecondary)
             }
@@ -454,9 +457,64 @@ struct ScreenRecordingProgressView: View {
             .fixedSize(horizontal: false, vertical: true)
             .padding(.horizontal, Space.xl)
             microphone
+            if showsFloater {
+                floaterRow
+            }
             stopButton
                 .padding(.top, Space.xs)
             Spacer()
+        }
+        .onAppear { updateFloater() }
+        .onChange(of: settings.showsRecordingFloater) { _ in updateFloater() }
+    }
+
+    private var guidance: String {
+        showsFloater
+            ? "Go to your Home Screen and open any app. Stop with the floating Snapreel button, the red pill at the top, or here."
+            : "Go to your Home Screen and open any app. When you're done, tap Stop recording or the red pill at the top of the screen."
+    }
+
+    /// What will float over other apps once the person leaves Snapreel.
+    private var floaterRow: some View {
+        HStack(spacing: Space.s) {
+            ZStack {
+                // The same picture as the floating window, under the live layer in case the
+                // layer hasn't drawn yet.
+                Image(uiImage: ScreenRecordingFloater.shared.tileImage)
+                    .resizable()
+                    .scaledToFit()
+                FloaterTileView()
+            }
+            .frame(width: 96, height: 54)
+            .clipShape(RoundedRectangle(cornerRadius: Radius.s, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: Radius.s, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.18), lineWidth: 1))
+            .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Floating button")
+                    .font(.srSubheadlineStrong)
+                    .foregroundStyle(.white)
+                Text("Appears over other apps when you leave Snapreel. Tap it, then ❚❚ to stop.")
+                    .font(.srFootnote)
+                    .foregroundStyle(Color.srOnDarkSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(Space.s)
+        .background(RoundedRectangle(cornerRadius: Radius.l, style: .continuous).fill(Color.srInkControl))
+        .padding(.horizontal, Space.l)
+        .accessibilityElement(children: .combine)
+    }
+
+    private func updateFloater() {
+        let floater = ScreenRecordingFloater.shared
+        if model.isStatic {
+            floater.renderTile()
+        } else if showsFloater && model.isBroadcastLive {
+            floater.arm()
+        } else {
+            floater.disarm()
         }
     }
 
@@ -512,6 +570,37 @@ struct ScreenRecordingProgressView: View {
 }
 
 // MARK: - Broadcast picker
+
+/// iOS keeps its "Screen Broadcast" sheet on screen after the countdown, which looks stuck.
+/// Once the broadcast has started, Snapreel closes it.
+enum BroadcastPickerSheet {
+    @MainActor static func dismissIfShowing(openedFromSnapreel: Bool) {
+        let windows = UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .flatMap(\.windows)
+        for window in windows {
+            var presenter = window.rootViewController
+            while let presented = presenter?.presentedViewController {
+                if isBroadcastSheet(presented, openedFromSnapreel: openedFromSnapreel) {
+                    presented.dismiss(animated: true)
+                    return
+                }
+                presenter = presented
+            }
+        }
+    }
+
+    /// The sheet is ReplayKit's (its class names say Broadcast). As a fallback, when the sheet
+    /// was opened from Snapreel moments ago, the topmost presentation that isn't one of
+    /// Snapreel's own SwiftUI screens is taken to be it.
+    @MainActor private static func isBroadcastSheet(_ controller: UIViewController, openedFromSnapreel: Bool) -> Bool {
+        let name = String(describing: type(of: controller))
+        if name.contains("Broadcast") { return true }
+        guard openedFromSnapreel, controller.presentedViewController == nil else { return false }
+        return !name.contains("Hosting") && !(controller is UIAlertController)
+            && !(controller is UIActivityViewController)
+    }
+}
 
 /// The system screen-broadcast button, made invisible and laid over Snapreel's own record
 /// button: the tap goes straight to iOS, which shows its sheet with Snapreel preselected and a

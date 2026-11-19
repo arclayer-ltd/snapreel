@@ -22,8 +22,17 @@ enum RecorderCaptureResult {
 /// Camera capture and movie writing, off the main actor.
 /// Session changes run on `sessionQueue`; frames, sound and the movie writer run on `dataQueue`.
 /// Results come back through `@Sendable` callbacks; callers hop to the main actor themselves.
+///
+/// One engine (and one capture session) serves every recorder the app opens. With a fresh
+/// session per recorder, build 22 on an iPhone X showed the front camera about four stops too
+/// dark after the recorder was closed with the camera running and opened again, until the app
+/// was killed. Each engine tore down and started up on its own queue, so the two sessions
+/// could overlap on the same camera. Sharing one session keeps teardown and start-up in order
+/// on one queue, and every start puts exposure back on automatic.
 final class RecorderCameraEngine: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate,
                                   AVCaptureAudioDataOutputSampleBufferDelegate {
+    static let shared = RecorderCameraEngine()
+
     let session = AVCaptureSession()
     private let sessionQueue = DispatchQueue(label: "co.arclayer.snapreel.camera.session")
     private let dataQueue = DispatchQueue(label: "co.arclayer.snapreel.camera.data")
@@ -35,8 +44,35 @@ final class RecorderCameraEngine: NSObject, AVCaptureVideoDataOutputSampleBuffer
     private var microphoneInput: AVCaptureDeviceInput?
     private var outputsAdded = false
 
+    // sessionQueue only: the recorder wants the camera running (restarted after media resets).
+    private var wantsRunning = false
+
     // dataQueue only
     private var movie: RecorderMovieWriter?
+
+    override init() {
+        super.init()
+        NotificationCenter.default.addObserver(self, selector: #selector(sessionRuntimeError(_:)),
+                                               name: AVCaptureSession.runtimeErrorNotification, object: session)
+        NotificationCenter.default.addObserver(self, selector: #selector(sessionInterruptionEnded(_:)),
+                                               name: AVCaptureSession.interruptionEndedNotification, object: session)
+    }
+
+    /// Media services were reset (or another error stopped the session): start again if a
+    /// recorder still shows the camera.
+    @objc private func sessionRuntimeError(_ note: Notification) {
+        sessionQueue.async {
+            guard self.wantsRunning, !self.session.isRunning else { return }
+            self.session.startRunning()
+        }
+    }
+
+    @objc private func sessionInterruptionEnded(_ note: Notification) {
+        sessionQueue.async {
+            guard self.wantsRunning, !self.session.isRunning else { return }
+            self.session.startRunning()
+        }
+    }
 
     // MARK: - Session
 
@@ -48,6 +84,7 @@ final class RecorderCameraEngine: NSObject, AVCaptureVideoDataOutputSampleBuffer
         sessionQueue.async {
             let setup = self.applyConfiguration(side: side, quality: quality, mirrorsFront: mirrorsFront,
                                                 microphone: microphone, keepPreset: keepPreset)
+            self.wantsRunning = setup.isAvailable
             if setup.isAvailable && !self.session.isRunning {
                 self.session.startRunning()
             }
@@ -57,14 +94,17 @@ final class RecorderCameraEngine: NSObject, AVCaptureVideoDataOutputSampleBuffer
 
     func stopRunning() {
         sessionQueue.async {
+            self.wantsRunning = false
             if self.session.isRunning { self.session.stopRunning() }
         }
     }
 
-    /// The recorder closed: stop, and let go of the camera, microphone and delegates so the
-    /// engine can be freed.
+    /// The recorder closed: stop, and let go of the camera, microphone and delegates. The next
+    /// recorder sets everything up again on the same queue, so it always starts from a clean
+    /// session.
     func shutDown() {
         sessionQueue.async {
+            self.wantsRunning = false
             if self.session.isRunning { self.session.stopRunning() }
             self.session.beginConfiguration()
             for input in self.session.inputs { self.session.removeInput(input) }
@@ -99,6 +139,7 @@ final class RecorderCameraEngine: NSObject, AVCaptureVideoDataOutputSampleBuffer
             session.addInput(input)
             cameraInput = input
         }
+        Self.restoreAutomaticAdjustments(device)
 
         if microphone, microphoneInput == nil,
            let mic = AVCaptureDevice.default(for: .audio),
@@ -144,6 +185,28 @@ final class RecorderCameraEngine: NSObject, AVCaptureVideoDataOutputSampleBuffer
         let other = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: otherPosition)
         let canFlip = other?.supportsSessionPreset(session.sessionPreset) ?? false
         return RecorderCameraSetup(isAvailable: true, side: side, canFlipWhileRecording: canFlip, message: nil)
+    }
+
+    /// Puts exposure, focus and white balance back on automatic, metered from the middle of the
+    /// frame with no bias, and lets faces drive exposure. Nothing in Snapreel locks them, but
+    /// the camera is shared with every other app, so each recorder starts from known settings.
+    private static func restoreAutomaticAdjustments(_ device: AVCaptureDevice) {
+        guard (try? device.lockForConfiguration()) != nil else { return }
+        defer { device.unlockForConfiguration() }
+        let centre = CGPoint(x: 0.5, y: 0.5)
+        if device.isExposurePointOfInterestSupported { device.exposurePointOfInterest = centre }
+        if device.isExposureModeSupported(.continuousAutoExposure) { device.exposureMode = .continuousAutoExposure }
+        if device.exposureTargetBias != 0 { device.setExposureTargetBias(0, completionHandler: nil) }
+        if device.isFocusPointOfInterestSupported { device.focusPointOfInterest = centre }
+        if device.isFocusModeSupported(.continuousAutoFocus) { device.focusMode = .continuousAutoFocus }
+        if device.isWhiteBalanceModeSupported(.continuousAutoWhiteBalance) {
+            device.whiteBalanceMode = .continuousAutoWhiteBalance
+        }
+        if device.isLowLightBoostSupported { device.automaticallyEnablesLowLightBoostWhenAvailable = true }
+        if #available(iOS 15.4, *) {
+            device.automaticallyAdjustsFaceDrivenAutoExposureEnabled = true
+            device.automaticallyAdjustsFaceDrivenAutoFocusEnabled = true
+        }
     }
 
     private static func presets(for quality: RecordingQuality) -> [AVCaptureSession.Preset] {

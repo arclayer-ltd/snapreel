@@ -14,7 +14,11 @@ struct RecorderView: View {
 
     init(launch: RecorderLaunch) {
         self.launch = launch
+        #if DEBUG
+        self.preset = RecordDebug.shellCoverPreset()
+        #else
         self.preset = nil
+        #endif
     }
 
     /// Opens straight into a state, without touching the camera or microphone (debug screens).
@@ -33,8 +37,14 @@ private struct RecorderContainer: View {
     @StateObject private var model: RecorderModel
 
     init(launch: RecorderLaunch, preset: RecorderPreset?, library: Library, settings: AppSettings, router: AppRouter) {
-        _model = StateObject(wrappedValue: RecorderModel(launch: launch, library: library, settings: settings,
-                                                         router: router, preset: preset))
+        _model = StateObject(wrappedValue: { () -> RecorderModel in
+            // Coming back from the bar above the tab bar: the same take, still recording.
+            if launch.resumesMinimized, preset == nil, let running = router.minimizedRecorder {
+                return running
+            }
+            return RecorderModel(launch: launch, library: library, settings: settings,
+                                 router: router, preset: preset)
+        }())
     }
 
     var body: some View {
@@ -48,11 +58,24 @@ private struct RecorderScreen: View {
     @EnvironmentObject private var settings: AppSettings
     @Environment(\.dismiss) private var dismiss
     @State private var pickedItem: PhotosPickerItem?
+    /// How far the recorder has been dragged down.
+    @State private var swipeOffset: CGFloat = 0
+    @State private var isSwipeLeaving = false
+    @GestureState private var isSwiping = false
 
     var body: some View {
         ZStack {
             Color.srInk.ignoresSafeArea()
             content
+        }
+        .offset(y: swipeOffset)
+        .onAppear {
+            if let held = model.preset?.swipeOffset, held > 0 { swipeOffset = held }
+        }
+        .onChange(of: isSwiping) { swiping in
+            if !swiping && !isSwipeLeaving && swipeOffset > 0 {
+                withAnimation(SwipeDismiss.springBack) { swipeOffset = 0 }
+            }
         }
         .preferredColorScheme(.dark)
         .modifier(RecorderPresentations(pickedItem: $pickedItem))
@@ -73,13 +96,53 @@ private struct RecorderScreen: View {
             RecorderImportProgressView(progress: progress)
                 .transition(.opacity)
         default:
-            RecorderCaptureLayout(close: { close() })
+            RecorderCaptureLayout(close: { close() }, swipeDown: swipeDown)
                 .transition(.opacity)
         }
     }
 
     private func close() {
         if model.prepareToClose() { dismiss() }
+    }
+
+    // MARK: Swipe down
+
+    /// Drag the recorder down. Letting go does what the close button does, except during a
+    /// voice recording: then the recorder slides away and the take carries on in a bar above
+    /// the tab bar. A camera take asks before it's thrown away, like the close button.
+    private var swipeDown: AnyGesture<DragGesture.Value> {
+        AnyGesture(DragGesture(minimumDistance: 14, coordinateSpace: .global)
+            .updating($isSwiping) { _, swiping, _ in swiping = true }
+            .onChanged { value in
+                guard !isSwipeLeaving, model.sheet == nil else { return }
+                if swipeOffset == 0 && !SwipeDismiss.isDownward(value) { return }
+                swipeOffset = max(0, value.translation.height)
+            }
+            .onEnded { value in
+                guard !isSwipeLeaving, swipeOffset > 0 else { return }
+                guard SwipeDismiss.commits(value) else {
+                    withAnimation(SwipeDismiss.springBack) { swipeOffset = 0 }
+                    return
+                }
+                if model.canMinimize {
+                    leave { model.minimize() }
+                } else if model.prepareToClose() {
+                    leave { dismiss() }
+                } else {
+                    // A take is running (the discard question is up) or the file is closing.
+                    withAnimation(SwipeDismiss.springBack) { swipeOffset = 0 }
+                }
+            })
+    }
+
+    private func leave(_ finish: @escaping @MainActor () -> Void) {
+        isSwipeLeaving = true
+        Haptics.tap()
+        withAnimation(SwipeDismiss.slideAway) { swipeOffset = SwipeDismiss.offscreen }
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 180_000_000)
+            finish()
+        }
     }
 
     private func closeWhileSaving() {
@@ -212,6 +275,7 @@ private struct RecorderEvents: ViewModifier {
 private struct RecorderCaptureLayout: View {
     @EnvironmentObject private var model: RecorderModel
     let close: @MainActor () -> Void
+    let swipeDown: AnyGesture<DragGesture.Value>
 
     var body: some View {
         VStack(spacing: Space.s) {
@@ -220,8 +284,13 @@ private struct RecorderCaptureLayout: View {
                 RecorderTopBar(close: close)
             }
             .clipShape(RoundedRectangle(cornerRadius: Radius.xl, style: .continuous))
-            RecorderControlsRow()
-            RecorderModeRow()
+            .simultaneousGesture(swipeDown)
+            if model.isChoosingMode {
+                RecorderChooserFooter()
+            } else {
+                RecorderControlsRow()
+                RecorderModeRow()
+            }
         }
         .padding(.horizontal, Space.xs)
         .padding(.top, Space.xxs)
@@ -229,10 +298,14 @@ private struct RecorderCaptureLayout: View {
     }
 
     @ViewBuilder private var stage: some View {
-        switch model.mode {
-        case .camera: RecorderCameraStage()
-        case .audio: RecorderAudioStage()
-        case .screen: RecorderScreenStage()
+        if model.isChoosingMode {
+            RecorderModeChooser()
+        } else {
+            switch model.mode {
+            case .camera: RecorderCameraStage()
+            case .audio: RecorderAudioStage()
+            case .screen: RecorderScreenStage()
+            }
         }
     }
 }
@@ -258,11 +331,19 @@ private struct RecorderTopBar: View {
     }
 
     private var showsTimer: Bool {
-        model.mode == .camera && model.primer == .none
+        model.mode == .camera && model.primer == .none && !model.isChoosingMode
     }
 
     @ViewBuilder private var tools: some View {
         let capturing = model.stage.isCapturing
+        if model.isChoosingMode {
+            EmptyView()
+        } else {
+            modeTools(capturing: capturing)
+        }
+    }
+
+    @ViewBuilder private func modeTools(capturing: Bool) -> some View {
         switch model.mode {
         case .camera:
             if model.primer == .none && !capturing {

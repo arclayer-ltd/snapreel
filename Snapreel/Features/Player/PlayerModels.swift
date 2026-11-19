@@ -97,6 +97,8 @@ struct PlayerInitialState {
     var scrollsToPanel = false
     /// Shows "Keep watching", as after a note paused a playing video.
     var showsResumePill = false
+    /// Holds the page part-way through a swipe down to minimise.
+    var swipeOffset: CGFloat = 0
 }
 
 /// A large emoji that rises over the video when you react.

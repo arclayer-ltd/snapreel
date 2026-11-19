@@ -54,6 +54,8 @@ struct RecorderLaunch: Identifiable, Equatable {
     var mode: RecordMode?
     /// Opens the photo library import straight away.
     var startsWithImport = false
+    /// Brings back the recorder that was minimised mid audio recording.
+    var resumesMinimized = false
 }
 
 /// The player is an overlay owned by the shell so it can minimise into a bar above the tab bar
@@ -78,6 +80,9 @@ final class AppRouter: ObservableObject {
     @Published var searchPath = NavigationPath()
 
     @Published var recorder: RecorderLaunch?
+    /// An audio recording that keeps going in the bar above the tab bar after the recorder was
+    /// swiped down.
+    @Published var minimizedRecorder: RecorderModel?
     @Published var player: PlayerPresentation?
     @Published var isSettingsPresented = false
     /// Pages pushed when Settings opens (empty = the root). Set through `openSettings(_:)`.
@@ -104,10 +109,30 @@ final class AppRouter: ObservableObject {
     }
 
     func record(_ mode: RecordMode? = nil, startsWithImport: Bool = false) {
+        if minimizedRecorder != nil {
+            // One take at a time: open the recording that's already running.
+            expandRecorder()
+            return
+        }
         recorder = RecorderLaunch(mode: mode, startsWithImport: startsWithImport)
     }
 
+    func minimizeRecorder(_ model: RecorderModel) {
+        withAnimation(Motion.standard) { minimizedRecorder = model }
+        recorder = nil
+    }
+
+    func expandRecorder() {
+        guard minimizedRecorder != nil, recorder == nil else { return }
+        recorder = RecorderLaunch(mode: nil, resumesMinimized: true)
+    }
+
     func play(_ videoID: UUID, at time: Double? = nil, opensTranscript: Bool = false) {
+        if minimizedRecorder != nil {
+            // Playing would take the microphone's audio session away from the recording.
+            showToast("Stop your recording to play this", systemImage: "mic.fill")
+            return
+        }
         withAnimation(Motion.standard) {
             player = PlayerPresentation(videoID: videoID, startAt: time, opensTranscript: opensTranscript)
         }

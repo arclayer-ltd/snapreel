@@ -17,12 +17,18 @@ struct MainShell: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .overlay(alignment: .bottom) {
-                if let player = router.player, player.isMinimized {
-                    MiniPlayerBar(videoID: player.videoID)
-                        .padding(.horizontal, Space.s)
-                        .padding(.bottom, Space.xs)
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                VStack(spacing: Space.xs) {
+                    if let recording = router.minimizedRecorder {
+                        MinimizedRecordingBar(model: recording)
+                            .transition(.move(edge: .bottom).combined(with: .opacity))
+                    }
+                    if let player = router.player, player.isMinimized {
+                        MiniPlayerBar(videoID: player.videoID)
+                            .transition(.move(edge: .bottom).combined(with: .opacity))
+                    }
                 }
+                .padding(.horizontal, Space.s)
+                .padding(.bottom, Space.xs)
             }
             SnapreelTabBar(selection: router.tab,
                            unreadCount: library.unreadNotificationCount,
@@ -48,6 +54,7 @@ struct MainShell: View {
                 .environmentObject(library)
                 .environmentObject(settings)
                 .environmentObject(router)
+                .clearCoverBackground()
         }
         .fullScreenCover(isPresented: playerExpanded) {
             if let player = router.player {
@@ -55,6 +62,7 @@ struct MainShell: View {
                     .environmentObject(library)
                     .environmentObject(settings)
                     .environmentObject(router)
+                    .clearCoverBackground()
             }
         }
         .sheet(isPresented: $router.isSettingsPresented) {
