@@ -330,9 +330,13 @@ enum FixtureArt {
     }
 
     /// A 6-second 640x360 clip so the player has something real to play in screenshots.
+    /// Written under a temporary name and moved into place only once complete: CI kills each
+    /// launch after a few seconds, and a half-written clip left at `url` passed the exists check
+    /// on every later launch, so run 28's player screens said "This recording won't play".
     static func writeSampleClip(to url: URL) {
-        try? FileManager.default.removeItem(at: url)
-        guard let writer = try? AVAssetWriter(outputURL: url, fileType: .mp4) else { return }
+        let partial = url.deletingLastPathComponent().appendingPathComponent("partial-" + url.lastPathComponent)
+        try? FileManager.default.removeItem(at: partial)
+        guard let writer = try? AVAssetWriter(outputURL: partial, fileType: .mp4) else { return }
         let width = 640, height = 360, fps: Int32 = 30, seconds = 6
         let input = AVAssetWriterInput(mediaType: .video, outputSettings: [
             AVVideoCodecKey: AVVideoCodecType.h264,
@@ -373,6 +377,9 @@ enum FixtureArt {
         let done = DispatchSemaphore(value: 0)
         writer.finishWriting { done.signal() }
         done.wait()
+        guard writer.status == .completed else { return }
+        try? FileManager.default.removeItem(at: url)
+        try? FileManager.default.moveItem(at: partial, to: url)
     }
 }
 #endif
