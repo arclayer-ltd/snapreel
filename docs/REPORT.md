@@ -4,18 +4,25 @@ Snapreel is a native SwiftUI iPhone app (iOS 16.0 and later) for recording your 
 
 ## Where it stands
 
-- **TestFlight:** build 22 of "Snapreel: Screen Recorder" (`co.arclayer.snapreel`) is processed by Apple and valid, and the internal group "Snapreel Internal" has it, so it shows up in the TestFlight app on your iPhone. It fixes what you found testing build 20 on the phone: the record button sat off-centre in Screen and Audio, the app ignored the iPhone's Dark mode (the welcome screens were always dark and everything else always light), and the welcome animation stuttered when it looped.
-- **Code:** `arclayer-ltd/snapreel` (public, so the macOS CI minutes are free). The last full CI run (Xcode 27.2, iOS 27.2 SDK) compiled both targets with no errors and no warnings and screenshotted 124 screen states in the simulator (run 21), and run 22 screenshotted 42 of them again in Dark mode. Building with the iOS 27 SDK clears App Store Connect's ITMS-90725 warning, which builds 12 to 18 carried (built with the iOS 26.2 SDK, which can't be uploaded from April 2027).
-- **Plan:** all 57 planned screens exist and are reachable, plus their states (124 screenshots in total). `docs/PLAN.md` maps every feature to its screens and data; `refs/index.json` maps every screen to its reference.
+- **TestFlight:** build 24 of "Snapreel: Screen Recorder" (`co.arclayer.snapreel`) is the one to install. Apple has processed it as valid and the internal group "Snapreel Internal" has it, so it shows up in the TestFlight app on your iPhone. Build 23 has the same app code with the old welcome clip. Builds 23 and 24 fix what your two videos of build 22 showed (19 November); items 18 to 25 of the phone checklist test each fix:
+  - the player's notes got stuck at the bottom and sprang back, and only the arrow closed the player;
+  - the recorder couldn't be swiped down;
+  - the camera came back very dark after closing the recorder and opening it again;
+  - the recorder turned the camera on before you chose what to record;
+  - the system's Screen Broadcast sheet stayed on screen after Start Broadcast;
+  - there was no floating button to stop a screen recording from other apps;
+  - the welcome walk still glitched.
+- **Code:** `arclayer-ltd/snapreel` (public, so the macOS CI minutes are free). The last full CI run (run 23, Xcode 27.2, iOS 27.2 SDK) compiled both targets with no errors and no warnings and screenshotted 131 screen states in the simulator, 28 of them again in Dark mode, with no crashes. Building with the iOS 27 SDK clears App Store Connect's ITMS-90725 warning, which builds 12 to 18 carried (built with the iOS 26.2 SDK, which can't be uploaded from April 2027).
+- **Plan:** all 57 planned screens exist and are reachable, plus their states (131 screenshots in total). `docs/PLAN.md` maps every feature to its screens and data; `refs/index.json` maps every screen to its reference.
 
 ### Against the brief's "Done means"
 
 | Requirement | Status |
 |---|---|
-| Every planned screen exists, is reachable and has a screenshot | Done: 57 screens, 124 screenshots of screens and states in the last CI run |
+| Every planned screen exists, is reachable and has a screenshot | Done: 57 screens, 131 screenshots of screens and states in the last full CI run |
 | Every feature works with real recordings and no network | Built and compiled; device-only parts are unverified until you run the phone checklist below |
 | Comparison results recorded | Done: three rounds in `refs/results.json` |
-| A processed TestFlight build exists | Done: build 22, valid |
+| A processed TestFlight build exists | Done: build 24, valid |
 | Parallel sessions A–E, merged | Done in the first part of the build |
 
 ## What was built
@@ -97,7 +104,7 @@ Why the raw numbers stay low: almost every reference screen carries something Sn
 
 ## Test on the phone (iPhone X, iOS 16.7)
 
-Install build 20 from TestFlight. Put the phone on Airplane Mode for everything except sending.
+Install build 24 from TestFlight. Put the phone on Airplane Mode for everything except sending.
 
 1. **First run:** Get started → three slides (swipe and Back) → choose a use → tour → Turn on notifications → Allow.
 2. **Camera:** Record → Camera → Allow camera and microphone → both iOS prompts → Allow.
@@ -131,10 +138,31 @@ Install build 20 from TestFlight. Put the phone on Airplane Mode for everything 
 15. **Light and Dark (build 22):** with the iPhone in Dark mode, the welcome screens, Home, Library, Notifications, Search, Settings and their sheets are all dark. Switch the iPhone to Light (Control Centre, or Settings → Display & Brightness) and they turn light, with the character art in rounded dark cards. Then Settings → Appearance → Light or Dark keeps that look whatever the iPhone is set to; Match iPhone hands control back. The recorder and the player stay dark in every mode.
 16. **Record button (build 22):** Record → Screen, and Record → Audio. The big record button sits in the middle of the screen, the same as in Camera mode.
 17. **Character loops (build 22):** watch the welcome screen for ten seconds. The five friends keep walking with no stutter, ghosted legs or pause when the clip restarts.
+18. **Player, swipe down (build 23):** open any recording and drag the video down. The page follows your finger and the app shows behind it. Let go past a third of the way, or flick, and it shrinks into the bar above the tab bar while it keeps playing. A short drag springs back. With the details scrolled to the top, pulling them further down does the same. Try it with an audio recording too.
+19. **Player, notes don't stick (build 23):** play a recording, scroll down to Notes, and wait for the controls to fade. Scroll back up: the title and buttons come back and stay. Before, the page sprang back to the notes on its own.
+20. **Camera after closing (build 23):** Record → Camera, then close with ✕ while the preview is live. Open it again, three times. The preview should be as bright as the first time, and your face shouldn't go dark when you move out of frame. Then tap Flip, point the back camera at the room and record a few seconds.
+21. **Choose before recording (build 23):** tap the tab bar's red record button, or Home → Start a recording. You get "What do you want to record?" with the green camera dot off. Pick Camera and the preview starts. Home's Camera, Screen and Audio tiles still go straight to that mode.
+22. **Recorder, swipe down (build 23):**
+    - Record → Audio → record. Swipe the recorder down: it slides away and "Recording your voice" carries on in a bar above the tab bar, with the time running.
+    - In the bar, pause and resume. Tap the bar to bring the recorder back, then swipe it away again.
+    - Stop from the bar's red button: the recorder opens on the saving or review screen.
+    - Swiping down an idle recorder closes it. Swiping down mid camera recording asks "Discard this recording?", like ✕ does.
+    - While the voice recording runs, try to play a video: you get "Stop your recording to play this".
+23. **Broadcast sheet closes itself (build 23):** with Screen Mirroring off, Record → Screen → record button → Start Broadcast. After the 3-2-1 the iOS sheet closes by itself and "Snapreel is recording your screen" shows. iOS doesn't let an app send itself to the Home Screen, so swipe up yourself.
+24. **Floating button (build 23):**
+    - Start a screen recording as in item 23, then go to the Home Screen. A small "● Recording Snapreel" tile floats over other apps.
+    - Drag it around, push it off the side to tuck it away, and pull it back.
+    - Tap it, then the pause sign: the recording stops and is saved (you get the usual notification).
+    - Start again, tap the tile, then the arrow: Snapreel comes back on the recording screen.
+    - The tile is in the recording itself. To turn it off: Settings → Recording → Floating button, or the gear in the recorder.
+25. **Welcome walk (build 24):** delete Snapreel, reinstall build 24 and watch the welcome screen for ten seconds. The walk should keep an even pace, with no jump where the loop restarts. At the restart the feet may blur for a moment. This is a re-cut of the existing clip; the Seedance 2.5 remake you asked for waits for your go-ahead on the credits (about 35 per 5-second attempt).
 
 ## Not verified
 
-- **On the iPhone:** you tested build 20 on the iPhone X and found recording, audio and the screen working; build 22's three fixes are checked only in simulator screenshots until you run items 15 to 17 below. Everything else here comes from compiling, simulator screenshots of debug states with sample data, and Apple's processing of the TestFlight builds.
+- **On the iPhone:** you tested build 22 on the iPhone X and filmed what still went wrong. Builds 23 and 24 are checked only by compiling and in simulator screenshots until you run items 18 to 25. The simulator can't swipe, has no camera and no picture in picture, and can't broadcast, so the swipe gestures, the camera brightness fix, the closing broadcast sheet and the floating button are untested until then. The screenshots show their states: `rec.chooser`, `rec.swipe`, `rec.minimized`, `rec.screen.floater` and `video.swipe`.
+- **Dark camera cause:** I couldn't reproduce it without the phone. The video shows the front camera live but about four stops too dark after closing and reopening the recorder, until the app was killed. Build 23 removes the likely cause: each recorder used to open its own camera session, and now one session is shared. It also resets exposure to automatic every time the camera starts. If it still happens, the device log while reopening the recorder will show why.
+- **Floating button:** it uses picture in picture, which needs iOS to treat Snapreel as playing. Whether iOS starts it automatically when you leave during a broadcast has only been checked against Apple's documentation. If no tile appears in item 24, that's the reason.
+- **Swiping over a light screen:** while the player or recorder is dragged down over a light Home, the clock and battery at the top stay white, so they're faint for that moment. Everything else here comes from compiling, simulator screenshots of debug states with sample data, and Apple's processing of the TestFlight builds.
 - **Screen recording:** works on your iPhone X (build 20). Its memory use against the extension's 50 MB cap hasn't been measured.
 - **Camera and audio:** you found them working on the phone; CI can't check them (the simulator has no camera).
 - **Picture in picture:** untested; the simulator reports it unsupported.
