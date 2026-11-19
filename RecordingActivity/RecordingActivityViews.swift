@@ -94,17 +94,19 @@ struct RecordingActivityLockScreenView: View {
     var body: some View {
         HStack(spacing: 12) {
             RecordingActivityMark(phase: status.phase, size: 42)
+            // On a 375-point iPhone the text gets about 180 points, so the title may shrink a
+            // little and the subtitle wraps rather than losing "and stop" (run 27).
             VStack(alignment: .leading, spacing: 2) {
                 Text(RecordingActivityStyle.title(kind, status.phase))
                     .font(.headline)
                     .foregroundColor(.white)
                     .lineLimit(1)
-                    .minimumScaleFactor(0.8)
+                    .minimumScaleFactor(0.75)
                 Text(RecordingActivityStyle.subtitle(status.phase))
                     .font(.subheadline)
                     .foregroundColor(RecordingActivityStyle.secondary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             RecordingActivityClock(status: status)
@@ -113,7 +115,7 @@ struct RecordingActivityLockScreenView: View {
                 .multilineTextAlignment(.trailing)
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
-                .frame(width: 96, alignment: .trailing)
+                .frame(width: 76, alignment: .trailing)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 14)

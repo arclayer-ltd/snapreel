@@ -12,6 +12,11 @@ Snapreel is a native SwiftUI iPhone app (iOS 16.0 and later) for recording your 
     - the broadcast sheet still stayed up.
   - Build 25 also has the welcome walk remade with Seedance 2.5.
   - Items 18 to 26 of the phone checklist test each fix.
+- **Next build, on `main` but not on TestFlight:**
+  - The Live Activity build: a recording timer on the Lock Screen and in the Dynamic Island, and no floating picture-in-picture button.
+  - Fixes for what your 16:11 video of build 25 showed. Under a portrait recording, taps on the title, buttons and Details did nothing, and the notes scrolled up but not back down.
+  - The Live Activity build is simulator-only until you approve a new App ID and provisioning profile for its widget extension (`co.arclayer.snapreel.liveactivity`). You answered "Not now", so TestFlight can't sign it, and nothing has been created at Apple.
+  - CI run 27 compiled it and screenshotted it. The touch fix and the speed-menu fix came after run 27, so they haven't run in CI yet.
 - **Code:** `arclayer-ltd/snapreel` (public, so the macOS CI minutes are free). The last full CI run (run 25, Xcode 27.2, iOS 27.2 SDK) compiled both targets with no errors and no warnings and screenshotted 132 screen states in the simulator, 33 of them again in Dark mode, with no crashes. Building with the iOS 27 SDK clears App Store Connect's ITMS-90725 warning, which builds 12 to 18 carried (built with the iOS 26.2 SDK, which can't be uploaded from April 2027).
 - **Plan:** all 57 planned screens exist and are reachable, plus their states (132 screenshots in total). `docs/PLAN.md` maps every feature to its screens and data; `refs/index.json` maps every screen to its reference.
 
@@ -164,11 +169,20 @@ Install build 25 from TestFlight. Put the phone on Airplane Mode for everything 
 
 ## Not verified
 
-- **Known in build 25:** opening a recording from a "transcript ready" notification picks the Transcript tab, but the page stays at the top, so the transcript sits below the fold until you scroll. Run 25's screenshots showed it (`video.notes`, `video.transcript`). The fix is on `main` and comes in the next build: the scroll view now places the Notes / Transcript switch at the top itself.
+- **Known in build 25: taps and scrolling under a portrait recording.** Your 16:11 video showed it:
+  - Share, the more button, Edit title and Details did nothing.
+  - The notes scrolled up but never back down, and a downward swipe closed the player instead.
+  - The cause: the blurred backdrop behind a portrait video is a picture that fills the video area. The part that overflows is hidden, but it still caught touches, reaching about 230 points down over the title, buttons and notes. Taps there went to the video, and downward drags went to its swipe-down.
+  - The same overflow explains the stuck notes in builds 22 and 23.
+  - The fix is on `main` for the next build: the backdrop no longer takes touches, and the video sits under the details (except while the speed menu is open).
+- **Known in build 25: opening on the transcript.** Opening a recording from a "transcript ready" notification picks the Transcript tab, but the page stays at the top. The cause: the panel's position always reached the scroll view as 0. Run 27 shows it fixed on `main` (`video.notes`, `video.transcript`).
 - **On the iPhone:** you tested build 23 on the iPhone X and found what still went wrong. Builds 23 to 25 are checked only by compiling and in simulator screenshots until you run items 18 to 26. The simulator can't swipe, has no camera and no picture in picture, and can't broadcast, so the swipe gestures, the camera brightness fix, the closing broadcast sheet and the floating button are untested until then. The screenshots show their states: `rec.chooser`, `rec.swipe`, `rec.minimized`, `rec.screen.floater` and `video.swipe`.
 - **Dark camera cause:** I couldn't reproduce it without the phone. The video shows the front camera live but about four stops too dark after closing and reopening the recorder, until the app was killed. Build 23 removes the likely cause: each recorder used to open its own camera session, and now one session is shared. It also resets exposure to automatic every time the camera starts. If it still happens, the device log while reopening the recorder will show why.
-- **Floating button:** it uses picture in picture, which needs iOS to treat Snapreel as playing. Whether iOS starts it automatically when you leave during a broadcast has only been checked against Apple's documentation. If no tile appears in item 24, that's the reason. You've since said "no floating PiP bubble"; it is still in build 25, and the Live Activity build that comes next can remove it.
-- **Notes scrolling (build 25):** the cause in builds 22 and 23 was never pinned to one line of code. Build 25 moves the area onto a UIKit scroll view, so that bug can't come from SwiftUI's scroll view there any more. The simulator can't swipe, so only item 19 on the phone confirms it.
+- **Floating button:** it uses picture in picture, which needs iOS to treat Snapreel as playing. Whether iOS starts it automatically when you leave during a broadcast has only been checked against Apple's documentation. If no tile appears in item 24, that's the reason. You've since said "no floating PiP bubble". It is still in build 25 and is removed on `main`.
+- **Live Activity (on `main`, simulator only):** CI draws its Lock Screen and Dynamic Island views (`rec.live`, `rec.live.states`, `rec.live.island`), but the simulator can't show a real Live Activity.
+  - If a recording is stopped from the red pill or Control Centre while Snapreel is suspended, the Lock Screen keeps showing "Recording" until Snapreel next opens.
+  - A broadcast started from Control Centre gets no Live Activity until Snapreel is opened.
+- **Notes scrolling:** build 25's UIKit scroll view didn't fix it, because the cause was the video's backdrop catching touches, not the scroll view (see "Known in build 25" above). The simulator can't tap or swipe, so `video.player` now logs which view the system finds under points down the details (`debug-trace.txt`). Only the phone confirms it.
 - **Broadcast sheet (build 25):** opening Snapreel's own link to close the sheet comes from one developer's report on iOS 14. It hasn't been tried on iOS 16.7. Going to the Home Screen by itself would need an undocumented Apple call; it's written but off, as you chose ("Ship 25 as is").
 - **Endless spinner (build 25):** the spinner was the saving screen with the video already saved. Build 25 makes the recorder move on by itself, but I couldn't replay your exact steps, because the simulator can't broadcast.
 - **Swiping over a light screen:** while the player or recorder is dragged down over a light Home, the clock and battery at the top stay white, so they're faint for that moment. Everything else here comes from compiling, simulator screenshots of debug states with sample data, and Apple's processing of the TestFlight builds.
