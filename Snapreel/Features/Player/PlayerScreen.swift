@@ -128,8 +128,10 @@ struct PlayerScreen: View {
                     .frame(height: PlayerLayout.videoHeight(for: video, width: proxy.size.width,
                                                             available: proxy.size.height))
                     // The band behind the status bar is the page's, so the clock reads in both
-                    // appearances; the video area itself stays dark.
-                    .background(Color.srInkDeep)
+                    // appearances; the video area itself stays dark. A colour background reaches
+                    // into the safe area by itself (run 30 still showed a dark band in Light
+                    // mode), so it is kept inside the video area explicitly.
+                    .background(Color.srInkDeep, ignoresSafeAreaEdges: [])
                     .simultaneousGesture(swipeToMinimise)
                     // Normally under the details, which are drawn later and so win the touch:
                     // build 25's constant zIndex(1) let the portrait poster's overflow take their

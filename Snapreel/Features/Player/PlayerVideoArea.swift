@@ -214,7 +214,7 @@ struct PlayerControlsOverlay: View {
                     .frame(height: 110)
             }
         }
-        .background(onPicture ? Color.black.opacity(0.12) : Color.clear)
+        .background(onPicture ? Color.black.opacity(0.12) : Color.clear, ignoresSafeAreaEdges: [])
         .allowsHitTesting(false)
     }
 
