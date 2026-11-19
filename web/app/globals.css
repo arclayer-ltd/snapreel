@@ -1,0 +1,72 @@
+@import "tailwindcss";
+
+/* Snapreel tokens, taken from the app's Kit/Tokens.swift so the site and the app match.
+   Light and Dark follow the visitor's system setting, like the app. */
+:root {
+  /* Brand (same in both modes) */
+  --sr-red: #f04850;
+  --sr-red-deep: #d32434;
+  --sr-red-glow: #fe6262;
+  --sr-wine: #5e0b16;
+  --sr-wine-mid: #8f1424;
+  --sr-cream: #ffe9b8;
+  --sr-ink: #13141b;
+  --sr-ink-deep: #07080c;
+
+  /* Surfaces and text (adaptive) */
+  --sr-canvas: #f4f4f6;
+  --sr-surface: #ffffff;
+  --sr-fill: #ececf0;
+  --sr-line: #e3e3e8;
+  --sr-text: #13141b;
+  --sr-text-2: #5b5e6b;
+  --sr-text-3: #8f929d;
+  --sr-red-text: #d32434;
+  --sr-red-soft: #fdeced;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --sr-canvas: #0e0f14;
+    --sr-surface: #1c1e27;
+    --sr-fill: #2a2c37;
+    --sr-line: #30323d;
+    --sr-text: #f4f4f6;
+    --sr-text-2: #a6a9b5;
+    --sr-text-3: #737685;
+    --sr-red-text: #ff6e72;
+    --sr-red-soft: #3b1d24;
+  }
+}
+
+@theme inline {
+  --color-sr-red: var(--sr-red);
+  --color-sr-red-deep: var(--sr-red-deep);
+  --color-sr-red-glow: var(--sr-red-glow);
+  --color-sr-wine: var(--sr-wine);
+  --color-sr-wine-mid: var(--sr-wine-mid);
+  --color-sr-cream: var(--sr-cream);
+  --color-sr-ink: var(--sr-ink);
+  --color-sr-ink-deep: var(--sr-ink-deep);
+  --color-canvas: var(--sr-canvas);
+  --color-surface: var(--sr-surface);
+  --color-fill: var(--sr-fill);
+  --color-line: var(--sr-line);
+  --color-text: var(--sr-text);
+  --color-text-2: var(--sr-text-2);
+  --color-text-3: var(--sr-text-3);
+  --color-red-text: var(--sr-red-text);
+  --color-red-soft: var(--sr-red-soft);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+html {
+  color-scheme: light dark;
+}
+
+body {
+  background: var(--sr-canvas);
+  color: var(--sr-text);
+  font-family: var(--font-geist-sans), system-ui, sans-serif;
+}
