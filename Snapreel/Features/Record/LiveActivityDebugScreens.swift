@@ -19,6 +19,15 @@ extension DebugCatalog {
                     (.audio, .paused(elapsed: 125)),
                 ])
             },
+            DebugScreen("rec.live.stopped", "Live Activity after the phone locked [stopped, stale]") {
+                // Locking the phone ends a screen broadcast: the card freezes as stopped. The
+                // second card is the backstop when Snapreel couldn't hear the end (stale date
+                // passed): no clock, "open Snapreel to check".
+                LiveActivityLockScreenMock(cards: [
+                    (.screen, .stopped(elapsed: 14)),
+                    (.screen, .recording(clockStart: Date().addingTimeInterval(-1_000))),
+                ], staleCards: [1])
+            },
             DebugScreen("rec.live.island", "Live Activity in the Dynamic Island") {
                 LiveActivityIslandMock(kind: .screen,
                                        status: .recording(clockStart: Date().addingTimeInterval(-83)))
@@ -49,6 +58,8 @@ private func lockScreenText(_ scheme: ColorScheme) -> Color {
 
 private struct LiveActivityLockScreenMock: View {
     let cards: [(RecordingActivityKind, RecordingActivityStatus)]
+    /// Indexes of cards drawn as iOS draws them once their stale date has passed.
+    var staleCards: Set<Int> = []
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
@@ -65,8 +76,9 @@ private struct LiveActivityLockScreenMock: View {
                     .font(.system(size: 88, weight: .bold, design: .rounded))
                 Spacer()
                 VStack(spacing: 10) {
-                    ForEach(Array(cards.enumerated()), id: \.offset) { _, card in
-                        RecordingActivityLockScreenView(kind: card.0, status: card.1)
+                    ForEach(Array(cards.enumerated()), id: \.offset) { index, card in
+                        RecordingActivityLockScreenView(kind: card.0, status: card.1,
+                                                        isStale: staleCards.contains(index))
                             .background(RecordingActivityStyle.background(colorScheme))
                             .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
                     }

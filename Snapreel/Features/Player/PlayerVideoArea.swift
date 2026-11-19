@@ -79,7 +79,8 @@ struct PlayerVideoArea: View {
     // MARK: - Layers
 
     @ViewBuilder private var backdrop: some View {
-        Color.srInkDeep
+        // An audio recording has no picture, so its panel follows the appearance.
+        video.isAudioOnly ? Color.srStageRaised : Color.srInkDeep
         if video.isPortrait && !video.isAudioOnly && !isFullscreen {
             PlayerBlurredPoster(video: video)
         }
@@ -87,8 +88,7 @@ struct PlayerVideoArea: View {
 
     @ViewBuilder private var media: some View {
         if video.isAudioOnly {
-            AudioArtwork(seed: PlayerArtSeed.of(video.id))
-                .accessibilityHidden(true)
+            PlayerAudioPanel(video: video, session: session, clock: session.clock)
         } else if video.state.isReady {
             PlayerSurface(session: session)
                 .accessibilityLabel("Video")
@@ -130,7 +130,7 @@ struct PlayerVideoArea: View {
                                   rate: rate, overlay: $overlay, actions: actions)
                 .transition(.opacity)
         } else {
-            PlayerProgressLine(clock: session.clock, duration: duration)
+            PlayerProgressLine(clock: session.clock, duration: duration, onPicture: !video.isAudioOnly)
                 .transition(.opacity)
         }
     }
@@ -182,6 +182,10 @@ struct PlayerControlsOverlay: View {
     @Binding var overlay: PlayerOverlay?
     let actions: PlayerVideoActions
 
+    /// Full controls over a video: scrims, glass buttons, white text. An audio recording's
+    /// panel (and `.minimal`) has no picture, so the controls take the stage colours instead.
+    private var onPicture: Bool { mode == .full && !isAudio }
+
     var body: some View {
         ZStack {
             scrims
@@ -198,19 +202,19 @@ struct PlayerControlsOverlay: View {
 
     private var scrims: some View {
         VStack(spacing: 0) {
-            if mode == .full {
+            if onPicture {
                 LinearGradient(colors: [Color.black.opacity(0.55), Color.black.opacity(0)],
                                startPoint: .top, endPoint: .bottom)
                     .frame(height: 96)
             }
             Spacer(minLength: 0)
-            if mode == .full {
+            if onPicture {
                 LinearGradient(colors: [Color.black.opacity(0), Color.black.opacity(0.6)],
                                startPoint: .top, endPoint: .bottom)
                     .frame(height: 110)
             }
         }
-        .background(mode == .full ? Color.black.opacity(0.12) : Color.clear)
+        .background(onPicture ? Color.black.opacity(0.12) : Color.clear)
         .allowsHitTesting(false)
     }
 
@@ -218,7 +222,7 @@ struct PlayerControlsOverlay: View {
         HStack(spacing: Space.xs) {
             CircleIconButton(systemName: isFullscreen ? "arrow.down.right.and.arrow.up.left" : "chevron.down",
                              label: isFullscreen ? "Leave full screen" : "Minimise player",
-                             tone: mode == .full ? .glass : .stage, size: 38) {
+                             tone: onPicture ? .glass : .stage, size: 38) {
                 if isFullscreen { actions.toggleFullscreen() } else { actions.minimise() }
             }
             if mode == .full { speedPill }
@@ -253,10 +257,10 @@ struct PlayerControlsOverlay: View {
                 Text(PlaybackSpeed.label(rate))
                     .font(.srTimerSmall)
             }
-            .foregroundStyle(Color.white)
+            .foregroundStyle(onPicture ? Color.white : Color.srStageText)
             .padding(.horizontal, Space.s)
             .frame(height: 38)
-            .background(Capsule().fill(Color.black.opacity(0.38)))
+            .background(Capsule().fill(onPicture ? Color.black.opacity(0.38) : Color.srStageControl))
             .contentShape(Capsule())
         }
         .buttonStyle(PressScaleStyle())
@@ -266,12 +270,12 @@ struct PlayerControlsOverlay: View {
 
     private var centre: some View {
         HStack(spacing: isFullscreen ? 64 : 44) {
-            TransportButton(systemName: "gobackward.5", label: "Back 5 seconds", size: 26) {
+            TransportButton(systemName: "gobackward.5", label: "Back 5 seconds", size: 26, onPicture: onPicture) {
                 session.skip(by: -5)
                 actions.interacted()
             }
             playButton
-            TransportButton(systemName: "goforward.5", label: "Forward 5 seconds", size: 26) {
+            TransportButton(systemName: "goforward.5", label: "Forward 5 seconds", size: 26, onPicture: onPicture) {
                 session.skip(by: 5)
                 actions.interacted()
             }
@@ -288,9 +292,9 @@ struct PlayerControlsOverlay: View {
         } label: {
             Image(systemName: symbol)
                 .font(.system(size: 30, weight: .bold))
-                .foregroundStyle(Color.white)
+                .foregroundStyle(onPicture ? Color.white : Color.srStageText)
                 .frame(width: 68, height: 68)
-                .background(Circle().fill(Color.black.opacity(0.35)))
+                .background(Circle().fill(onPicture ? Color.black.opacity(0.35) : Color.srStageControl))
                 .contentShape(Circle())
         }
         .buttonStyle(PressScaleStyle(scale: 0.9))
@@ -298,7 +302,7 @@ struct PlayerControlsOverlay: View {
     }
 
     private var scrubber: some View {
-        PlayerScrubber(clock: session.clock, duration: duration, reactions: reactions,
+        PlayerScrubber(clock: session.clock, duration: duration, reactions: reactions, onPicture: onPicture,
                        onBegin: {
                            session.beginScrubbing()
                            actions.interacted()
@@ -321,6 +325,7 @@ private struct TransportButton: View {
     let systemName: String
     let label: String
     let size: CGFloat
+    var onPicture = true
     let action: @MainActor () -> Void
 
     var body: some View {
@@ -330,7 +335,7 @@ private struct TransportButton: View {
         } label: {
             Image(systemName: systemName)
                 .font(.system(size: size, weight: .semibold))
-                .foregroundStyle(Color.white)
+                .foregroundStyle(onPicture ? Color.white : Color.srStageText)
                 .frame(width: 52, height: 52)
                 .contentShape(Circle())
         }
@@ -346,6 +351,8 @@ struct PlayerScrubber: View {
     @ObservedObject var clock: PlaybackClock
     let duration: Double
     let reactions: [VideoReaction]
+    /// Over a video (white on the scrim) or on an audio panel (stage colours).
+    var onPicture = true
     let onBegin: @MainActor () -> Void
     let onScrub: @MainActor (Double) -> Void
     let onEnd: @MainActor (Double) -> Void
@@ -413,7 +420,7 @@ struct PlayerScrubber: View {
         let filled = CGFloat(fraction) * width
         return ZStack(alignment: .leading) {
             Capsule()
-                .fill(Color.white.opacity(0.28))
+                .fill(onPicture ? Color.white.opacity(0.28) : Color.srStageText.opacity(0.18))
                 .frame(height: lineHeight)
             Capsule()
                 .fill(Color.srRed)
@@ -450,7 +457,7 @@ struct PlayerScrubber: View {
             Text(Format.remaining(duration - shownTime))
         }
         .font(.srTimerSmall)
-        .foregroundStyle(Color.white.opacity(0.9))
+        .foregroundStyle(onPicture ? Color.white.opacity(0.9) : Color.srStageTextSecondary)
     }
 
     private func xPosition(_ time: Double, width: CGFloat) -> CGFloat {
@@ -464,12 +471,13 @@ struct PlayerScrubber: View {
 struct PlayerProgressLine: View {
     @ObservedObject var clock: PlaybackClock
     let duration: Double
+    var onPicture = true
 
     var body: some View {
         GeometryReader { proxy in
             let fraction = duration > 0 ? min(1, max(0, clock.time / duration)) : 0
             ZStack(alignment: .leading) {
-                Rectangle().fill(Color.white.opacity(0.18))
+                Rectangle().fill(onPicture ? Color.white.opacity(0.18) : Color.srStageText.opacity(0.12))
                 Rectangle().fill(Color.srRed).frame(width: proxy.size.width * CGFloat(fraction))
             }
         }
@@ -636,6 +644,22 @@ private struct ReactionBurstView: View {
         guard !burst.isPinned else { return }
         withAnimation(.spring(response: 0.32, dampingFraction: 0.55)) { popped = true }
         withAnimation(.easeIn(duration: 0.95).delay(0.3)) { risen = true }
+    }
+}
+
+// MARK: - Audio
+
+/// An audio recording's panel: bars from the file's loudness that move with playback.
+private struct PlayerAudioPanel: View {
+    let video: Video
+    @ObservedObject var session: PlaybackSession
+    @ObservedObject var clock: PlaybackClock
+    @EnvironmentObject private var library: Library
+
+    var body: some View {
+        let isHere = session.videoID == video.id
+        AudioPlaybackBars(url: library.fileURL(for: video), player: session.player,
+                          isPlaying: isHere && session.isPlaying, time: isHere ? clock.time : 0)
     }
 }
 

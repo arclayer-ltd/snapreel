@@ -5,6 +5,11 @@ import UserNotifications
 
 /// Hands a recording to the recorder's review screen, whether or not the recorder is open.
 /// `PendingImports` sets it; `RecorderView` takes it.
+///
+/// Each recording is reviewed once. Build 29 showed a screen recording's review a second time
+/// on the next tap of the record button: more than one thing hands a finished recording over
+/// (coming back to Snapreel, the extension's "finished" signal, a notification tap), and a
+/// hand-off that landed while the recorder was closing was still waiting for the next one.
 @MainActor
 final class RecorderInbox: ObservableObject {
     static let shared = RecorderInbox()
@@ -12,6 +17,22 @@ final class RecorderInbox: ObservableObject {
     @Published var reviewRequest: UUID?
     /// Shown above the review when the screen recording stopped early.
     var reviewNote: String?
+    /// Recordings whose review has been shown, so none is offered twice.
+    private(set) var reviewed: Set<UUID> = []
+
+    func hasReviewed(_ id: UUID) -> Bool { reviewed.contains(id) }
+
+    /// The review of `id` is on screen (or its save is): it's not handed over again.
+    func markReviewed(_ id: UUID) {
+        reviewed.insert(id)
+        if reviewRequest == id { reviewRequest = nil }
+    }
+
+    /// The review was finished (Done, Delete, closed): nothing is left waiting.
+    func clear() {
+        reviewRequest = nil
+        reviewNote = nil
+    }
 }
 
 /// Session B owns this file. Called by the shell each time the app becomes active, and by the
@@ -81,6 +102,11 @@ enum PendingImports {
         importFinishedBroadcasts(into: library)
         guard library.video(broadcastID) != nil else { return }
         let router = AppEnvironment.shared.router
+        if RecorderInbox.shared.hasReviewed(broadcastID) {
+            // Already reviewed (often just now, by coming back to Snapreel): play it instead.
+            if router.recorder == nil { router.open(videoID: broadcastID) }
+            return
+        }
         router.closePlayer()
         router.isSettingsPresented = false
         openReview(broadcastID, note: nil, router: router)
@@ -109,6 +135,7 @@ enum PendingImports {
 
     private static func openReview(_ id: UUID, note: String?, router: AppRouter) {
         let inbox = RecorderInbox.shared
+        guard !inbox.hasReviewed(id) else { return }
         inbox.reviewNote = note
         inbox.reviewRequest = id
         if router.recorder == nil {

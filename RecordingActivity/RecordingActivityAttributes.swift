@@ -17,13 +17,17 @@ struct RecordingActivityStatus: Codable, Hashable {
         case starting
         case recording
         case paused
+        /// The recording ended while Snapreel was in the background (the phone locked, which
+        /// ends a screen broadcast, or it was stopped from the red pill or Control Centre). The
+        /// card stays with the time frozen until Snapreel opens.
+        case stopped
     }
 
     var phase: Phase
     /// While recording: when the clock read 0:00 (later than the real start after a pause), so
     /// the Lock Screen counts by itself without Snapreel sending updates.
     var clockStart: Date
-    /// While paused or starting: the time to show.
+    /// While paused, starting or stopped: the time to show.
     var elapsed: TimeInterval
 
     static func starting() -> RecordingActivityStatus {
@@ -36,6 +40,10 @@ struct RecordingActivityStatus: Codable, Hashable {
 
     static func paused(elapsed: TimeInterval) -> RecordingActivityStatus {
         RecordingActivityStatus(phase: .paused, clockStart: Date().addingTimeInterval(-elapsed), elapsed: elapsed)
+    }
+
+    static func stopped(elapsed: TimeInterval) -> RecordingActivityStatus {
+        RecordingActivityStatus(phase: .stopped, clockStart: Date().addingTimeInterval(-elapsed), elapsed: elapsed)
     }
 }
 

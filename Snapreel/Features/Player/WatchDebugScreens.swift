@@ -196,6 +196,12 @@ extension DebugCatalog {
                     $0.panel = .transcript
                 }
             },
+            watchPlayer("video.audio.playing", "Player [audio recording, playing]", FixtureStorage.IDs.launchMemo) { _ in
+                watchState {
+                    $0.position = 1
+                    $0.autoplay = true
+                }
+            },
             watchPreparedPlayer("video.saving", "Player [still saving]", FixtureStorage.IDs.untitled,
                                 prepare: { library in
                                     library.update(FixtureStorage.IDs.untitled) { $0.state = .saving(progress: 0.62) }

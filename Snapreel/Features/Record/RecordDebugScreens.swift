@@ -174,6 +174,12 @@ extension DebugCatalog {
             DebugScreen("rec.review", "Review after recording") {
                 RecordDebug.recorder(.screen) { $0.stage = .review(id) }
             },
+            DebugScreen("rec.review.audio", "Review after recording [voice, mid-way]") {
+                RecordDebug.recorder(.audio) {
+                    $0.stage = .review(FixtureStorage.IDs.launchMemo)
+                    $0.reviewPosition = 4.2
+                }
+            },
             DebugScreen("rec.review.delete", "Review after recording [delete]") {
                 RecordDebug.recorder(.screen) {
                     $0.stage = .review(id)

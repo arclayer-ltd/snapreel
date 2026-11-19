@@ -94,6 +94,8 @@ struct RecorderPreset {
     var levels: [CGFloat]?
     var confirmsRestart = false
     var reviewPanel: RecorderReviewPanel?
+    /// Review opens at this time in the recording (screenshots of a voice recording mid-way).
+    var reviewPosition: Double?
     /// Shows the "What do you want to record?" chooser (opened without a mode).
     var choosingMode: Bool?
     /// Holds the recorder part-way through a swipe down.
@@ -115,7 +117,12 @@ final class RecorderModel: ObservableObject {
     /// not even the camera, until the person picks Camera, Screen or Audio.
     @Published private(set) var isChoosingMode: Bool
     @Published var stage: RecorderStage = .idle {
-        didSet { if stage != oldValue { watchSaving() } }
+        didSet {
+            guard stage != oldValue else { return }
+            watchSaving()
+            // Reviewed once: nothing hands this recording to a recorder again.
+            if case .review(let id) = stage, !isStatic { RecorderInbox.shared.markReviewed(id) }
+        }
     }
     @Published var elapsed: TimeInterval = 0
     @Published var cameraPermission: PermissionState
@@ -879,7 +886,12 @@ final class RecorderModel: ObservableObject {
     func takeReview(_ id: UUID) {
         let inbox = RecorderInbox.shared
         inbox.reviewRequest = nil
+        guard !inbox.hasReviewed(id) else {
+            inbox.reviewNote = nil
+            return
+        }
         guard !stage.isCapturing, stage != .finishing, let video = library.video(id) else { return }
+        inbox.markReviewed(id)
         if stage.isCountingDown { cancelCountdown() }
         if case .importing = stage { cancelImport() }
         reviewNote = inbox.reviewNote
@@ -932,6 +944,7 @@ final class RecorderModel: ObservableObject {
     /// Delete from review or from a failed save: back to the recorder for another take.
     func deleteRecording(_ id: UUID) {
         RecordingSaver.shared.discard(id, library: library)
+        RecorderInbox.shared.clear()
         reviewNote = nil
         stage = .idle
         toast = ToastMessage(text: "Recording deleted", systemImage: "trash.fill")
@@ -946,11 +959,13 @@ final class RecorderModel: ObservableObject {
     /// Done in review. The recorder closes; the shell shows the toast.
     func finishReview() {
         Haptics.success()
+        RecorderInbox.shared.clear()
         router.showToast("Saved to your library")
     }
 
     /// Leave saving running in the background and close.
     func closeWhileSaving() {
+        RecorderInbox.shared.clear()
         router.showToast("Still saving. It'll be in your library in a moment.", systemImage: "arrow.down.circle.fill")
     }
 }

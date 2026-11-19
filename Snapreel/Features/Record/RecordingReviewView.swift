@@ -45,7 +45,8 @@ struct RecordingReviewView: View {
             if let note = model.reviewNote {
                 ReviewNoteBanner(text: note)
             }
-            ReviewPlayerView(video: video, url: library.fileURL(for: video), autoplay: !model.isStatic)
+            ReviewPlayerView(video: video, url: library.fileURL(for: video), autoplay: !model.isStatic,
+                             startAt: model.preset?.reviewPosition)
             ReviewTitleBlock(video: video) { editsTitle = true }
             actions(video)
             Button {
@@ -189,34 +190,39 @@ private struct ReviewActionButton: View {
 
 // MARK: - Player
 
-/// Plays the recording once (no loop). Tap to pause or play.
+/// Plays the recording once (no loop). Tap to pause or play. A video plays on black with its
+/// controls on a scrim; a voice recording has no picture, so its panel follows the appearance
+/// and its bars move with the recorded voice.
 private struct ReviewPlayerView: View {
     let video: Video
     let url: URL
     let autoplay: Bool
+    let startAt: Double?
     @StateObject private var player: RecorderReviewPlayer
 
-    init(video: Video, url: URL, autoplay: Bool) {
+    init(video: Video, url: URL, autoplay: Bool, startAt: Double? = nil) {
         self.video = video
         self.url = url
         self.autoplay = autoplay
+        self.startAt = startAt
         _player = StateObject(wrappedValue: RecorderReviewPlayer(url: url, duration: video.duration))
     }
 
     var body: some View {
         ZStack {
-            Color.black
+            onPicture ? Color.black : Color.srStageRaised
             if video.isAudioOnly {
-                AudioArtwork(seed: video.id.hashValue)
+                AudioPlaybackBars(url: url, player: player.player, isPlaying: player.isPlaying,
+                                  time: player.position)
             } else {
                 RecorderPlayerLayer(player: player.player)
             }
             if !player.isPlaying {
                 Image(systemName: "play.fill")
                     .font(.system(size: 26, weight: .bold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(onPicture ? Color.white : Color.srStageText)
                     .frame(width: 64, height: 64)
-                    .background(Circle().fill(Color.black.opacity(0.5)))
+                    .background(Circle().fill(onPicture ? Color.black.opacity(0.5) : Color.srStageControl))
                     .transition(.opacity)
             }
             VStack {
@@ -229,7 +235,10 @@ private struct ReviewPlayerView: View {
         .contentShape(Rectangle())
         .onTapGesture { player.toggle() }
         .animation(Motion.quick, value: player.isPlaying)
-        .onAppear { if autoplay { player.play() } }
+        .onAppear {
+            if let startAt { player.seek(to: startAt) }
+            if autoplay { player.play() }
+        }
         .onDisappear { player.stop() }
         .onReceive(NotificationCenter.default.publisher(for: .AVPlayerItemDidPlayToEndTime,
                                                          object: player.player.currentItem)) { _ in
@@ -241,13 +250,15 @@ private struct ReviewPlayerView: View {
         .accessibilityAddTraits(.startsMediaSession)
     }
 
+    private var onPicture: Bool { !video.isAudioOnly }
+
     private var progressBar: some View {
         HStack(spacing: Space.xs) {
             Text(Format.clock(player.position))
                 .font(.srTimerSmall)
             GeometryReader { proxy in
                 ZStack(alignment: .leading) {
-                    Capsule().fill(Color.white.opacity(0.25))
+                    Capsule().fill(onPicture ? Color.white.opacity(0.25) : Color.srStageText.opacity(0.18))
                     Capsule().fill(Color.srRed)
                         .frame(width: proxy.size.width * fraction)
                 }
@@ -256,10 +267,11 @@ private struct ReviewPlayerView: View {
             Text(Format.clock(player.duration))
                 .font(.srTimerSmall)
         }
-        .foregroundStyle(.white)
+        .foregroundStyle(onPicture ? Color.white : Color.srStageTextSecondary)
         .padding(.horizontal, Space.s)
         .padding(.vertical, Space.xs)
-        .background(LinearGradient(colors: [.clear, Color.black.opacity(0.55)], startPoint: .top, endPoint: .bottom))
+        .background(LinearGradient(colors: [.clear, onPicture ? Color.black.opacity(0.55) : Color.clear],
+                                   startPoint: .top, endPoint: .bottom))
     }
 
     private var fraction: CGFloat {
@@ -313,6 +325,11 @@ final class RecorderReviewPlayer: ObservableObject {
 
     func toggle() {
         if isPlaying { pause() } else { play() }
+    }
+
+    func seek(to seconds: Double) {
+        player.seek(to: CMTime(seconds: seconds, preferredTimescale: 600))
+        position = seconds
     }
 
     func reachedEnd() {

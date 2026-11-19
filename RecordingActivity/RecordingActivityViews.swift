@@ -36,21 +36,28 @@ enum RecordingActivityStyle {
             : String(format: "%d:%02d", minutes, rest)
     }
 
-    static func title(_ kind: RecordingActivityKind, _ phase: RecordingActivityStatus.Phase) -> String {
+    static func title(_ kind: RecordingActivityKind, _ phase: RecordingActivityStatus.Phase,
+                      isStale: Bool = false) -> String {
+        if isStale && phase != .stopped {
+            return kind == .screen ? "Screen recording" : "Voice recording"
+        }
         switch (kind, phase) {
         case (_, .starting): return "Starting screen recording"
         case (.screen, .recording): return "Recording your screen"
         case (.screen, .paused): return "Screen recording paused"
+        case (.screen, .stopped): return "Screen recording stopped"
         case (.audio, .recording): return "Recording your voice"
         case (.audio, .paused): return "Voice recording paused"
+        case (.audio, .stopped): return "Voice recording stopped"
         }
     }
 
-    static func subtitle(_ phase: RecordingActivityStatus.Phase) -> String {
+    static func subtitle(_ phase: RecordingActivityStatus.Phase, isStale: Bool = false) -> String {
+        if isStale && phase != .stopped { return "Open Snapreel to check it or stop it" }
         switch phase {
         case .starting: return "Tap Start Broadcast to begin"
         case .recording: return "Tap to open Snapreel and stop"
-        case .paused: return "Tap to open Snapreel"
+        case .paused, .stopped: return "Tap to open Snapreel"
         }
     }
 }
@@ -64,7 +71,7 @@ struct RecordingActivityClock: View {
         switch status.phase {
         case .recording:
             Text(status.clockStart, style: .timer)
-        case .paused:
+        case .paused, .stopped:
             Text(RecordingActivityStyle.clock(status.elapsed))
         case .starting:
             Text(RecordingActivityStyle.clock(0))
@@ -93,6 +100,7 @@ struct RecordingActivityMark: View {
         case .starting: return "record.circle"
         case .recording: return "record.circle.fill"
         case .paused: return "pause.fill"
+        case .stopped: return "stop.fill"
         }
     }
 }
@@ -103,7 +111,12 @@ struct RecordingActivityMark: View {
 struct RecordingActivityLockScreenView: View {
     let kind: RecordingActivityKind
     let status: RecordingActivityStatus
+    /// Snapreel couldn't confirm the recording is still going for a while (`staleDate` passed
+    /// while it was suspended): the clock is hidden rather than counting time that may be wrong.
+    var isStale = false
     @Environment(\.colorScheme) private var colorScheme
+
+    private var showsClock: Bool { !(isStale && status.phase != .stopped) }
 
     var body: some View {
         HStack(spacing: 12) {
@@ -111,26 +124,28 @@ struct RecordingActivityLockScreenView: View {
             // On a 375-point iPhone the text gets about 180 points, so the title may shrink a
             // little and the subtitle wraps rather than losing "and stop" (run 27).
             VStack(alignment: .leading, spacing: 2) {
-                Text(RecordingActivityStyle.title(kind, status.phase))
+                Text(RecordingActivityStyle.title(kind, status.phase, isStale: isStale))
                     .font(.headline)
                     .foregroundColor(RecordingActivityStyle.primaryText(colorScheme))
                     .lineLimit(1)
                     .minimumScaleFactor(0.75)
-                Text(RecordingActivityStyle.subtitle(status.phase))
+                Text(RecordingActivityStyle.subtitle(status.phase, isStale: isStale))
                     .font(.subheadline)
                     .foregroundColor(RecordingActivityStyle.secondaryText(colorScheme))
                     .lineLimit(2)
                     .fixedSize(horizontal: false, vertical: true)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            RecordingActivityClock(status: status)
-                .font(.system(size: 28, weight: .semibold, design: .rounded).monospacedDigit())
-                .foregroundColor(status.phase == .recording ? RecordingActivityStyle.primaryText(colorScheme)
-                                                            : RecordingActivityStyle.secondaryText(colorScheme))
-                .multilineTextAlignment(.trailing)
-                .lineLimit(1)
-                .minimumScaleFactor(0.6)
-                .frame(width: 76, alignment: .trailing)
+            if showsClock {
+                RecordingActivityClock(status: status)
+                    .font(.system(size: 28, weight: .semibold, design: .rounded).monospacedDigit())
+                    .foregroundColor(status.phase == .recording ? RecordingActivityStyle.primaryText(colorScheme)
+                                                                : RecordingActivityStyle.secondaryText(colorScheme))
+                    .multilineTextAlignment(.trailing)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)
+                    .frame(width: 76, alignment: .trailing)
+            }
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 14)

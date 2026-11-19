@@ -16,7 +16,8 @@ struct SnapreelLiveActivityBundle: WidgetBundle {
 struct RecordingLiveActivityWidget: Widget {
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: RecordingActivityAttributes.self) { context in
-            RecordingActivityLockScreen(kind: context.attributes.kind, status: context.state)
+            RecordingActivityLockScreen(kind: context.attributes.kind, status: context.state,
+                                        isStale: Self.isStale(context))
                 .widgetURL(RecordingActivityStyle.url)
         } dynamicIsland: { context in
             DynamicIsland {
@@ -43,6 +44,13 @@ struct RecordingLiveActivityWidget: Widget {
             .keylineTint(RecordingActivityStyle.red)
         }
     }
+
+    /// The content's `staleDate` passed (iOS 16.2 and later): Snapreel set it while a screen
+    /// recording ran and couldn't renew it, so the recording may have ended.
+    private static func isStale(_ context: ActivityViewContext<RecordingActivityAttributes>) -> Bool {
+        if #available(iOS 16.2, *) { return context.isStale }
+        return false
+    }
 }
 
 /// The Lock Screen card with a background that matches the appearance (the Lock Screen and its
@@ -50,10 +58,11 @@ struct RecordingLiveActivityWidget: Widget {
 private struct RecordingActivityLockScreen: View {
     let kind: RecordingActivityKind
     let status: RecordingActivityStatus
+    let isStale: Bool
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
-        RecordingActivityLockScreenView(kind: kind, status: status)
+        RecordingActivityLockScreenView(kind: kind, status: status, isStale: isStale)
             .activityBackgroundTint(RecordingActivityStyle.background(colorScheme))
             .activitySystemActionForegroundColor(RecordingActivityStyle.primaryText(colorScheme))
     }
