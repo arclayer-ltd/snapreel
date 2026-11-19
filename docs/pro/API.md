@@ -22,8 +22,12 @@ Product rules (owner decisions, 20 November 2026):
 
 | Key | Value |
 |---|---|
-| `SUPABASE_URL` | _filled in by the backend session_ |
-| `SUPABASE_PUBLISHABLE_KEY` | _filled in by the backend session_ |
+| `SUPABASE_URL` | `https://jaajkutdglblwtpfcgag.supabase.co` (project ref `jaajkutdglblwtpfcgag`) |
+| `SUPABASE_PUBLISHABLE_KEY` | `sb_publishable_TMSX2mDy_fE7eYhJggL8hg_tMU_Eq91` |
+| TUS upload endpoint | `https://jaajkutdglblwtpfcgag.storage.supabase.co/storage/v1/upload/resumable` |
+
+In Vercel the two public values are `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
+(production, preview and development; `vercel env pull` gets them).
 
 Server-only secrets live in Vercel env and never in git:
 - `SUPABASE_SECRET_KEY`
