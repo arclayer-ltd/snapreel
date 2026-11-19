@@ -46,7 +46,7 @@ jobs:
       BUNDLE_ID: co.arclayer.snapreel
       BROADCAST_BUNDLE_ID: co.arclayer.snapreel.broadcast
       LIVE_ACTIVITY_BUNDLE_ID: co.arclayer.snapreel.liveactivity
-      APP_PROFILE: Snapreel App Store
+      APP_PROFILE: Snapreel App Store Push
       BROADCAST_PROFILE: Snapreel Broadcast App Store
       LIVE_ACTIVITY_PROFILE: Snapreel Live Activity App Store
       BUILD_NUMBER: ${{ github.run_number }}
