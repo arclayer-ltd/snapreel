@@ -35,9 +35,6 @@ struct PlayerScreen: View {
     @State private var swipeOffset: CGFloat = 0
     @State private var isSwipeMinimising = false
     @GestureState private var isSwiping = false
-    /// Where the Notes / Transcript switch sits in the scroll content.
-    @State private var panelTop: CGFloat = 0
-    @State private var scrollRequest: PlayerScrollRequest?
 
     init(presentation: PlayerPresentation) {
         var initial = PlayerInitialState()
@@ -179,15 +176,8 @@ struct PlayerScreen: View {
 
     private func belowVideo(_ video: Video) -> some View {
         PlayerScroller(content: AnyView(scrollContent(video)),
-                       scrollRequest: scrollRequest,
+                       opensOnPanel: initial.scrollsToPanel,
                        onPulledDown: { pulledPastTop() })
-            .onAppear {
-                guard initial.scrollsToPanel else { return }
-                Task { @MainActor in
-                    try? await Task.sleep(nanoseconds: 300_000_000)
-                    scrollRequest = PlayerScrollRequest(y: panelTop)
-                }
-            }
     }
 
     /// What scrolls under the video. Hosted in UIKit, so everything it needs comes in as values
@@ -206,7 +196,6 @@ struct PlayerScreen: View {
         .padding(.top, Space.m)
         .padding(.bottom, Space.xxxl)
         .coordinateSpace(name: Self.contentSpace)
-        .onPreferenceChange(PlayerPanelTopKey.self) { panelTop = $0 }
     }
 
     private static let contentSpace = "player.content"
