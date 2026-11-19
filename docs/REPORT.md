@@ -95,7 +95,7 @@ Why the raw numbers stay low: almost every reference screen carries something Sn
 ## Assumptions I made instead of asking
 
 1. **Store name:** "Snapreel: Screen Recorder". "Snapreel" was already taken on the App Store; the home-screen name stays "Snapreel".
-2. **Support address:** support@arclayer.co, used by Contact support and the legal drafts.
+2. **Support address:** support@snapreel.video, used by Contact support and the legal drafts.
 3. **Wording:** British spelling throughout.
 4. **Legal drafts:** they name Arclayer Ltd. They still need your company address, governing law and minimum age before publishing.
 5. **Character clips:** Seedance 1.5 isn't on Higgsfield, so the eight clips use Seedance 2.0 with matching start and end frames for seamless loops. The five characters are original, drawn in the style of your reference.

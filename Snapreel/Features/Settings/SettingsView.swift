@@ -287,6 +287,6 @@ enum AppInfo {
     /// "Version 1.0 (12)"
     static var versionLine: String { "Version \(version) (\(build))" }
 
-    static let supportEmail = "support@arclayer.co"
+    static let supportEmail = "support@snapreel.video"
     static let publisher = "Arclayer Ltd"
 }

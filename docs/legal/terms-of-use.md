@@ -5,13 +5,13 @@
 
 # Terms of use
 
-Last updated: 18 November 2026
+Last updated: 20 November 2026
 
 These terms cover your use of Snapreel, an iPhone app made by Arclayer Ltd ("we", "us"). By using Snapreel you agree to them. If you don't agree, please don't use the app.
 
 ## The short version
 
-- Snapreel works entirely on your iPhone. There's no account and no online service behind it.
+- Snapreel works on your iPhone. There's no account, and the only online service behind it stops the Lock Screen card when a screen recording ends.
 - What you record belongs to you, and so does the responsibility for it.
 - Snapreel is provided as it is, so keep copies of anything important.
 
@@ -63,4 +63,4 @@ You can stop using Snapreel at any time by deleting it. These terms end automati
 
 ## Contact
 
-Questions about these terms? Write to [support@arclayer.co](mailto:support@arclayer.co).
+Questions about these terms? Write to [support@snapreel.video](mailto:support@snapreel.video).

@@ -1,12 +1,12 @@
 # Privacy policy
 
-Last updated: 18 November 2026
+Last updated: 20 November 2026
 
 This policy explains how Snapreel, an iPhone app made by Arclayer Ltd, handles your information. The short answer: it stays on your iPhone.
 
 ## In short
 
-- No account, no sign-in and no servers.
+- No account and no sign-in. The only thing that ever reaches our server is a push code that stops the Lock Screen card, and it isn't kept.
 - We don't collect, store, share or sell any information about you.
 - No analytics, no advertising and no tracking.
 - Your recordings leave your iPhone only when you choose to send them.
@@ -21,7 +21,7 @@ Snapreel keeps the following on your device, in storage that only Snapreel can r
 - the list in the Notifications tab
 - your settings and recent searches
 
-We can't see any of it. Snapreel doesn't connect to the internet.
+We can't see any of it. Snapreel goes online for one thing only: stopping the Lock Screen card when a screen recording ends (see below).
 
 ## Permissions
 
@@ -34,6 +34,10 @@ Snapreel asks for a permission only when a feature needs it. You can change your
 - **Notifications** – to tell you when a recording is saved, a transcript is ready or space is running low. These notifications are created on your iPhone; no notification service is involved.
 
 Screen recording uses the broadcast feature built into iOS. You start and stop it yourself, and the recording is written straight into Snapreel's storage on your iPhone.
+
+## The Lock Screen card
+
+While you record your screen, Snapreel shows a card with the time on your Lock Screen. iOS can stop a screen recording while Snapreel is in the background (for example when you lock your iPhone), and only Apple's push service can then stop that card. So when a screen recording ends, Snapreel's screen recorder sends our server at snapreel.video two things: the card's push code (a random code Apple makes for that one card) and how long the recording ran. The server passes them straight to Apple's push service so the card stops counting, and keeps nothing. Like any web request it comes from your internet address, which our host, Vercel, may keep in routine logs for a short time. Nothing about your recording, its title or anything else in Snapreel is sent.
 
 ## When information leaves your iPhone
 
@@ -58,4 +62,4 @@ If this policy changes, we'll update the date at the top and mention the change 
 
 ## Contact
 
-Arclayer Ltd, [support@arclayer.co](mailto:support@arclayer.co)
+Arclayer Ltd, [support@snapreel.video](mailto:support@snapreel.video)
