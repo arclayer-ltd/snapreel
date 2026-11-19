@@ -160,7 +160,7 @@ struct RecorderAudioStage: View {
                     .foregroundStyle(Color.srStageRed)
             }
             Spacer(minLength: 0)
-            Label("Stays on this iPhone", systemImage: "lock.fill")
+            Label("Saved on this iPhone", systemImage: "lock.fill")
                 .font(.srFootnote)
                 .foregroundStyle(Color.srStageTextTertiary)
                 .padding(.bottom, Space.l)

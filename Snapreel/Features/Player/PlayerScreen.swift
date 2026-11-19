@@ -15,6 +15,8 @@ struct PlayerScreen: View {
     @EnvironmentObject private var settings: AppSettings
     @ObservedObject private var session: PlaybackSession = .shared
     @ObservedObject private var transcripts: TranscriptService = .shared
+    @ObservedObject private var shareLinks: ShareLinks = .shared
+    @ObservedObject private var uploader: Uploader = .shared
 
     @State private var panel: PlayerPanel
     @State private var showsDetails: Bool
@@ -36,12 +38,22 @@ struct PlayerScreen: View {
     @State private var swipeOffset: CGFloat = 0
     @State private var isSwipeMinimising = false
     @GestureState private var isSwiping = false
+    /// Viewers' comments and reactions on the recording's share link.
+    @State private var activity: CloudActivity?
+    @State private var activityFailed = false
+    /// The comment whose delete-or-block choice is open.
+    @State private var moderating: CloudComment?
 
     init(presentation: PlayerPresentation) {
         var initial = PlayerInitialState()
         if presentation.opensTranscript {
             // From a "transcript ready" notification: land on what it announced.
             initial.panel = .transcript
+            initial.scrollsToPanel = true
+        }
+        if presentation.opensComments {
+            // From a comment on the share link: land on the comments.
+            initial.panel = .comments
             initial.scrollsToPanel = true
         }
         #if DEBUG
@@ -66,11 +78,13 @@ struct PlayerScreen: View {
         _showsPiPPlaceholder = State(initialValue: initial.showsPictureInPicturePlaceholder)
         _showsResume = State(initialValue: initial.showsResumePill)
         _swipeOffset = State(initialValue: initial.swipeOffset)
+        _activity = State(initialValue: initial.activity)
         let pinned: [ReactionBurst] = initial.pinnedBurst.map { [ReactionBurst(emoji: $0, isPinned: true)] } ?? []
         _bursts = State(initialValue: pinned)
     }
 
     private var currentVideo: Video? { library.video(presentation.videoID) }
+    private var currentLink: CloudLink? { library.link(for: presentation.videoID) }
 
     var body: some View {
         ZStack {
@@ -114,6 +128,15 @@ struct PlayerScreen: View {
             }
         }
         .task(id: autoHideKey) { await autoHideControls() }
+        .task(id: currentLink?.serverID) { await loadActivity() }
+        .confirmationDialog(moderating.map { "Comment by \($0.authorName)" } ?? "Comment",
+                            isPresented: moderationShown, titleVisibility: .visible, presenting: moderating) { comment in
+            Button("Delete comment", role: .destructive) { moderate(comment, block: false) }
+            Button("Delete and block \(comment.authorName)", role: .destructive) { moderate(comment, block: true) }
+            Button("Cancel", role: .cancel) {}
+        } message: { _ in
+            Text("Blocking stops this viewer commenting or reacting on any of your videos.")
+        }
     }
 
     // MARK: - Layouts
@@ -178,7 +201,8 @@ struct PlayerScreen: View {
                         bursts: bursts,
                         showsPictureInPicturePlaceholder: showsPiPPlaceholder || session.isPictureInPictureActive,
                         rate: settings.playbackRate,
-                        actions: videoActions)
+                        actions: videoActions,
+                        viewerReactions: activity?.reactions ?? [])
     }
 
     private func belowVideo(_ video: Video) -> some View {
@@ -259,22 +283,36 @@ struct PlayerScreen: View {
                              onEditTitle: { sheet = .title },
                              onStats: { sheet = .stats },
                              onSaveToPhotos: { photosTarget = video },
-                             onToggleWatchLater: { chooseAction(.toggleWatchLater) })
+                             onToggleWatchLater: { chooseAction(.toggleWatchLater) },
+                             link: currentLink,
+                             linkState: shareLinks.state(for: video.id),
+                             onCopyLink: { ShareLinks.shared.copyLink(video.id) },
+                             onLinkTapped: { ProPresenter.shareLink(video.id) })
     }
 
     private var panelHeader: some View {
         HStack {
-            PillSwitch(options: PlayerPanel.allCases, selection: $panel, title: { $0.title })
+            PillSwitch(options: panels, selection: $panel, title: { $0.title })
             Spacer(minLength: Space.xs)
             if panel == .notes {
                 Button {
                     openComposer()
                 } label: {
-                    Label("Add note", systemImage: "plus")
-                        .font(.srSubheadlineStrong)
-                        .foregroundStyle(Color.srStageRed)
+                    if panels.count > 2 {
+                        // Three tabs leave room for the icon only.
+                        Image(systemName: "plus")
+                            .font(.system(size: 15, weight: .bold))
+                            .foregroundStyle(Color.srStageRed)
+                            .frame(width: 34, height: 34)
+                            .background(Circle().fill(Color.srStageControl))
+                    } else {
+                        Label("Add note", systemImage: "plus")
+                            .font(.srSubheadlineStrong)
+                            .foregroundStyle(Color.srStageRed)
+                    }
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel("Add note")
             }
         }
     }
@@ -290,6 +328,14 @@ struct PlayerScreen: View {
                        onDelete: { deleteNote($0) },
                        onDeleteReaction: { deleteReaction($0) },
                        onAddNote: { openComposer() })
+        case .comments:
+            CommentsPanel(activity: activity,
+                          failed: activityFailed,
+                          commentsAllowed: currentLink?.detail?.allowComments ?? true,
+                          onSeek: { seekAndPlay($0) },
+                          onModerate: { moderating = $0 },
+                          onRetry: { Task { await loadActivity() } },
+                          onSettings: { ProPresenter.linkSettings(video.id) })
         case .transcript:
             TranscriptPanel(video: video,
                             transcript: library.transcript(for: video.id),
@@ -362,10 +408,10 @@ struct PlayerScreen: View {
                 .presentationDetents([.medium, .large])
         case .actions(let confirming):
             if let video = currentVideo {
-                PlayerActionsSheet(video: video, startsConfirmingDelete: confirming,
+                PlayerActionsSheet(video: video, isShared: currentLink != nil, startsConfirmingDelete: confirming,
                                   onChoose: { chooseAction($0) },
                                   onClose: { sheet = nil })
-                    .presentationDetents([.height(560), .large])
+                    .presentationDetents([.height(currentLink != nil ? 690 : 630), .large])
             }
         case .title:
             if let video = currentVideo {
@@ -376,7 +422,7 @@ struct PlayerScreen: View {
             }
         case .stats:
             if let video = currentVideo {
-                PlayerStatsSheet(video: video, onClose: { sheet = nil })
+                PlayerStatsSheet(video: video, link: currentLink, onClose: { sheet = nil })
                     .presentationDetents([.large])
             }
         }
@@ -612,6 +658,8 @@ struct PlayerScreen: View {
         case .share: followUp = .share
         case .stats: followUp = .stats
         case .delete: followUp = .delete
+        case .copyLink: followUp = .copyLink
+        case .linkSettings: followUp = .linkSettings
         case .toggleWatchLater:
             library.toggleWatchLater(video.id)
             let added = library.video(video.id)?.isInWatchLater ?? false
@@ -641,6 +689,54 @@ struct PlayerScreen: View {
         case .stats: present(.stats)
         case .delete: deleteRecording(video)
         case .react(let emoji): react(emoji)
+        case .copyLink: ShareLinks.shared.copyLink(video.id)
+        case .linkSettings: ProPresenter.linkSettings(video.id)
+        }
+    }
+
+    // MARK: - Comments (share link)
+
+    /// Notes and Transcript, plus Comments once the recording is shared as a link.
+    private var panels: [PlayerPanel] {
+        currentLink == nil ? [.notes, .transcript] : PlayerPanel.allCases
+    }
+
+    private var moderationShown: Binding<Bool> {
+        Binding(get: { moderating != nil }, set: { if !$0 { moderating = nil } })
+    }
+
+    private func loadActivity() async {
+        guard let link = currentLink else {
+            if panel == .comments { panel = .notes }
+            return
+        }
+        do {
+            activity = try await APIClient.shared.activity(link.serverID)
+            activityFailed = false
+        } catch {
+            activityFailed = activity == nil
+        }
+    }
+
+    /// Deletes a viewer's comment, and when blocking, stops that viewer commenting or reacting on
+    /// any of your videos (App Review guideline 1.2).
+    private func moderate(_ comment: CloudComment, block: Bool) {
+        moderating = nil
+        Task { @MainActor in
+            do {
+                if block { try await APIClient.shared.block(commentID: comment.id) }
+                try await APIClient.shared.deleteComment(comment.id)
+                withAnimation(Motion.standard) {
+                    activity?.comments.removeAll { $0.id == comment.id || $0.parentId == comment.id }
+                }
+                Haptics.success()
+                toast = ToastMessage(text: block ? "Deleted and blocked \(comment.authorName)" : "Comment deleted",
+                                     systemImage: block ? "hand.raised.fill" : "trash.fill")
+            } catch {
+                Haptics.error()
+                toast = ToastMessage(text: (error as? CloudError)?.message ?? "That didn't work. Try again.",
+                                     systemImage: "exclamationmark.circle.fill")
+            }
         }
     }
 

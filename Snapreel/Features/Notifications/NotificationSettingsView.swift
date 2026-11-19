@@ -121,6 +121,7 @@ struct NotificationSettingsView: View {
 enum NotificationSettingsGroup: String, CaseIterable, Identifiable {
     case recording
     case library
+    case links
     case device
 
     var id: String { rawValue }
@@ -129,6 +130,7 @@ enum NotificationSettingsGroup: String, CaseIterable, Identifiable {
         switch self {
         case .recording: return "Recording"
         case .library: return "Library"
+        case .links: return "Share links"
         case .device: return "This iPhone"
         }
     }
@@ -137,6 +139,7 @@ enum NotificationSettingsGroup: String, CaseIterable, Identifiable {
         switch self {
         case .recording: return [.recordingSaved, .needsTitle, .importFinished]
         case .library: return [.transcriptReady]
+        case .links: return [.newViewer, .newComment, .uploadFinished, .uploadFailed]
         case .device: return [.storageLow]
         }
     }
@@ -145,6 +148,7 @@ enum NotificationSettingsGroup: String, CaseIterable, Identifiable {
         switch self {
         case .recording: return nil
         case .library: return "Transcripts are made on this iPhone, so they can take a few minutes for long recordings."
+        case .links: return "Viewer and comment alerts come from snapreel.video while you're signed in. Switch both off to stop them reaching this iPhone."
         case .device: return "Snapreel checks free space when you open it, and warns you at most once a day. Everything here still shows up in the Notifications tab when an alert is off."
         }
     }

@@ -16,11 +16,18 @@ struct PlayerDetailsSection: View {
     let onStats: @MainActor () -> Void
     var onSaveToPhotos: (@MainActor () -> Void)? = nil
     var onToggleWatchLater: (@MainActor () -> Void)? = nil
+    /// The recording's share link, if it has one ("Shared · 12 views").
+    var link: CloudLink? = nil
+    var linkState: LinkState = .notShared
+    /// Copy link next to Share; nil hides it.
+    var onCopyLink: (@MainActor () -> Void)? = nil
+    var onLinkTapped: (@MainActor () -> Void)? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: Space.s) {
             dateLine
             titleRow
+            if let link { sharedLine(link) }
             if video.needsTitle { titleHint }
             quickActions
             metaRow
@@ -51,6 +58,12 @@ struct PlayerDetailsSection: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .accessibilityAddTraits(.isHeader)
+            if let onCopyLink {
+                CircleIconButton(systemName: "link", label: link == nil ? "Copy link" : "Copy link again",
+                                 tone: .stage, size: 36) {
+                    onCopyLink()
+                }
+            }
             CircleIconButton(systemName: "square.and.arrow.up", label: "Share", tone: .stage, size: 36) {
                 onShare()
             }
@@ -73,6 +86,28 @@ struct PlayerDetailsSection: View {
                                 isOn: video.isInWatchLater) { onToggleWatchLater() }
             }
         }
+    }
+
+    /// "Shared · 12 views", or the upload's progress; opens the share-link sheet.
+    private func sharedLine(_ link: CloudLink) -> some View {
+        Button {
+            Haptics.tap()
+            onLinkTapped?()
+        } label: {
+            HStack(spacing: Space.xs) {
+                SharedBadge(link: link, state: linkState, onStage: true)
+                if linkState == .ready && link.commentCount > 0 {
+                    Text(ProText.comments(link.commentCount))
+                        .font(.srCaption)
+                        .foregroundStyle(Color.srStageTextSecondary)
+                }
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(Color.srStageTextTertiary)
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityHint("Shows the link and its upload")
     }
 
     private var titleHint: some View {

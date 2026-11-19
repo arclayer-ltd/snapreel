@@ -1,9 +1,11 @@
 import SwiftUI
 
 /// What this iPhone knows about a recording: plays, how far you got, last watched, shares,
-/// saves to Photos, and the file facts. Counted here and never sent anywhere.
+/// saves to Photos, and the file facts, counted here. A recording shared as a link also shows
+/// its viewers on snapreel.video at the top (`InsightsSection`).
 struct PlayerStatsSheet: View {
     let video: Video
+    var link: CloudLink? = nil
     let onClose: @MainActor () -> Void
 
     private let columns = [GridItem(.flexible(), spacing: Space.s), GridItem(.flexible(), spacing: Space.s)]
@@ -13,7 +15,13 @@ struct PlayerStatsSheet: View {
             SheetHeader(title: "Stats", trailingTitle: "Done", trailingAction: { onClose() }, onStage: true)
             ScrollView {
                 VStack(alignment: .leading, spacing: Space.m) {
-                    Label("Counted on this iPhone. Nobody else sees these.", systemImage: "lock.fill")
+                    if let link {
+                        InsightsSection(link: link)
+                        Rectangle().fill(Color.srStageLine).frame(height: 0.5)
+                            .padding(.vertical, Space.xs)
+                    }
+                    Label(link == nil ? "Counted on this iPhone. These are your own plays and shares."
+                                      : "Your own plays and shares, counted on this iPhone.", systemImage: "iphone")
                         .font(.srFootnote)
                         .foregroundStyle(Color.srStageTextSecondary)
                     LazyVGrid(columns: columns, spacing: Space.s) {

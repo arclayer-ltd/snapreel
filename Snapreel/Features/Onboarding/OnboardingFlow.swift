@@ -67,7 +67,16 @@ struct OnboardingFlow: View {
     @ViewBuilder private var content: some View {
         switch stage {
         case .welcome:
-            WelcomeStep(onStart: { go(to: .intro, forward: true) })
+            WelcomeStep(onStart: { go(to: .intro, forward: true) },
+                        onSignIn: {
+                            // A returning person: sign in, then straight into the app.
+                            ProPresenter.signIn(reason: .account) { signedIn in
+                                if signedIn {
+                                    Haptics.success()
+                                    onFinish()
+                                }
+                            }
+                        })
                 .transition(stageTransition)
         case .intro:
             IntroSlides(page: $introPage,

@@ -63,6 +63,7 @@ enum DebugCatalog {
             + watchScreens      // C: Features/Player
             + browseScreens     // D: Features/Home, Library, Search
             + inboxScreens      // E: Features/Notifications, Storage, Sharing
+            + proScreens        // Snapreel Pro: Features/Pro (pro., account., share.link., insights.)
     }
 
     static func screen(_ id: String) -> DebugScreen? { all.first { $0.id == id } }

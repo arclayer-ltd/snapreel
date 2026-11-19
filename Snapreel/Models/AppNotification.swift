@@ -8,8 +8,22 @@ enum NotificationKind: String, Codable, CaseIterable, Identifiable {
     case importFinished
     case transcriptReady
     case storageLow
+    // Share links (Snapreel Pro). Viewers and comments arrive as pushes from snapreel.video;
+    // uploads are reported by this iPhone.
+    case newViewer
+    case newComment
+    case uploadFinished
+    case uploadFailed
 
     var id: String { rawValue }
+
+    /// Kinds about share links rather than this iPhone's own recordings.
+    var isAboutLinks: Bool {
+        switch self {
+        case .newViewer, .newComment, .uploadFinished, .uploadFailed: return true
+        case .recordingSaved, .needsTitle, .importFinished, .transcriptReady, .storageLow: return false
+        }
+    }
 
     /// Settings label.
     var settingsTitle: String {
@@ -19,6 +33,10 @@ enum NotificationKind: String, Codable, CaseIterable, Identifiable {
         case .importFinished: return "Import finished"
         case .transcriptReady: return "Transcript ready"
         case .storageLow: return "Storage running low"
+        case .newViewer: return "Someone watched"
+        case .newComment: return "Comments and reactions"
+        case .uploadFinished: return "Link ready"
+        case .uploadFailed: return "Upload stopped"
         }
     }
 
@@ -30,6 +48,10 @@ enum NotificationKind: String, Codable, CaseIterable, Identifiable {
         case .importFinished: return "When a video from your photo library has been copied in."
         case .transcriptReady: return "When the transcript of a recording is ready to read and search."
         case .storageLow: return "When your iPhone is close to full and new recordings may not save."
+        case .newViewer: return "When someone new watches one of your share links."
+        case .newComment: return "When a viewer comments on or reacts to one of your share links."
+        case .uploadFinished: return "When a share link's video has finished uploading and can be watched."
+        case .uploadFailed: return "When an upload to a share link stops and needs you to try again."
         }
     }
 
@@ -40,6 +62,10 @@ enum NotificationKind: String, Codable, CaseIterable, Identifiable {
         case .importFinished: return "square.and.arrow.down.fill"
         case .transcriptReady: return "text.quote"
         case .storageLow: return "externaldrive.fill.badge.exclamationmark"
+        case .newViewer: return "eye.fill"
+        case .newComment: return "text.bubble.fill"
+        case .uploadFinished: return "link"
+        case .uploadFailed: return "exclamationmark.icloud.fill"
         }
     }
 

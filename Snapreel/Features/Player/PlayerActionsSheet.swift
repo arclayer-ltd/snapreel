@@ -10,18 +10,22 @@ struct PlayerActionsSheet: View {
         case toggleWatchLater
         case stats
         case delete
+        case copyLink
+        case linkSettings
     }
 
     let video: Video
+    var isShared = false
     let onChoose: @MainActor (Action) -> Void
     let onClose: @MainActor () -> Void
 
     @State private var confirmingDelete: Bool
 
-    init(video: Video, startsConfirmingDelete: Bool = false,
+    init(video: Video, isShared: Bool = false, startsConfirmingDelete: Bool = false,
          onChoose: @escaping @MainActor (Action) -> Void,
          onClose: @escaping @MainActor () -> Void) {
         self.video = video
+        self.isShared = isShared
         self.onChoose = onChoose
         self.onClose = onClose
         _confirmingDelete = State(initialValue: startsConfirmingDelete)
@@ -59,6 +63,17 @@ struct PlayerActionsSheet: View {
                     ActionRow(systemImage: "square.and.arrow.up", title: "Share",
                               subtitle: "Send the file with AirDrop, Messages, Mail or any app") {
                         onChoose(.share)
+                    }
+                    ActionRow(systemImage: "link", title: "Copy link",
+                              subtitle: isShared ? "Shared on snapreel.video. Copies the link again"
+                                                 : "Upload it and copy a link that plays in any browser") {
+                        onChoose(.copyLink)
+                    }
+                    if isShared {
+                        ActionRow(systemImage: "slider.horizontal.3", title: "Link settings",
+                                  subtitle: "Password, expiry, comments, or stop sharing") {
+                            onChoose(.linkSettings)
+                        }
                     }
                     ActionRow(systemImage: video.isInWatchLater ? "clock.badge.checkmark" : "clock",
                               title: video.isInWatchLater ? "Remove from Watch later" : "Add to Watch later") {

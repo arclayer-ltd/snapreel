@@ -194,9 +194,14 @@ struct VideoCardBadges: View {
     var showsWatched = false
 
     @EnvironmentObject private var library: Library
+    @ObservedObject private var shareLinks: ShareLinks = .shared
+    @ObservedObject private var uploader: Uploader = .shared
 
     var body: some View {
         HStack(spacing: Space.s) {
+            if let link = library.link(for: video.id) {
+                SharedBadge(link: link, state: shareLinks.state(for: video.id))
+            }
             if video.needsTitle {
                 HStack(spacing: 3) {
                     Image(systemName: "pencil")

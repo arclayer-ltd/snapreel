@@ -75,9 +75,9 @@ struct LegalMenuView: View {
                     .accessibilityAddTraits(.isHeader)
             }
             VStack(alignment: .leading, spacing: Space.xs) {
-                glanceLine("person.crop.circle.badge.xmark", "No account and nothing to sign in to")
+                glanceLine("person.crop.circle", "No account needed, except to share links")
                 glanceLine("chart.bar.xaxis", "No analytics, advertising or tracking")
-                glanceLine("iphone", "Recordings stay on this iPhone until you send them")
+                glanceLine("iphone", "Recordings stay on this iPhone until you send them or share a link")
             }
         }
         .padding(Space.m)

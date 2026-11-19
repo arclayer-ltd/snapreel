@@ -66,6 +66,8 @@ struct PlayerPresentation: Equatable {
     var isMinimized = false
     /// Opens on the Transcript tab (from a "transcript ready" notification).
     var opensTranscript = false
+    /// Opens on the Comments tab (from a comment on the recording's share link).
+    var opensComments = false
     /// Changes each time `play` is called so the player can react to a new request for the same video.
     var token = UUID()
 }
@@ -127,14 +129,15 @@ final class AppRouter: ObservableObject {
         recorder = RecorderLaunch(mode: nil, resumesMinimized: true)
     }
 
-    func play(_ videoID: UUID, at time: Double? = nil, opensTranscript: Bool = false) {
+    func play(_ videoID: UUID, at time: Double? = nil, opensTranscript: Bool = false, opensComments: Bool = false) {
         if minimizedRecorder != nil {
             // Playing would take the microphone's audio session away from the recording.
             showToast("Stop your recording to play this", systemImage: "mic.fill")
             return
         }
         withAnimation(Motion.standard) {
-            player = PlayerPresentation(videoID: videoID, startAt: time, opensTranscript: opensTranscript)
+            player = PlayerPresentation(videoID: videoID, startAt: time, opensTranscript: opensTranscript,
+                                        opensComments: opensComments)
         }
     }
 
@@ -174,9 +177,9 @@ final class AppRouter: ObservableObject {
     }
 
     /// Notification tap or deep link: open the video.
-    func open(videoID: UUID, opensTranscript: Bool = false) {
+    func open(videoID: UUID, opensTranscript: Bool = false, opensComments: Bool = false) {
         recorder = nil
         isSettingsPresented = false
-        play(videoID, opensTranscript: opensTranscript)
+        play(videoID, opensTranscript: opensTranscript, opensComments: opensComments)
     }
 }

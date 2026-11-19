@@ -1,14 +1,16 @@
 import Foundation
 
-/// The two tabs under the video.
+/// The tabs under the video. Comments appears only for a recording shared as a link.
 enum PlayerPanel: String, CaseIterable, Hashable {
     case notes
     case transcript
+    case comments
 
     var title: String {
         switch self {
         case .notes: return "Notes"
         case .transcript: return "Transcript"
+        case .comments: return "Comments"
         }
     }
 }
@@ -52,6 +54,8 @@ enum PlayerFollowUp: Equatable {
     case stats
     case delete
     case react(String)
+    case copyLink
+    case linkSettings
 }
 
 /// What the Transcript tab shows.
@@ -99,6 +103,8 @@ struct PlayerInitialState {
     var showsResumePill = false
     /// Holds the page part-way through a swipe down to minimise.
     var swipeOffset: CGFloat = 0
+    /// Viewers' comments and reactions already loaded (debug screens).
+    var activity: CloudActivity? = nil
 }
 
 /// A large emoji that rises over the video when you react.

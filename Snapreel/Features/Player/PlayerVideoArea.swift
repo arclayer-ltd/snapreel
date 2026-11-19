@@ -30,6 +30,8 @@ struct PlayerVideoArea: View {
     let showsPictureInPicturePlaceholder: Bool
     let rate: Double
     let actions: PlayerVideoActions
+    /// Viewers' reactions on the share link, marked apart from yours on the timeline.
+    var viewerReactions: [CloudReaction] = []
 
     private var duration: Double { video.duration > 0 ? video.duration : session.itemDuration }
     private var isLoadedHere: Bool { session.videoID == video.id }
@@ -123,11 +125,13 @@ struct PlayerVideoArea: View {
         if !canPlay || showsPictureInPicturePlaceholder {
             PlayerControlsOverlay(session: session, mode: .minimal, reactions: reactions, duration: duration,
                                   isFullscreen: isFullscreen, isAudio: video.isAudioOnly, insets: controlInsets,
-                                  rate: rate, overlay: $overlay, actions: actions)
+                                  rate: rate, overlay: $overlay, actions: actions,
+                                  viewerReactions: viewerReactions)
         } else if controlsVisible || overlay == .speed {
             PlayerControlsOverlay(session: session, mode: .full, reactions: reactions, duration: duration,
                                   isFullscreen: isFullscreen, isAudio: video.isAudioOnly, insets: controlInsets,
-                                  rate: rate, overlay: $overlay, actions: actions)
+                                  rate: rate, overlay: $overlay, actions: actions,
+                                  viewerReactions: viewerReactions)
                 .transition(.opacity)
         } else {
             PlayerProgressLine(clock: session.clock, duration: duration, onPicture: !video.isAudioOnly)
@@ -181,6 +185,7 @@ struct PlayerControlsOverlay: View {
     let rate: Double
     @Binding var overlay: PlayerOverlay?
     let actions: PlayerVideoActions
+    var viewerReactions: [CloudReaction] = []
 
     /// Full controls over a video: scrims, glass buttons, white text. An audio recording's
     /// panel (and `.minimal`) has no picture, so the controls take the stage colours instead.
@@ -315,7 +320,8 @@ struct PlayerControlsOverlay: View {
                        onSeek: {
                            session.seek(to: $0)
                            actions.interacted()
-                       })
+                       },
+                       viewerReactions: viewerReactions)
             .padding(.horizontal, Space.m)
             .padding(.bottom, Space.xs)
     }
@@ -357,6 +363,8 @@ struct PlayerScrubber: View {
     let onScrub: @MainActor (Double) -> Void
     let onEnd: @MainActor (Double) -> Void
     let onSeek: @MainActor (Double) -> Void
+    /// Viewers' reactions on the share link: a small disc with a ring, where yours are bare.
+    var viewerReactions: [CloudReaction] = []
 
     @State private var dragFraction: Double?
 
@@ -396,6 +404,23 @@ struct PlayerScrubber: View {
     private func markerRow(width: CGFloat) -> some View {
         ZStack(alignment: .topLeading) {
             Color.clear
+            ForEach(viewerReactions) { reaction in
+                Button {
+                    Haptics.tap()
+                    onSeek(reaction.atS)
+                } label: {
+                    Text(reaction.emoji)
+                        .font(.system(size: 11))
+                        .frame(width: 20, height: 20)
+                        .background(Circle().fill(onPicture ? Color.white.opacity(0.85) : ViewerMarkerStyle.fill))
+                        .overlay(Circle().strokeBorder(onPicture ? Color.white : ViewerMarkerStyle.ring, lineWidth: 1.5))
+                        .frame(width: 26, height: 22)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(PressScaleStyle(scale: 0.8))
+                .position(x: xPosition(reaction.atS, width: width), y: 11)
+                .accessibilityLabel("A viewer reacted with \(reaction.emoji) at \(Format.stamp(reaction.atS))")
+            }
             ForEach(reactions) { reaction in
                 Button {
                     Haptics.tap()

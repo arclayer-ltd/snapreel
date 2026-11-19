@@ -88,6 +88,9 @@ struct RecordingReviewView: View {
             ReviewActionButton(systemImage: "square.and.arrow.up", title: "Share", tint: Color.srStageText) {
                 shareTarget = library.video(video.id)
             }
+            ReviewActionButton(systemImage: "link", title: "Copy link", tint: Color.srStageRed) {
+                ShareLinks.shared.copyLink(video.id)
+            }
             if !video.isAudioOnly {
                 ReviewActionButton(systemImage: "square.and.arrow.down", title: "Save to Photos", tint: Color.srStageText) {
                     photosTarget = library.video(video.id)
