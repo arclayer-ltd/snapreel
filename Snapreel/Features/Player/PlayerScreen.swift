@@ -130,9 +130,11 @@ struct PlayerScreen: View {
                                                             available: proxy.size.height))
                     .background(Color.srInkDeep.ignoresSafeArea(edges: .top))
                     .simultaneousGesture(swipeToMinimise)
-                // No zIndex on the video: anything of it that reaches below its frame must stay
-                // under the details, which are drawn later and so win the touch (build 25's
-                // zIndex(1) let the portrait poster's overflow take their taps and drags).
+                    // Normally under the details, which are drawn later and so win the touch:
+                    // build 25's constant zIndex(1) let the portrait poster's overflow take their
+                    // taps and drags. Raised only while the speed menu is open, because on a
+                    // landscape video (211 points tall) the menu reaches about 100 points below.
+                    .zIndex(overlay == .speed ? 1 : 0)
                 belowVideo(video)
                     .overlay(alignment: .bottom) { resumePill }
                 ReactionDock(onReact: { react($0) },

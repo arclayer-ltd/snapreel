@@ -86,7 +86,8 @@ enum DebugSettle {
         }
         let frame = list.convert(list.bounds, to: window)
         DebugTrace.log("touch probe: list at y \(Int(frame.minY))...\(Int(frame.maxY)) in a \(Int(window.bounds.height))-point window")
-        for (label, x) in [("left", frame.minX + 40), ("right", frame.maxX - 40)] {
+        // "middle" sits under the speed menu when it is open (it starts 58 points from the left).
+        for (label, x) in [("left", frame.minX + 40), ("middle", frame.minX + 150), ("right", frame.maxX - 40)] {
             for depth in stride(from: CGFloat(16), to: frame.height, by: 48) {
                 let point = CGPoint(x: x, y: frame.minY + depth)
                 let hit = window.hitTest(point, with: nil)

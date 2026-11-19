@@ -31,6 +31,15 @@ extension DebugCatalog {
                     $0.overlay = .speed
                 }
             },
+            // A landscape video area is about 211 points tall, so the open speed menu reaches
+            // below it over the details: its lowest rates must still draw on top and take the
+            // touch (the probe's "middle" column should hit the menu, "right" the details).
+            watchPlayer("video.speed.landscape", "Speed menu [landscape video]", landscape) { _ in
+                watchState {
+                    $0.position = 3
+                    $0.overlay = .speed
+                }
+            }.settling(.probeTouches),
             watchPlayer("video.notes", "Notes tab", checkout) { _ in
                 watchState {
                     $0.position = 4
