@@ -27,7 +27,15 @@ export interface Plan {
 }
 
 export interface Me {
-  user: { id: string; email: string | null; displayName: string | null };
+  user: {
+    id: string;
+    email: string | null;
+    displayName: string | null;
+    /** profiles.email_alerts: emails for new viewers, comments and reactions. */
+    emailAlerts: boolean;
+    /** Pro branding on watch pages (profiles.brand_color, "#rrggbb"). */
+    brandColor: string | null;
+  };
   plan: Plan;
   usage: {
     activeLinks: number;
@@ -103,6 +111,12 @@ export interface VideoDetail extends VideoSummary {
   sizeBytes: number;
 }
 
+export interface UpdateMeRequest {
+  displayName?: string;
+  brandColor?: string | null;
+  emailAlerts?: boolean;
+}
+
 export interface UpdateVideoRequest {
   title?: string;
   status?: VideoStatus;
@@ -162,12 +176,16 @@ export interface Activity {
 
 export interface PublicVideo {
   title: string;
+  /** "audio" plays with a moving waveform instead of a picture. */
+  kind: VideoKind;
   ownerName: string | null;
   brand: { color: string | null; logoUrl: string | null } | null;
   durationS: number;
   width: number;
   height: number;
   status: VideoStatus;
+  /** 0 to 1 while status is "uploading" (uploaded_bytes / size_bytes); otherwise null. */
+  uploadProgress: number | null;
   posterUrl: string | null;
   videoUrl: string | null;
   previewUrl: string | null;
