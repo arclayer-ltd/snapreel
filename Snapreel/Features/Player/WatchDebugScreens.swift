@@ -8,9 +8,11 @@ extension DebugCatalog {
         let checkout = FixtureStorage.IDs.checkout
         let landscape = FixtureStorage.IDs.onboardingFeedback
         return [
+            // Checkout is a portrait screen recording, so the video has its blurred poster; the
+            // probe logs that touches under the video reach the details (debug-trace.txt).
             watchPlayer("video.player", "Player", checkout) { _ in
                 watchState { $0.position = 4 }
-            },
+            }.settling(.probeTouches),
             watchPlayer("video.fullscreen", "Fullscreen player", landscape) { _ in
                 watchState {
                     $0.position = 3

@@ -130,7 +130,9 @@ struct PlayerScreen: View {
                                                             available: proxy.size.height))
                     .background(Color.srInkDeep.ignoresSafeArea(edges: .top))
                     .simultaneousGesture(swipeToMinimise)
-                    .zIndex(1)
+                // No zIndex on the video: anything of it that reaches below its frame must stay
+                // under the details, which are drawn later and so win the touch (build 25's
+                // zIndex(1) let the portrait poster's overflow take their taps and drags).
                 belowVideo(video)
                     .overlay(alignment: .bottom) { resumePill }
                 ReactionDock(onReact: { react($0) },

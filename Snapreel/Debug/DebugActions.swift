@@ -14,19 +14,25 @@ enum DebugSettle {
     case cameraPrompt
     /// Ask iOS for add-only Photos access.
     case photosPrompt
+    /// Log (DebugTrace) which view the system hit-tests at points down the main list, and
+    /// whether that view is inside the list: the simulator can't tap, so this is how CI shows
+    /// that touches on the player's details reach them.
+    case probeTouches
 
     /// System prompts stay on screen until answered, even across relaunches, so the screenshot
     /// script shoots these last, each on a fresh install.
     var raisesSystemPrompt: Bool {
         switch self {
         case .microphonePrompt, .cameraPrompt, .photosPrompt: return true
-        case .scroll: return false
+        case .scroll, .probeTouches: return false
         }
     }
 
     @MainActor
     func run() {
         switch self {
+        case .probeTouches:
+            DebugSettle.probeTouches()
         case .scroll(let fraction):
             DebugSettle.scrollMainList(to: fraction)
         case .microphonePrompt:
@@ -63,13 +69,37 @@ enum DebugSettle {
 
     /// The tallest vertically scrollable view on the front-most screen (lists, not rails or pagers).
     @MainActor
-    private static func scrollMainList(to fraction: CGFloat) {
-        guard let root = topView else { return }
+    private static func mainList() -> UIScrollView? {
+        guard let root = topView else { return nil }
         let candidates = views(of: UIScrollView.self, in: root).filter {
             !($0 is UITextView) && $0.isScrollEnabled && !$0.isHidden && $0.window != nil
                 && $0.contentSize.height > $0.bounds.height + 1
         }
-        guard let list = candidates.max(by: { $0.bounds.height < $1.bounds.height }) else { return }
+        return candidates.max(by: { $0.bounds.height < $1.bounds.height })
+    }
+
+    @MainActor
+    private static func probeTouches() {
+        guard let list = mainList(), let window = list.window else {
+            DebugTrace.log("touch probe: no scrollable list on screen")
+            return
+        }
+        let frame = list.convert(list.bounds, to: window)
+        DebugTrace.log("touch probe: list at y \(Int(frame.minY))...\(Int(frame.maxY)) in a \(Int(window.bounds.height))-point window")
+        for (label, x) in [("left", frame.minX + 40), ("right", frame.maxX - 40)] {
+            for depth in stride(from: CGFloat(16), to: frame.height, by: 48) {
+                let point = CGPoint(x: x, y: frame.minY + depth)
+                let hit = window.hitTest(point, with: nil)
+                let inside = hit.map { $0 === list || $0.isDescendant(of: list) } ?? false
+                let name = hit.map { String(describing: type(of: $0)) } ?? "nothing"
+                DebugTrace.log("touch probe: \(label) +\(Int(depth)) -> \(inside ? "list" : "NOT the list") (\(name))")
+            }
+        }
+    }
+
+    @MainActor
+    private static func scrollMainList(to fraction: CGFloat) {
+        guard let list = mainList() else { return }
         let insets = list.adjustedContentInset
         let top = -insets.top
         let bottom = list.contentSize.height - list.bounds.height + insets.bottom

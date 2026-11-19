@@ -762,6 +762,11 @@ struct PlayerBlurredPoster: View {
             image = ThumbnailCache.shared.cached(url)
             if image == nil { image = await ThumbnailCache.shared.load(url) }
         }
+        // Only a picture, never a touch target. `.clipped()` hides the filled image beyond the
+        // video area but SwiftUI still hit-tests it: for a portrait recording it reached about
+        // 230 points down over the title, buttons and notes, so taps there went to the video
+        // (builds 22 to 25: "nothing is responding", notes that wouldn't scroll back down).
+        .allowsHitTesting(false)
         .accessibilityHidden(true)
     }
 }
