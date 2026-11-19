@@ -35,6 +35,10 @@ extension DebugCatalog {
                     $0.scrollsToPanel = true
                 }
             },
+            // The details and notes scroller (UIKit since build 25) scrolled to its very end.
+            watchPlayer("video.notes.bottom", "Notes tab [scrolled to the end]", checkout) { _ in
+                watchState { $0.position = 4 }
+            }.settling(.scroll(1)),
             watchPlayer("video.notes.empty", "Notes tab [empty]", landscape) { _ in
                 watchState { $0.scrollsToPanel = true }
             },

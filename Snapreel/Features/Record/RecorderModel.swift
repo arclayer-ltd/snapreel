@@ -1,4 +1,5 @@
 import AVFoundation
+import Combine
 import PhotosUI
 import ReplayKit
 import SwiftUI
@@ -113,7 +114,9 @@ final class RecorderModel: ObservableObject {
     /// Opened without a mode (the tab bar's record button, "Start a recording"): nothing runs,
     /// not even the camera, until the person picks Camera, Screen or Audio.
     @Published private(set) var isChoosingMode: Bool
-    @Published var stage: RecorderStage = .idle
+    @Published var stage: RecorderStage = .idle {
+        didSet { if stage != oldValue { watchSaving() } }
+    }
     @Published var elapsed: TimeInterval = 0
     @Published var cameraPermission: PermissionState
     @Published var microphonePermission: PermissionState
@@ -162,6 +165,9 @@ final class RecorderModel: ObservableObject {
     private var isVisible = false
     /// When the system broadcast sheet was last opened from Snapreel's record button.
     private var broadcastPickerOpenedAt: Date?
+    /// While `stage` is `.saving`, watches the library so review opens the moment the video is
+    /// ready, whatever the saving screen is doing (see `watchSaving`).
+    private var savingWatch: AnyCancellable?
     /// The recorder was swiped down mid audio recording; the take carries on from the bar
     /// above the tab bar, so closing the screen mustn't stop anything.
     private(set) var isMinimized = false
@@ -331,6 +337,10 @@ final class RecorderModel: ObservableObject {
 
     func appDidBecomeActive() {
         guard !isStatic else { return }
+        // A save that finished while Snapreel was away: go straight to review.
+        if case .saving(let id) = stage, library.video(id)?.state.isReady == true {
+            savingFinished(id)
+        }
         let camera = Permissions.currentState(.camera)
         let microphone = Permissions.currentState(.microphone)
         let changed = camera != cameraPermission || microphone != microphonePermission
@@ -720,7 +730,10 @@ final class RecorderModel: ObservableObject {
         }
         // iOS leaves its broadcast sheet up after the countdown; close it so the recorder's
         // "Snapreel is recording your screen" page (and the floating button) shows.
+        // The sheet runs outside Snapreel on iOS 14 and later: coming back to the front closes
+        // it. The in-app dismissal stays for iOS versions that show it inside the app.
         let openedRecently = broadcastPickerOpenedAt.map { Date().timeIntervalSince($0) < 180 } ?? false
+        BroadcastSheetCloser.broadcastStarted()
         BroadcastPickerSheet.dismissIfShowing(openedFromSnapreel: openedRecently)
         broadcastPickerOpenedAt = nil
         if settings.showsRecordingFloater { ScreenRecordingFloater.shared.arm() }
@@ -737,6 +750,7 @@ final class RecorderModel: ObservableObject {
     /// The picker's own button was tapped (the system sheet is opening).
     func broadcastPickerTapped() {
         broadcastPickerOpenedAt = Date()
+        if !isStatic { BroadcastSheetCloser.sheetOpened() }
         Haptics.firm()
         if !settings.hasSeenScreenTutorial { settings.hasSeenScreenTutorial = true }
     }
@@ -865,6 +879,32 @@ final class RecorderModel: ObservableObject {
         }
         camera.stopRunning()
         stage = video.state.isReady ? .review(id) : .saving(id)
+    }
+
+    /// Moves on to review as soon as the video being saved is ready.
+    ///
+    /// On build 23 a screen recording stopped from the status-bar pill left the recorder on its
+    /// saving screen with the video already saved: a blank page with a spinner, for good. That
+    /// hand-over used to depend on the saving screen seeing the change (`onAppear`/`onChange`),
+    /// which can miss it when the save finishes while Snapreel is in the background or the
+    /// screen is still being presented. The model now watches the library itself.
+    private func watchSaving() {
+        guard case .saving(let id) = stage, !isStatic else {
+            savingWatch = nil
+            return
+        }
+        // objectWillChange fires before the change lands; receive(on:) reads it a moment later.
+        savingWatch = library.objectWillChange
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                Task { @MainActor in
+                    guard let self, self.library.video(id)?.state.isReady == true else { return }
+                    self.savingFinished(id)
+                }
+            }
+        if library.video(id)?.state.isReady == true {
+            Task { @MainActor in self.savingFinished(id) }
+        }
     }
 
     /// The saving screen saw the video become ready.

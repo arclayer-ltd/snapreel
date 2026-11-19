@@ -27,18 +27,6 @@ enum SwipeDismiss {
     }
 }
 
-/// Top edge, on screen, of a scroll view's content.
-struct ScrollContentTopKey: PreferenceKey {
-    static let defaultValue: CGFloat = 0
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
-}
-
-/// Bottom edge, on screen, of a header pinned above a scroll view (the player's video).
-struct PinnedHeaderBottomKey: PreferenceKey {
-    static let defaultValue: CGFloat = 0
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
-}
-
 extension View {
     /// Lets the app show through a full-screen cover, so a page dragged down reveals what is
     /// underneath instead of a black gap. The page draws its own background.

@@ -49,7 +49,25 @@ struct RecordingSavingView: View {
                 failed(reason)
             }
         case .ready:
-            ProgressView().tint(.white)
+            // Saved: the model is about to show review. If that ever doesn't happen, the
+            // person still has a way on instead of a spinner that never ends.
+            saved
+                .task { model.savingFinished(videoID) }
+        }
+    }
+
+    private var saved: some View {
+        VStack(spacing: Space.l) {
+            Spacer()
+            stateIcon("checkmark.circle.fill")
+            Text("Saved to your library")
+                .font(.srTitle)
+                .foregroundStyle(.white)
+            Spacer()
+            Button("Continue") { model.savingFinished(videoID) }
+                .buttonStyle(.srPrimary)
+                .padding(.horizontal, Space.l)
+            .padding(.bottom, Space.l)
         }
     }
 

@@ -35,10 +35,9 @@ struct PlayerScreen: View {
     @State private var swipeOffset: CGFloat = 0
     @State private var isSwipeMinimising = false
     @GestureState private var isSwiping = false
-    /// Where the video ends on screen, so a pull of the details past it can be measured.
-    @State private var videoBottom: CGFloat = 0
-    /// Pulling down to minimise only counts once the page has settled after opening.
-    @State private var isPullArmed = false
+    /// Where the Notes / Transcript switch sits in the scroll content.
+    @State private var panelTop: CGFloat = 0
+    @State private var scrollRequest: PlayerScrollRequest?
 
     init(presentation: PlayerPresentation) {
         var initial = PlayerInitialState()
@@ -123,38 +122,24 @@ struct PlayerScreen: View {
 
     // MARK: - Layouts
 
-    /// The video sits in the scroll view's top inset and the reaction dock in its bottom inset,
-    /// so the details and notes always scroll in the space between them and can't end up
-    /// parked behind the video. Drag the video down (or pull the details down past the top)
-    /// to minimise.
+    /// The video at the top, the details and notes scrolling under it (in a UIKit scroll view,
+    /// see `PlayerScroller`), and the reaction dock at the bottom. Drag the video down, or pull
+    /// the details down past their top, to minimise.
     private func standardLayout(_ video: Video) -> some View {
         GeometryReader { proxy in
-            belowVideo(video)
-                .safeAreaInset(edge: .top, spacing: 0) {
-                    videoArea(video, fullscreen: false, insets: EdgeInsets())
-                        .frame(height: PlayerLayout.videoHeight(for: video, width: proxy.size.width,
-                                                                available: proxy.size.height))
-                        .background(Color.srInkDeep.ignoresSafeArea(edges: .top))
-                        .background(GeometryReader { area in
-                            Color.clear.preference(key: PinnedHeaderBottomKey.self,
-                                                   value: area.frame(in: .global).maxY)
-                        })
-                        .simultaneousGesture(swipeToMinimise)
-                }
-                .safeAreaInset(edge: .bottom, spacing: 0) {
-                    ReactionDock(onReact: { react($0) },
-                                 onMore: { openEmojiPicker() },
-                                 onAddNote: { openComposer() })
-                        .overlay(alignment: .top) {
-                            resumePill.alignmentGuide(.top) { $0[.bottom] }
-                        }
-                }
-                .onPreferenceChange(PinnedHeaderBottomKey.self) { videoBottom = $0 }
-                .onPreferenceChange(ScrollContentTopKey.self) { top in pulled(by: top - videoBottom) }
-        }
-        .task {
-            try? await Task.sleep(nanoseconds: 700_000_000)
-            isPullArmed = true
+            VStack(spacing: 0) {
+                videoArea(video, fullscreen: false, insets: EdgeInsets())
+                    .frame(height: PlayerLayout.videoHeight(for: video, width: proxy.size.width,
+                                                            available: proxy.size.height))
+                    .background(Color.srInkDeep.ignoresSafeArea(edges: .top))
+                    .simultaneousGesture(swipeToMinimise)
+                    .zIndex(1)
+                belowVideo(video)
+                    .overlay(alignment: .bottom) { resumePill }
+                ReactionDock(onReact: { react($0) },
+                             onMore: { openEmojiPicker() },
+                             onAddNote: { openComposer() })
+            }
         }
     }
 
@@ -193,33 +178,38 @@ struct PlayerScreen: View {
     }
 
     private func belowVideo(_ video: Video) -> some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                VStack(alignment: .leading, spacing: Space.l) {
-                    details(video)
-                    panelHeader
-                        .id(Self.panelAnchor)
-                    panelBody(video)
-                }
-                .padding(.horizontal, Space.gutter)
-                .padding(.top, Space.m)
-                .padding(.bottom, Space.xxxl)
-                .background(GeometryReader { content in
-                    Color.clear.preference(key: ScrollContentTopKey.self,
-                                           value: content.frame(in: .global).minY)
-                })
-            }
+        PlayerScroller(content: AnyView(scrollContent(video)),
+                       scrollRequest: scrollRequest,
+                       onPulledDown: { pulledPastTop() })
             .onAppear {
                 guard initial.scrollsToPanel else { return }
                 Task { @MainActor in
                     try? await Task.sleep(nanoseconds: 300_000_000)
-                    proxy.scrollTo(Self.panelAnchor, anchor: .top)
+                    scrollRequest = PlayerScrollRequest(y: panelTop)
                 }
             }
-        }
     }
 
-    private static let panelAnchor = "player.panel"
+    /// What scrolls under the video. Hosted in UIKit, so everything it needs comes in as values
+    /// and callbacks rather than from the environment.
+    private func scrollContent(_ video: Video) -> some View {
+        VStack(alignment: .leading, spacing: Space.l) {
+            details(video)
+            panelHeader
+                .background(GeometryReader { header in
+                    Color.clear.preference(key: PlayerPanelTopKey.self,
+                                           value: header.frame(in: .named(Self.contentSpace)).minY)
+                })
+            panelBody(video)
+        }
+        .padding(.horizontal, Space.gutter)
+        .padding(.top, Space.m)
+        .padding(.bottom, Space.xxxl)
+        .coordinateSpace(name: Self.contentSpace)
+        .onPreferenceChange(PlayerPanelTopKey.self) { panelTop = $0 }
+    }
+
+    private static let contentSpace = "player.content"
 
     // MARK: - Swipe down to minimise
 
@@ -243,11 +233,9 @@ struct PlayerScreen: View {
             }
     }
 
-    /// The details were pulled down past the bottom of the video (the top of the scroll view).
-    /// At rest the two edges meet, so `distance` is how far past the top they've been pulled.
-    private func pulled(by distance: CGFloat) {
-        guard isPullArmed, videoBottom > 0, distance > SwipeDismiss.pull,
-              !isSwipeMinimising, swipeOffset == 0, sheet == nil, !isFullscreen else { return }
+    /// The details were pulled down past their top and let go.
+    private func pulledPastTop() {
+        guard !isSwipeMinimising, swipeOffset == 0, sheet == nil, !isFullscreen else { return }
         minimiseBySwipe()
     }
 

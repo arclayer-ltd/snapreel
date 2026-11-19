@@ -13,10 +13,27 @@ struct SnapreelApp: App {
                 .environmentObject(environment.library)
                 .environmentObject(environment.settings)
                 .environmentObject(environment.router)
+                .onOpenURL { url in AppLinks.open(url) }
         }
         .onChange(of: scenePhase) { phase in
             guard phase == .active, environment.debugScreenID == nil else { return }
             AppLifecycle.becameActive(library: environment.library, settings: environment.settings)
+        }
+    }
+}
+
+/// `snapreel://` links. Snapreel opens `snapreel://recording` itself to come back over the
+/// system's broadcast sheet (see `BroadcastSheetCloser`); the recorder showing the recording
+/// is usually already open, so this only makes sure of it.
+@MainActor
+enum AppLinks {
+    static func open(_ url: URL) {
+        guard url.scheme == "snapreel", url.host == "recording" else { return }
+        let router = AppEnvironment.shared.router
+        let state = BroadcastStateStore.read()
+        let live = state.status == .recording && Date().timeIntervalSince(state.updatedAt) < 20
+        if live, router.recorder == nil, router.minimizedRecorder == nil {
+            router.record(.screen)
         }
     }
 }
