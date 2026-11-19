@@ -5,11 +5,12 @@ import UIKit
 extension DebugCatalog {
     /// Session B owns this list: recorder, permissions, camera, screen, audio, import, review, saving.
     static var recordScreens: [DebugScreen] {
-        cameraScreens + screenModeScreens + reviewScreens + build23Screens
+        cameraScreens + screenModeScreens + reviewScreens + build23Screens + liveActivityScreens
     }
 
-    /// Build 23 (owner's phone videos, 2026-11-19): the chooser, swipe down, the minimised
-    /// voice recording and the floating button's preview.
+    /// Build 23 (owner's phone videos, 2026-11-19): the chooser, swipe down and the minimised
+    /// voice recording. (Build 23's floating picture-in-picture button and its `rec.screen.floater`
+    /// state were removed for the Live Activity; see `liveActivityScreens`.)
     private static var build23Screens: [DebugScreen] {
         [
             DebugScreen("rec.chooser", "Recorder [choose what to record]") {
@@ -24,14 +25,6 @@ extension DebugCatalog {
             .shell("rec.minimized.paused", "Voice recording in the bar [paused]", tab: .library) { router, library in
                 router.minimizedRecorder = RecordDebug.minimizedRecording(router: router, library: library,
                                                                           paused: true)
-            },
-            DebugScreen("rec.screen.floater", "Screen recording in progress [floating button]") {
-                RecordDebug.recorder(.screen) {
-                    $0.showsTutorial = false
-                    $0.broadcast = BroadcastState(status: .recording, recordingID: UUID(),
-                                                  startedAt: Date().addingTimeInterval(-12),
-                                                  updatedAt: Date(), microphoneEnabled: false)
-                }
             },
         ]
     }

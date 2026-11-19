@@ -22,17 +22,21 @@ struct SnapreelApp: App {
     }
 }
 
-/// `snapreel://` links. Snapreel opens `snapreel://recording` itself to come back over the
-/// system's broadcast sheet (see `BroadcastSheetCloser`); the recorder showing the recording
-/// is usually already open, so this only makes sure of it.
+/// `snapreel://` links. `snapreel://recording` opens the recording in progress, where Stop
+/// is: tapping the recording's Live Activity sends it (`RecordingLiveActivity`), and Snapreel
+/// opens it itself to come back over the system's broadcast sheet (`BroadcastSheetCloser`).
 @MainActor
 enum AppLinks {
     static func open(_ url: URL) {
         guard url.scheme == "snapreel", url.host == "recording" else { return }
         let router = AppEnvironment.shared.router
+        guard router.recorder == nil else { return }
         let state = BroadcastStateStore.read()
         let live = state.status == .recording && Date().timeIntervalSince(state.updatedAt) < 20
-        if live, router.recorder == nil, router.minimizedRecorder == nil {
+        if router.minimizedRecorder != nil {
+            // A voice recording carrying on in the bar above the tab bar.
+            router.expandRecorder()
+        } else if live {
             router.record(.screen)
         }
     }
@@ -48,6 +52,9 @@ enum AppLifecycle {
         PendingImports.resumeInterruptedSaves(in: library)
         // Warn once a day when the phone is nearly full (session E).
         StorageMonitor.check(library: library)
+        // End a recording's Live Activity left over from a recording that stopped while
+        // Snapreel was suspended, or start one it couldn't start from the background.
+        RecordingLiveActivity.sync()
     }
 }
 
@@ -55,6 +62,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
     func application(_ application: UIApplication,
                      didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         UNUserNotificationCenter.current().delegate = self
+        Task { @MainActor in RecordingLiveActivity.startObserving() }
         return true
     }
 

@@ -97,12 +97,6 @@ struct RecordingSettingsSheet: View {
             DarkToggleRow(title: "Show speaker notes",
                           detail: "Your notes float over the camera while you record. They're never in the video.",
                           isOn: $settings.showsSpeakerNotes)
-            if ScreenRecordingFloater.isSupported {
-                Divider().overlay(Color.srInkLine)
-                DarkToggleRow(title: "Floating button",
-                              detail: "While you record your screen, a small Snapreel button floats over other apps. Tap it, then the pause sign, to stop. It shows in the recording.",
-                              isOn: $settings.showsRecordingFloater)
-            }
         }
     }
 }

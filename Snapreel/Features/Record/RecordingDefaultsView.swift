@@ -63,16 +63,6 @@ struct RecordingDefaultsView: View {
                     Text(length.label).tag(length)
                 }
             }
-            if ScreenRecordingFloater.isSupported {
-                Toggle(isOn: $settings.showsRecordingFloater) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Floating button").font(.srBody)
-                        Text("While you record your screen, a small Snapreel button floats over other apps so you can stop from anywhere. It shows in the recording.")
-                            .font(.srFootnote)
-                            .foregroundStyle(Color.srTextSecondary)
-                    }
-                }
-            }
         } header: {
             Text("Recording")
         }

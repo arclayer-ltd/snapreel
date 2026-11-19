@@ -23,6 +23,8 @@
 	<string>Snapreel saves the recordings you choose to your Photos library.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Snapreel opens your library only when you choose a video to import.</string>
+	<key>NSSupportsLiveActivities</key>
+	<true/>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>Snapreel turns the speech in your recordings into a transcript on this iPhone, so you can search it and jump to any line.</string>
 	<key>UIBackgroundModes</key>

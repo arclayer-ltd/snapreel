@@ -435,9 +435,8 @@ struct ScreenUnavailableView: View {
 /// Shown when Snapreel is open while the screen is being recorded.
 struct ScreenRecordingProgressView: View {
     @EnvironmentObject private var model: RecorderModel
-    @EnvironmentObject private var settings: AppSettings
 
-    private var showsFloater: Bool { ScreenRecordingFloater.isSupported && settings.showsRecordingFloater }
+    private var showsLiveActivity: Bool { RecordingLiveActivity.isSupported }
 
     var body: some View {
         VStack(spacing: Space.l) {
@@ -457,44 +456,35 @@ struct ScreenRecordingProgressView: View {
             .fixedSize(horizontal: false, vertical: true)
             .padding(.horizontal, Space.xl)
             microphone
-            if showsFloater {
-                floaterRow
+            if showsLiveActivity {
+                lockScreenRow
             }
             stopButton
                 .padding(.top, Space.xs)
             Spacer()
         }
-        .onAppear { updateFloater() }
-        .onChange(of: settings.showsRecordingFloater) { _ in updateFloater() }
     }
 
     private var guidance: String {
-        showsFloater
-            ? "Go to your Home Screen and open any app. Stop with the floating Snapreel button, the red pill at the top, or here."
+        showsLiveActivity
+            ? "Go to your Home Screen and open any app. To stop, tap the Snapreel timer on your Lock Screen or the red pill at the top, then Stop recording."
             : "Go to your Home Screen and open any app. When you're done, tap Stop recording or the red pill at the top of the screen."
     }
 
-    /// What will float over other apps once the person leaves Snapreel.
-    private var floaterRow: some View {
+    /// Where the recording shows once the person leaves Snapreel: its Live Activity.
+    private var lockScreenRow: some View {
         HStack(spacing: Space.s) {
-            ZStack {
-                // The same picture as the floating window, under the live layer in case the
-                // layer hasn't drawn yet.
-                Image(uiImage: ScreenRecordingFloater.shared.tileImage)
-                    .resizable()
-                    .scaledToFit()
-                FloaterTileView()
-            }
-            .frame(width: 96, height: 54)
-            .clipShape(RoundedRectangle(cornerRadius: Radius.s, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: Radius.s, style: .continuous)
-                .strokeBorder(Color.white.opacity(0.18), lineWidth: 1))
-            .accessibilityHidden(true)
+            Image(systemName: "lock.iphone")
+                .font(.system(size: 20, weight: .semibold))
+                .foregroundStyle(Color.srRed)
+                .frame(width: 44, height: 44)
+                .background(Circle().fill(Color.srRed.opacity(0.16)))
+                .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
-                Text("Floating button")
+                Text("On your Lock Screen")
                     .font(.srSubheadlineStrong)
                     .foregroundStyle(.white)
-                Text("Appears over other apps when you leave Snapreel. Tap it, then ❚❚ to stop.")
+                Text("Snapreel keeps the timer there, and in the Dynamic Island on newer iPhones. Tap it to come back and stop.")
                     .font(.srFootnote)
                     .foregroundStyle(Color.srOnDarkSecondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -505,17 +495,6 @@ struct ScreenRecordingProgressView: View {
         .background(RoundedRectangle(cornerRadius: Radius.l, style: .continuous).fill(Color.srInkControl))
         .padding(.horizontal, Space.l)
         .accessibilityElement(children: .combine)
-    }
-
-    private func updateFloater() {
-        let floater = ScreenRecordingFloater.shared
-        if model.isStatic {
-            floater.renderTile()
-        } else if showsFloater && model.isBroadcastLive {
-            floater.arm()
-        } else {
-            floater.disarm()
-        }
     }
 
     /// A named way to stop, next to the explanation, as well as the round button below.

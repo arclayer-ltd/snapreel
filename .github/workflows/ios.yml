@@ -44,8 +44,10 @@ jobs:
       TEAM_ID: N3DBKUVJS5
       BUNDLE_ID: co.arclayer.snapreel
       BROADCAST_BUNDLE_ID: co.arclayer.snapreel.broadcast
+      LIVE_ACTIVITY_BUNDLE_ID: co.arclayer.snapreel.liveactivity
       APP_PROFILE: Snapreel App Store
       BROADCAST_PROFILE: Snapreel Broadcast App Store
+      LIVE_ACTIVITY_PROFILE: Snapreel Live Activity App Store
       BUILD_NUMBER: ${{ github.run_number }}
     steps:
       - uses: actions/checkout@v4
@@ -100,8 +102,9 @@ jobs:
         if: ${{ inputs.screenshots && inputs.dark != 'none' }}
         run: bash scripts/ci-screenshots.sh build/Build/Products/Debug-iphonesimulator/Snapreel.app ci-out/dark/screenshots "${{ inputs.dark }}" dark
 
-      # Reuses the team's existing distribution certificate and two App Store profiles made
-      # through the App Store Connect API, so a run never creates or revokes anything.
+      # Reuses the team's existing distribution certificate and three App Store profiles made
+      # through the App Store Connect API (app, broadcast extension, Live Activity widget
+      # extension), so a run never creates or revokes anything.
       - name: Install signing certificate, profiles and API key
         if: ${{ inputs.testflight }}
         env:
@@ -109,9 +112,16 @@ jobs:
           DIST_CERT_PASSWORD: ${{ secrets.DIST_CERT_PASSWORD }}
           APPSTORE_PROFILE_BASE64: ${{ secrets.APPSTORE_PROFILE_BASE64 }}
           BROADCAST_PROFILE_BASE64: ${{ secrets.BROADCAST_PROFILE_BASE64 }}
+          LIVE_ACTIVITY_PROFILE_BASE64: ${{ secrets.LIVE_ACTIVITY_PROFILE_BASE64 }}
           ASC_KEY_P8_BASE64: ${{ secrets.ASC_KEY_P8_BASE64 }}
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
         run: |
+          for SECRET in APPSTORE_PROFILE_BASE64 BROADCAST_PROFILE_BASE64 LIVE_ACTIVITY_PROFILE_BASE64; do
+            if [ -z "${!SECRET}" ]; then
+              echo "::error::Repository secret $SECRET is missing (an App Store provisioning profile, base64)"
+              exit 1
+            fi
+          done
           KEYCHAIN="$RUNNER_TEMP/signing.keychain-db"
           KEYCHAIN_PASSWORD=$(uuidgen)
           echo "$DIST_CERT_P12_BASE64" | base64 --decode > "$RUNNER_TEMP/dist.p12"
@@ -123,7 +133,7 @@ jobs:
           security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | tr -d '"')
           rm "$RUNNER_TEMP/dist.p12"
           security find-identity -v -p codesigning "$KEYCHAIN"
-          for PAIR in "APPSTORE_PROFILE_BASE64" "BROADCAST_PROFILE_BASE64"; do
+          for PAIR in "APPSTORE_PROFILE_BASE64" "BROADCAST_PROFILE_BASE64" "LIVE_ACTIVITY_PROFILE_BASE64"; do
             echo "${!PAIR}" | base64 --decode > "$RUNNER_TEMP/profile.mobileprovision"
             security cms -D -i "$RUNNER_TEMP/profile.mobileprovision" > "$RUNNER_TEMP/profile.plist"
             UUID=$(/usr/libexec/PlistBuddy -c "Print :UUID" "$RUNNER_TEMP/profile.plist")
@@ -155,6 +165,7 @@ jobs:
           fi
           codesign -d --entitlements :- build/Snapreel.xcarchive/Products/Applications/Snapreel.app 2>/dev/null | grep -A3 application-groups
           codesign -d --entitlements :- build/Snapreel.xcarchive/Products/Applications/Snapreel.app/PlugIns/SnapreelBroadcast.appex 2>/dev/null | grep -A3 application-groups
+          codesign -dv build/Snapreel.xcarchive/Products/Applications/Snapreel.app/PlugIns/SnapreelLiveActivity.appex 2>&1 | grep -E "Identifier|TeamIdentifier"
 
       - name: Export and upload to App Store Connect
         if: ${{ inputs.testflight }}
@@ -176,6 +187,7 @@ jobs:
             <dict>
               <key>$BUNDLE_ID</key><string>$APP_PROFILE</string>
               <key>$BROADCAST_BUNDLE_ID</key><string>$BROADCAST_PROFILE</string>
+              <key>$LIVE_ACTIVITY_BUNDLE_ID</key><string>$LIVE_ACTIVITY_PROFILE</string>
             </dict>
             <key>manageAppVersionAndBuildNumber</key><false/>
             <key>uploadSymbols</key><true/>

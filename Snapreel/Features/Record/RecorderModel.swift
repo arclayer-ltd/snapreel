@@ -556,6 +556,7 @@ final class RecorderModel: ObservableObject {
         Haptics.firm()
         UIApplication.shared.isIdleTimerDisabled = true
         startClock()
+        if mode == .audio { RecordingLiveActivity.voiceChanged(.recording(clockStart: Date())) }
     }
 
     func togglePause() {
@@ -576,6 +577,7 @@ final class RecorderModel: ObservableObject {
         elapsed = accumulated
         stage = .paused
         Haptics.tap()
+        if !isStatic && mode == .audio { RecordingLiveActivity.voiceChanged(.paused(elapsed: accumulated)) }
     }
 
     private func resume() {
@@ -586,6 +588,9 @@ final class RecorderModel: ObservableObject {
         segmentStart = Date()
         stage = .recording
         Haptics.tap()
+        if !isStatic && mode == .audio {
+            RecordingLiveActivity.voiceChanged(.recording(clockStart: Date().addingTimeInterval(-accumulated)))
+        }
     }
 
     func stop() {
@@ -596,6 +601,7 @@ final class RecorderModel: ObservableObject {
         elapsed = accumulated
         Haptics.firm()
         UIApplication.shared.isIdleTimerDisabled = false
+        if !isStatic && mode == .audio { RecordingLiveActivity.voiceChanged(nil) }
         guard !isStatic, let id = captureID, let fileName = captureFileName else {
             stage = .idle
             return
@@ -650,7 +656,9 @@ final class RecorderModel: ObservableObject {
         if !isStatic {
             switch mode {
             case .camera: camera.cancelRecording()
-            case .audio: audio.cancel()
+            case .audio:
+                audio.cancel()
+                RecordingLiveActivity.voiceChanged(nil)
             case .screen: break
             }
         }
@@ -729,19 +737,17 @@ final class RecorderModel: ObservableObject {
             switchMode(to: .screen)
         }
         // iOS leaves its broadcast sheet up after the countdown; close it so the recorder's
-        // "Snapreel is recording your screen" page (and the floating button) shows.
+        // "Snapreel is recording your screen" page shows.
         // The sheet runs outside Snapreel on iOS 14 and later: coming back to the front closes
         // it. The in-app dismissal stays for iOS versions that show it inside the app.
         let openedRecently = broadcastPickerOpenedAt.map { Date().timeIntervalSince($0) < 180 } ?? false
         BroadcastSheetCloser.broadcastStarted()
         BroadcastPickerSheet.dismissIfShowing(openedFromSnapreel: openedRecently)
         broadcastPickerOpenedAt = nil
-        if settings.showsRecordingFloater { ScreenRecordingFloater.shared.arm() }
     }
 
     private func broadcastDidFinish() {
         refreshBroadcast()
-        ScreenRecordingFloater.shared.disarm()
         isStoppingBroadcast = false
         PendingImports.importFinishedBroadcasts(into: library)
         if screenFailure != nil { Haptics.warning() }
@@ -750,7 +756,11 @@ final class RecorderModel: ObservableObject {
     /// The picker's own button was tapped (the system sheet is opening).
     func broadcastPickerTapped() {
         broadcastPickerOpenedAt = Date()
-        if !isStatic { BroadcastSheetCloser.sheetOpened() }
+        if !isStatic {
+            BroadcastSheetCloser.sheetOpened()
+            // While Snapreel is still in front, the only time iOS lets it start a Live Activity.
+            RecordingLiveActivity.screenSheetOpened()
+        }
         Haptics.firm()
         if !settings.hasSeenScreenTutorial { settings.hasSeenScreenTutorial = true }
     }

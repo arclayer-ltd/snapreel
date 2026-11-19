@@ -26,9 +26,6 @@ final class AppSettings: ObservableObject {
     // Speaker notes shown over the camera while recording
     @Published var speakerNotes: String { didSet { defaults.set(speakerNotes, forKey: Keys.speakerNotes) } }
     @Published var showsSpeakerNotes: Bool { didSet { defaults.set(showsSpeakerNotes, forKey: Keys.showsNotes) } }
-    /// A small Snapreel button floats over other apps while the screen is being recorded
-    /// (picture in picture). It shows in the recording, so it can be turned off.
-    @Published var showsRecordingFloater: Bool { didSet { defaults.set(showsRecordingFloater, forKey: Keys.floater) } }
 
     // Playback
     @Published var playbackRate: Double { didSet { defaults.set(playbackRate, forKey: Keys.rate) } }
@@ -60,7 +57,6 @@ final class AppSettings: ObservableObject {
         hasSeenScreenTutorial = defaults.bool(forKey: Keys.screenTutorial)
         speakerNotes = defaults.string(forKey: Keys.speakerNotes) ?? ""
         showsSpeakerNotes = defaults.bool(forKey: Keys.showsNotes)
-        showsRecordingFloater = defaults.object(forKey: Keys.floater) as? Bool ?? true
         let rate = defaults.double(forKey: Keys.rate)
         playbackRate = rate > 0 ? rate : 1
         appearance = defaults.string(forKey: Keys.appearance).flatMap(AppearanceMode.init(rawValue:)) ?? .system
@@ -105,7 +101,6 @@ final class AppSettings: ObservableObject {
         static let screenTutorial = "recording.screenTutorialSeen"
         static let speakerNotes = "recording.speakerNotes"
         static let showsNotes = "recording.showsSpeakerNotes"
-        static let floater = "recording.showsFloater"
         static let rate = "playback.rate"
         static let appearance = "display.appearance"
     }
