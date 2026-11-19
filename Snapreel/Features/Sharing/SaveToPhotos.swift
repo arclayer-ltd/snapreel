@@ -86,7 +86,15 @@ struct SaveToPhotosModifier: ViewModifier {
             return
         }
         isFrozen = false
-        begin(current)
+        // Like sharing: a screen recording's sound mix finishes first, so Photos gets one track.
+        guard RecordingSaver.shared.isProcessing(current.id) else { return begin(current) }
+        if current.kind == .screen { show(.saving) }
+        Task { @MainActor in
+            await RecordingSaver.shared.waitUntilFinished(current.id)
+            guard activeID == current.id, let latest = library.video(current.id) else { return }
+            target = latest
+            begin(latest)
+        }
     }
 
     private func begin(_ video: Video) {

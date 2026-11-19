@@ -85,16 +85,12 @@ struct RecordingSavingView: View {
     private func saving(_ progress: Double) -> some View {
         VStack(spacing: Space.l) {
             Spacer()
-            ZStack {
-                ProgressRing(progress: progress, lineWidth: 8, track: Color.srStageText.opacity(0.25))
-                Text("\(Int((progress * 100).rounded()))%")
-                    .font(.system(.title2, design: .rounded, weight: .bold))
-                    .monospacedDigit()
-                    .foregroundStyle(Color.srStageText)
-            }
-            .frame(width: 128, height: 128)
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel("Saving, \(Int((progress * 100).rounded())) percent")
+            // Saving reads the file's length and moves it: there's no honest percentage, so the
+            // ring turns (builds up to 30 showed a figure that sat at 5%).
+            SpinningRing(lineWidth: 8, track: Color.srStageText.opacity(0.25))
+                .frame(width: 96, height: 96)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("Saving")
             VStack(spacing: Space.xs) {
                 Text("Saving your recording")
                     .font(.srTitle)

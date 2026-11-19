@@ -24,6 +24,21 @@ struct ShareVideoModifier: ViewModifier {
     private func startIfRequested() {
         guard let requested = video, activeID != requested.id else { return }
         activeID = requested.id
+        // A recording whose work after review is still running (a screen recording's two sound
+        // tracks being mixed into one) is shared once that's done, so the file has all its sound.
+        guard RecordingSaver.shared.isProcessing(requested.id) else { return share(requested) }
+        if requested.kind == .screen {
+            toast = ToastMessage(text: "Finishing the sound…", systemImage: "waveform")
+        }
+        Task { @MainActor in
+            await RecordingSaver.shared.waitUntilFinished(requested.id)
+            toast = nil
+            guard activeID == requested.id else { return }
+            share(requested)
+        }
+    }
+
+    private func share(_ requested: Video) {
         let current = library.video(requested.id) ?? requested
         let source = library.fileURL(for: current)
         guard FileManager.default.fileExists(atPath: source.path) else {

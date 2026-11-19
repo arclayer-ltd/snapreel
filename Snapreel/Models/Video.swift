@@ -123,6 +123,10 @@ struct Video: Identifiable, Codable, Hashable {
     /// When its review (after recording) was shown. Set once; a recording is never offered for
     /// review again, also after a relaunch (`ReviewCoordinator`). Nil for older recordings.
     var reviewedAt: Date?
+    /// True from the moment a save is ready for review until the work after it is done (the
+    /// library card's frame, a screen recording's one sound track, the "saved" notice and the
+    /// transcript). Stored, so a launch finishes what a killed app left (`RecordingSaver`).
+    var isFinishing: Bool?
 
     var isAudioOnly: Bool { kind == .audio || pixelWidth == 0 }
     var isPortrait: Bool { pixelHeight > pixelWidth }

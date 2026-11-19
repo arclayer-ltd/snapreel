@@ -84,29 +84,15 @@ struct RecordingReviewView: View {
             ReviewActionButton(systemImage: "character.cursor.ibeam", title: "Title", tint: Color.srStageText) {
                 editsTitle = true
             }
+            // Both wait for a screen recording's sound mix themselves (`.shareVideo`, `.saveToPhotos`).
             ReviewActionButton(systemImage: "square.and.arrow.up", title: "Share", tint: Color.srStageText) {
-                whenFinished(video.id) { shareTarget = library.video(video.id) }
+                shareTarget = library.video(video.id)
             }
             if !video.isAudioOnly {
                 ReviewActionButton(systemImage: "square.and.arrow.down", title: "Save to Photos", tint: Color.srStageText) {
-                    whenFinished(video.id) { photosTarget = library.video(video.id) }
+                    photosTarget = library.video(video.id)
                 }
             }
-        }
-    }
-
-    /// Review opens before a screen recording's two sound tracks are mixed into one. Sharing or
-    /// saving waits for that, so the file that leaves Snapreel has all its sound.
-    private func whenFinished(_ id: UUID, _ action: @escaping @MainActor () -> Void) {
-        guard RecordingSaver.shared.isProcessing(id) else {
-            action()
-            return
-        }
-        model.toast = ToastMessage(text: "Finishing the sound…", systemImage: "waveform")
-        Task { @MainActor in
-            await RecordingSaver.shared.waitUntilFinished(id)
-            model.toast = nil
-            action()
         }
     }
 }

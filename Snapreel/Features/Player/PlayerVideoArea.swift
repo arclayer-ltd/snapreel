@@ -747,7 +747,7 @@ struct PlayerSavingMessage: View {
         ZStack {
             Color.srStageDeep
             VStack(spacing: Space.s) {
-                ProgressRing(progress: progress, lineWidth: 4, track: Color.srStageText.opacity(0.25))
+                SpinningRing(lineWidth: 4, track: Color.srStageText.opacity(0.25))
                     .frame(width: 44, height: 44)
                 Text("Still saving")
                     .font(.srHeadline)

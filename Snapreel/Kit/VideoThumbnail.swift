@@ -109,11 +109,11 @@ struct VideoThumbnail: View {
         switch video.state {
         case .ready:
             EmptyView()
-        case .saving(let progress):
+        case .saving:
             ZStack {
                 Color.black.opacity(0.45)
                 VStack(spacing: Space.xs) {
-                    ProgressRing(progress: progress, lineWidth: 3)
+                    SpinningRing(lineWidth: 3)
                         .frame(width: 30, height: 30)
                     Text("Saving").font(.srCaption).foregroundStyle(.white)
                 }
@@ -159,6 +159,26 @@ struct AudioArtwork: View {
         let x = Double(index) + Double(abs(seed % 17))
         let value = 0.25 + 0.35 * abs(sin(x * 0.9)) + 0.2 * abs(sin(x * 0.37 + 1.3))
         return CGFloat(min(0.78, value))
+    }
+}
+
+/// A ring that turns while something without a measurable progress is under way (saving).
+struct SpinningRing: View {
+    var lineWidth: CGFloat = 4
+    var tint: Color = .srRed
+    var track: Color = Color.white.opacity(0.25)
+    @State private var isTurning = false
+
+    var body: some View {
+        ZStack {
+            Circle().stroke(track, lineWidth: lineWidth)
+            Circle()
+                .trim(from: 0, to: 0.28)
+                .stroke(tint, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
+                .rotationEffect(.degrees(isTurning ? 270 : -90))
+                .animation(.linear(duration: 0.9).repeatForever(autoreverses: false), value: isTurning)
+        }
+        .onAppear { isTurning = true }
     }
 }
 

@@ -34,12 +34,15 @@ final class ReviewCoordinator {
     /// The recorder on screen, set while it is visible.
     private(set) weak var visibleRecorder: RecorderModel?
     /// A review for the recorder being presented for it (`launchID`), taken when it appears.
-    private(set) var pending: (id: UUID, note: String?, launchID: UUID)?
+    /// Dropped when another recorder is presented instead, or when none appeared in 5 s (iOS
+    /// can refuse a presentation), so it never blocks later hand-offs.
+    private(set) var pending: (id: UUID, note: String?, launchID: UUID, since: Date)?
     /// The recording whose review (or save) is on screen.
     private(set) var showing: UUID?
-    /// A hand-off that arrived while the recorder was on its way out: offered again once it
-    /// has gone, so it isn't shown in a recorder sliding off screen and lost.
-    private var deferred: (id: UUID, note: String?, source: Source, presentIfClosed: Bool)?
+    /// Hand-offs that arrived while the recorder was on its way out, or while it showed another
+    /// recording's review: offered in turn once it has gone, so none is shown in a recorder
+    /// sliding off screen, replaces a review being looked at, or is lost.
+    private var queued: [(id: UUID, note: String?, source: Source, presentIfClosed: Bool)] = []
 
     private let log = Logger(subsystem: "co.arclayer.snapreel", category: "review")
 
@@ -49,15 +52,20 @@ final class ReviewCoordinator {
     func offer(_ id: UUID, note: String?, source: Source, presentIfClosed: Bool,
                library: Library, router: AppRouter) {
         let tag = "hand-off \(source.rawValue) \(Self.short(id))"
+        dropStalePending(router: router)
         guard let video = library.video(id) else { return trace("\(tag): skip, not in the library") }
         guard video.reviewedAt == nil else { return trace("\(tag): skip, already reviewed") }
-        guard showing != id, pending?.id != id, deferred?.id != id else {
+        guard showing != id, pending?.id != id, !queued.contains(where: { $0.id == id }) else {
             return trace("\(tag): skip, already on screen or on its way")
         }
         if let recorder = visibleRecorder {
             guard recorder.acceptsReviews else {
-                deferred = (id, note, source, presentIfClosed)
+                queued.append((id, note, source, presentIfClosed))
                 return trace("\(tag): waiting for the closing recorder to go")
+            }
+            if let current = recorder.currentReviewID, current != id {
+                queued.append((id, note, source, presentIfClosed))
+                return trace("\(tag): waiting behind the review on screen")
             }
             if recorder.showReview(id, note: note) {
                 trace("\(tag): shown in the open recorder")
@@ -69,15 +77,36 @@ final class ReviewCoordinator {
         if let opening = router.recorder {
             // A recorder is on its way in (the person just tapped record): it shows this when
             // it appears. If it is on its way out instead, it never takes it.
-            pending = (id, note, opening.id)
+            guard pending == nil else {
+                queued.append((id, note, source, presentIfClosed))
+                return trace("\(tag): waiting behind the review on its way")
+            }
+            pending = (id, note, opening.id, Date())
             return trace("\(tag): waiting for the recorder that is opening")
         }
         guard presentIfClosed else { return trace("\(tag): skip, recorder closed and not presenting") }
         guard router.minimizedRecorder == nil else { return trace("\(tag): skip, a voice recording is running") }
         let launch = RecorderLaunch(mode: video.kind.recordMode)
-        pending = (id, note, launch.id)
+        pending = (id, note, launch.id, Date())
         router.recorder = launch
         trace("\(tag): presenting the recorder for it")
+    }
+
+    /// A pending review whose recorder was replaced by another presentation (the person opened
+    /// the recorder some other way, a minimised voice recording came back) or never appeared.
+    private func dropStalePending(router: AppRouter) {
+        guard let pending else { return }
+        let replaced = router.recorder?.id != pending.launchID && visibleRecorder?.launch.id != pending.launchID
+        guard replaced || Date().timeIntervalSince(pending.since) > 5 else { return }
+        self.pending = nil
+        trace("dropped the review of \(Self.short(pending.id)) waiting for a recorder that didn't come")
+    }
+
+    /// True while `id`'s review is on screen, on its way, or its save is showing in the recorder:
+    /// no "saved" alert for it (`RecordingSaver.announce`).
+    func isReviewing(_ id: UUID) -> Bool {
+        showing == id || pending?.id == id || queued.contains(where: { $0.id == id })
+            || visibleRecorder?.isShowingReview(of: id) == true
     }
 
     /// The recorder `launchID` is starting: the review it was presented for, if any.
@@ -99,21 +128,28 @@ final class ReviewCoordinator {
     }
 
     /// The recorder went away (Done, Delete, ✕, swipe). Nothing it was meant to show waits on,
-    /// except a hand-off that arrived while it was leaving: that one is offered now.
+    /// except hand-offs that arrived while it was leaving or busy: the next is offered now.
     func recorderDisappeared(_ recorder: RecorderModel) {
         if visibleRecorder === recorder { visibleRecorder = nil }
         if pending?.launchID == recorder.launch.id { pending = nil }
         showing = nil
         trace("recorder closed")
-        guard let waiting = deferred else { return }
-        deferred = nil
+        guard !queued.isEmpty else { return }
         Task { @MainActor in
             // Let the cover finish leaving before the next one is presented.
             try? await Task.sleep(nanoseconds: 150_000_000)
-            let environment = AppEnvironment.shared
-            self.offer(waiting.id, note: waiting.note, source: waiting.source,
-                       presentIfClosed: waiting.presentIfClosed,
-                       library: environment.library, router: environment.router)
+            self.offerNextQueued()
+        }
+    }
+
+    /// Offers queued hand-offs in order until one brings a recorder up (the rest wait for it to
+    /// go), skipping any that were reviewed meanwhile.
+    private func offerNextQueued() {
+        let environment = AppEnvironment.shared
+        while visibleRecorder == nil, environment.router.recorder == nil, !queued.isEmpty {
+            let next = queued.removeFirst()
+            offer(next.id, note: next.note, source: next.source, presentIfClosed: next.presentIfClosed,
+                  library: environment.library, router: environment.router)
         }
     }
 
@@ -124,12 +160,13 @@ final class ReviewCoordinator {
     }
 
     /// The review of `id` is on screen: it is never offered again, and its notifications go.
+    /// Runs once per recording (the recorder may report the same review twice as it appears).
     func reviewShown(_ id: UUID, library: Library) {
         reviewStarted(id)
+        guard library.video(id)?.reviewedAt == nil else { return }
         trace("review shown \(Self.short(id))")
         ReviewTiming.mark(id, "review shown")
         ReviewTiming.finish(id, kind: library.video(id)?.kind)
-        guard library.video(id)?.reviewedAt == nil else { return }
         library.update(id) { $0.reviewedAt = Date() }
         Self.removeDeliveredNotifications(for: id)
     }
@@ -288,8 +325,8 @@ enum PendingImports {
             RecordingSaver.shared.begin(RecordingSaveRequest(id: item.id, kind: .screen,
                                                              createdAt: item.createdAt, fileName: fileName),
                                         library: library)
-            UNUserNotificationCenter.current()
-                .removeDeliveredNotifications(withIdentifiers: [broadcastNotificationPrefix + item.id.uuidString])
+            // Its "Screen recording finished" notification stays until review is shown
+            // (`ReviewCoordinator.reviewShown`): if this hand-off is skipped, it's the way back.
             imported.append(item)
         }
 
@@ -317,12 +354,22 @@ enum PendingImports {
             if router.recorder == nil { router.open(videoID: broadcastID) }
             return
         }
+        let covered = router.isSettingsPresented || router.player.map { !$0.isMinimized } == true
         if router.recorder == nil {
             router.closePlayer()
             router.isSettingsPresented = false
         }
-        ReviewCoordinator.shared.offer(broadcastID, note: nil, source: .notificationTap, presentIfClosed: true,
-                                       library: library, router: router)
+        guard covered && router.recorder == nil else {
+            return ReviewCoordinator.shared.offer(broadcastID, note: nil, source: .notificationTap,
+                                                  presentIfClosed: true, library: library, router: router)
+        }
+        // Settings or the full player is closing: present the recorder once it has gone, not in
+        // the same moment (iOS can drop a presentation made during a dismissal).
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 600_000_000)
+            ReviewCoordinator.shared.offer(broadcastID, note: nil, source: .notificationTap,
+                                           presentIfClosed: true, library: library, router: router)
+        }
     }
 
     /// Resumes or marks failed any save that was interrupted when the app was closed, and
@@ -332,6 +379,8 @@ enum PendingImports {
         for video in library.videos where !saver.isProcessing(video.id) {
             if case .saving = video.state {
                 saver.resume(video.id, library: library)
+            } else if video.state.isReady, video.isFinishing == true {
+                saver.resumeFinishing(video.id, library: library)
             }
         }
         saver.recoverLeftovers(library: library)

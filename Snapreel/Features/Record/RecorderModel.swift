@@ -950,6 +950,9 @@ final class RecorderModel: ObservableObject {
 
     // MARK: - Saving and review
 
+    /// The recording being saved or reviewed here, if any (another one waits behind it).
+    var currentReviewID: UUID? { reviewingID }
+
     /// The recording being saved or reviewed here, if any.
     private var reviewingID: UUID? {
         switch stage {

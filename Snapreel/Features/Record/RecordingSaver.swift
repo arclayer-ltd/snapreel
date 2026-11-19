@@ -74,6 +74,11 @@ final class RecordingSaver {
         process(id, library: library)
     }
 
+    /// Runs the work after review that a killed app didn't finish (`Video.isFinishing`).
+    func resumeFinishing(_ id: UUID, library: Library) {
+        run(id) { await self.finishAfterReview(id, library: library) }
+    }
+
     /// Deletes a recording that is being reviewed or failed to save, including its staged file.
     func discard(_ id: UUID, library: Library) {
         if let video = library.video(id) {
@@ -86,14 +91,21 @@ final class RecordingSaver {
     // MARK: - Saving
 
     private func process(_ id: UUID, library: Library) {
-        guard !inFlight.contains(id) else { return }
-        inFlight.insert(id)
-        Task { @MainActor in
+        run(id) {
             do {
                 try await self.save(id, library: library)
             } catch {
                 self.markFailed(id, error: error, library: library)
             }
+        }
+    }
+
+    /// One piece of work per recording at a time; `waitUntilFinished` callers resume after it.
+    private func run(_ id: UUID, _ work: @escaping @MainActor () async -> Void) {
+        guard !inFlight.contains(id) else { return }
+        inFlight.insert(id)
+        Task { @MainActor in
+            await work()
             self.inFlight.remove(id)
             for waiter in self.waiters.removeValue(forKey: id) ?? [] { waiter.resume() }
         }
@@ -133,14 +145,28 @@ final class RecordingSaver {
             video.pixelWidth = info.pixelWidth
             video.pixelHeight = info.pixelHeight
             video.state = .ready
+            video.isFinishing = true
         }
         ReviewTiming.mark(id, "read")
+        await finishAfterReview(id, library: library)
+    }
 
-        // 2. After review is up: the library card's frame, then (screen recordings) one sound track.
-        if info.hasVideo {
+    /// The work after review: the library card's frame, then (screen recordings) one sound
+    /// track, then the notice and transcript. Marked done only at the end, so a launch after
+    /// the app was killed midway runs it again (each step checks what is already done).
+    private func finishAfterReview(_ id: UUID, library: Library) async {
+        guard let video = library.video(id), video.state.isReady else { return }
+        let destination = library.media.videoURL(video.fileName)
+        guard FileManager.default.fileExists(atPath: destination.path) else {
+            library.update(id) { $0.isFinishing = nil }
+            return
+        }
+        let hasVideo = video.kind != .audio && video.pixelWidth > 0
+
+        if hasVideo && video.thumbnailFileName == nil {
             let started = Date()
             let thumbnails = library.media.thumbnails
-            let at = min(0.5, info.duration / 2)
+            let at = min(0.5, video.duration / 2)
             let name = await Task.detached(priority: .utility) {
                 await RecordingSaver.makeThumbnail(for: destination, at: at, named: id.uuidString, in: thumbnails)
             }.value
@@ -159,6 +185,7 @@ final class RecordingSaver {
         }
         if let saved = library.video(id) {
             announce(saved, library: library)
+            library.update(id) { $0.isFinishing = nil }
         }
     }
 
@@ -185,9 +212,10 @@ final class RecordingSaver {
     }
 
     /// Feed row, local notification, the one-hour title reminder and the transcript. A recording
-    /// whose review was already shown gets the feed row only: the person has just seen it.
+    /// whose review was shown, is on screen or is on its way gets the feed row only: the person
+    /// is looking at it.
     private func announce(_ video: Video, library: Library) {
-        let alert = video.reviewedAt == nil
+        let alert = video.reviewedAt == nil && !ReviewCoordinator.shared.isReviewing(video.id)
         if video.kind == .imported {
             Notifier.shared.post(.importFinished, title: "Import finished",
                                  body: "Your video was copied from Photos and is in your library.",
