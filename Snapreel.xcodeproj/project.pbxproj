@@ -487,7 +487,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "Snapreel-Info.plist";
-				PROVISIONING_PROFILE_SPECIFIER = "Snapreel App Store";
+				PROVISIONING_PROFILE_SPECIFIER = "Snapreel App Store Push";
 				EXCLUDED_SOURCE_FILE_NAMES = "fixture-*";
 				INFOPLIST_KEY_CFBundleDisplayName = Snapreel;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
