@@ -31,10 +31,10 @@ export interface Me {
     id: string;
     email: string | null;
     displayName: string | null;
-    /** Email alerts for views, comments and reactions (profiles.email_alerts). Added by the backend. */
-    emailAlerts?: boolean;
-    /** Pro branding colour (#RRGGBB) or null. Added by the backend. */
-    brandColor?: string | null;
+    /** profiles.email_alerts: emails for new viewers, comments and reactions. */
+    emailAlerts: boolean;
+    /** Pro branding on watch pages (profiles.brand_color, "#rrggbb"). */
+    brandColor: string | null;
   };
   plan: Plan;
   usage: {
@@ -103,12 +103,13 @@ export interface VideoSummary {
   uniqueViewers: number;
   lastViewedAt: string | null;
   commentCount: number;
+  /** So the list can mark password-protected and expired links. */
+  access: Access;
+  expiresAt: string | null;
 }
 
 export interface VideoDetail extends VideoSummary {
-  access: Access;
   hasPassword: boolean;
-  expiresAt: string | null;
   allowDownload: boolean;
   allowComments: boolean;
   allowReactions: boolean;
@@ -139,14 +140,18 @@ export interface Viewer {
   device: "phone" | "tablet" | "desktop" | null;
   firstSeenAt: string;
   lastSeenAt: string;
+  /** How far they watched, 0 to 100. */
   percent: number;
 }
 
 export interface Insights {
   views: number;
   uniqueViewers: number;
+  /** Average share of the video watched per counted view, 0 to 100. */
   avgPercent: number | null;
+  /** Share of counted views that reached the end, 0 to 100. */
   completionRate: number | null;
+  /** 100 counts: how many counted views watched each 1% of the video. */
   dropoff: number[] | null;
   countries: { code: string; count: number }[] | null;
   viewers: Viewer[] | null;
@@ -177,12 +182,16 @@ export interface Activity {
 
 export interface PublicVideo {
   title: string;
+  /** "audio" plays with a moving waveform instead of a picture. */
+  kind: VideoKind;
   ownerName: string | null;
   brand: { color: string | null; logoUrl: string | null } | null;
   durationS: number;
   width: number;
   height: number;
   status: VideoStatus;
+  /** 0 to 1 while status is "uploading" (uploaded_bytes / size_bytes); otherwise null. */
+  uploadProgress: number | null;
   posterUrl: string | null;
   videoUrl: string | null;
   previewUrl: string | null;

@@ -160,8 +160,8 @@ Bodies are JSON with camelCase keys. Errors look like `{error: "<code>", message
 | `POST /api/account/delete` | `{appleAuthorizationCode?, appleClientId?}` | 204. Deletes everything, including the auth user. Sign in with Apple is revoked when the app sends a fresh `appleAuthorizationCode` (from an `ASAuthorizationAppleIDCredential`; `appleClientId` defaults to the bundle ID) |
 
 Shapes:
-- `VideoSummary`: `{id, slug, url, localId, title, kind, durationS, status, posterUrl, createdAt, views, uniqueViewers, lastViewedAt, commentCount}`
-- `VideoDetail`: VideoSummary plus `{access, hasPassword, expiresAt, allowDownload, allowComments, allowReactions, cta, width, height, sizeBytes}`
+- `VideoSummary`: `{id, slug, url, localId, title, kind, durationS, status, posterUrl, createdAt, views, uniqueViewers, lastViewedAt, commentCount, access, expiresAt}` (`access` and `expiresAt` let the dashboard list mark password and expired links)
+- `VideoDetail`: VideoSummary plus `{hasPassword, allowDownload, allowComments, allowReactions, cta, width, height, sizeBytes}`
 - `Comment`: `{id, authorName, isOwner, body, atS, parentId, createdAt}`
 - `Reaction`: `{id, emoji, atS, authorName, createdAt}`
 
@@ -169,7 +169,7 @@ Shapes:
 
 | Method and path | Body | Returns |
 |---|---|---|
-| `GET /api/public/v/{slug}` | | `{title, ownerName, brand: {color, logoUrl} \| null, durationS, width, height, status, posterUrl, videoUrl, previewUrl, captionsUrl, transcript, allowDownload, allowComments, allowReactions, cta, showBadge, createdAt}`, or 401 `{error: "password"}`, or 410 `{error: "expired" \| "removed"}` |
+| `GET /api/public/v/{slug}` | | `{title, kind, ownerName, brand: {color, logoUrl} \| null, durationS, width, height, status, uploadProgress, posterUrl, videoUrl, previewUrl, captionsUrl, transcript, allowDownload, allowComments, allowReactions, cta, showBadge, createdAt}`, or 401 `{error: "password"}`, or 410 `{error: "expired" \| "removed"}` |
 | `POST /api/public/v/{slug}/unlock` | `{password}` | 204 and sets the `sr_unlock_{slug}` cookie (12 h) |
 | `POST /api/public/v/{slug}/view` | `{event: "start"\|"progress"\|"end", positionS, watched: [bucketIndex], viewId?, referrer?}` | `{viewId}`. Sent with `sendBeacon` on pagehide. `watched` holds the 0–99 indexes of the 1% slices played since the last beacon; send back the `viewId` from the first answer, and `document.referrer` as `referrer`. `viewId` is `null` for the owner and for link-preview bots (not recorded) |
 | `GET /api/public/v/{slug}/activity` | | `{comments, reactions}` |
@@ -214,11 +214,15 @@ When pushes are sent:
 
 Each one also gets an email from Resend if the user hasn't turned email off. That setting lives in `profiles.email_alerts`, a boolean defaulting to true, which the backend adds.
 
+`uploadProgress` on the public video is `uploaded_bytes / size_bytes` (0 to 1) while `status` is `uploading`, and `null` otherwise. The watch page polls `GET /api/public/v/{slug}` every 3 s while uploading and starts playing when it turns `ready`.
+
 ## Watch page routes (`web/app/`)
 
 - `/v/{slug}`: watch page. `noindex`. Link-preview bots get OG and Twitter player tags plus oEmbed discovery.
+- `/v/{slug}/embed`: the same player with no page around it, for iframes. The oEmbed `html` and `twitter:player` point here (`<iframe src="https://snapreel.video/v/{slug}/embed" allowfullscreen>`).
+- `/v/preview/locked` and `/v/preview/generic`: 1200×630 PNG link-preview images for password videos and videos with no poster.
 - `/app`: dashboard. `/app/v/{id}` is a video's insights, comments and settings. `/app/account` is account and plan.
-- `/login`: email code and Sign in with Apple.
+- `/login`: email code and Sign in with Apple. Apple on the web returns to `/login/callback?next=…`, which exchanges the code for the cookie session; add `https://snapreel.video/login/callback` (and `http://localhost:3000/login/callback`) to Supabase Auth redirect URLs.
 - `/`, `/pricing`, `/help`, `/help/{slug}`, `/privacy`, `/terms`, `/support`: the marketing site.
 
 ## Who owns which files (parallel sessions)
@@ -232,3 +236,7 @@ Each one also gets an email from Resend if the user hasn't turned email off. Tha
 | Watch page and dashboard | `web/app/v/**`, `web/app/app/**`, `web/app/login/**`, `web/components/player/**`, `web/components/dashboard/**`, `web/lib/client/**` | API internals |
 
 Shared and changed carefully: `web/app/layout.tsx`, `web/app/globals.css` (tokens), `web/lib/contract.ts` (these types), `web/package.json`. Add dependencies, and don't remove other sessions' dependencies.
+
+## Session cookies on the web
+
+The dashboard reads the Supabase session from cookies in Server Components, which can't write cookies. So `web/proxy.ts` (Next 16's name for middleware; backend-owned) refreshes the session on every request to `/app`, `/login` and `/v/*` with `@supabase/ssr`'s `createServerClient` and `auth.getClaims()`, copying refreshed cookies onto the response. Without it, an expired access token sends the owner back to `/login` (which signs them straight back in from the browser), and a server-side refresh could reuse a rotated refresh token.

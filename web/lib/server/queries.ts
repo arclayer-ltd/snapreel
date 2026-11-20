@@ -74,12 +74,17 @@ export async function buildPublicVideo(video: VideoRow): Promise<PublicVideo> {
   const brandColor = plan.isPro ? profile?.brand_color ?? null : null;
   return {
     title: video.title,
+    kind: video.kind,
     ownerName: profile?.display_name ?? null,
     brand: brandColor || logoPath ? { color: brandColor, logoUrl: logoPath ? signed.get(logoPath) ?? null : null } : null,
     durationS: Number(video.duration_s),
     width: video.width,
     height: video.height,
     status: video.status,
+    uploadProgress:
+      video.status === "uploading" && Number(video.size_bytes) > 0
+        ? Math.min(1, Number(video.uploaded_bytes ?? 0) / Number(video.size_bytes))
+        : null,
     posterUrl: signed.get(paths.poster) ?? null,
     videoUrl: ready ? signed.get(paths.video) ?? null : null,
     previewUrl: ready ? signed.get(paths.preview) ?? null : null,

@@ -35,15 +35,15 @@ export function toSummary(v: VideoRow, stats: VideoStats, posterUrl: string | nu
     uniqueViewers: stats.uniqueViewers,
     lastViewedAt: stats.lastViewedAt,
     commentCount: stats.commentCount,
+    access: v.access,
+    expiresAt: v.expires_at,
   };
 }
 
 export function toDetail(v: VideoRow, stats: VideoStats, posterUrl: string | null): VideoDetail {
   return {
     ...toSummary(v, stats, posterUrl),
-    access: v.access,
     hasPassword: !!v.password_hash,
-    expiresAt: v.expires_at,
     allowDownload: v.allow_download,
     allowComments: v.allow_comments,
     allowReactions: v.allow_reactions,
