@@ -109,9 +109,6 @@
     .mk-panel,
     .mk-icon,
     .mk-squircle,
-    .mk-iphone-body,
-    .mk-iphone-body::before,
-    .mk-iphone-screen,
     .mk-appicon {
       corner-shape: superellipse(1.6);
     }
@@ -340,72 +337,34 @@
 
   /* ---------------------------------------------------------------- The iPhone
 
-     An iPhone 16 Pro, front on and upright, drawn at any width: everything is in cqw, 1% of the phone's
-     own width. 71.5 x 149.6 mm body; the screen (the app's 375 x 812 pt screenshot) sits inside a thin
-     titanium band and a black bezel, with the Dynamic Island, the side keys and a soft, layered shadow. */
+     An iPhone 16 Pro, front on and upright: a rendered frame (titanium band, buttons, black bezel,
+     Dynamic Island; scripts/web-device-frame.py) laid over the app's screen, which fills the frame's
+     opening. Sizes are in % of the 1900 x 3782 frame, and the shadow in cqw (1% of the phone's width), so
+     the phone scales to any width. */
   .mk-iphone {
-    --metal: conic-gradient(
-      from 215deg at 50% 50%,
-      #f4f4f6,
-      #b9bbc1 9%,
-      #eceef1 20%,
-      #9a9ca3 34%,
-      #dfe0e4 48%,
-      #a6a8ae 62%,
-      #f1f2f4 76%,
-      #b3b5bb 90%,
-      #f4f4f6
-    );
-    --key: linear-gradient(to right, #8f9198, #e4e5e9 45%, #b9bbc1);
     position: relative;
     container-type: inline-size;
     width: 100%;
-    aspect-ratio: 100 / 207.2;
+    aspect-ratio: 1900 / 3782;
     isolation: isolate;
   }
-  @media (prefers-color-scheme: dark) {
-    .mk-iphone {
-      /* Black Titanium */
-      --metal: conic-gradient(
-        from 215deg at 50% 50%,
-        #6b6d74,
-        #2b2c31 9%,
-        #55575e 20%,
-        #1d1e22 34%,
-        #4a4c53 48%,
-        #232428 62%,
-        #5f6168 76%,
-        #2a2b30 90%,
-        #6b6d74
-      );
-      --key: linear-gradient(to right, #26272b, #5c5e65 45%, #34353a);
-    }
-  }
-  .mk-iphone-body {
+  /* The body, under the frame, carries the soft layered shadow in the body's own rounded shape. */
+  .mk-iphone-shadow {
     position: absolute;
-    inset: 0;
-    z-index: 1;
-    border-radius: 16.6cqw;
-    background: var(--metal);
+    z-index: 0;
+    inset: 0.16% 1.58% 0.13% 1.37%;
+    border-radius: 17.9% / 8.8%;
     box-shadow: var(--mk-phone-shadow);
-  }
-  /* The black bezel and the glass's rim, inside the titanium band. */
-  .mk-iphone-body::before {
-    content: "";
-    position: absolute;
-    inset: 1.15cqw;
-    border-radius: 15.5cqw;
-    background: #050506;
-    box-shadow:
-      0 0 0 0.22cqw rgb(0 0 0 / 0.55),
-      inset 0 0 0 0.35cqw #17181b,
-      inset 0 0.5cqw 0.9cqw rgb(255 255 255 / 0.06);
   }
   .mk-iphone-screen {
     position: absolute;
-    inset: 4cqw;
+    z-index: 1;
+    left: 5.105%;
+    top: 2.036%;
+    width: 89.684%;
+    height: 96.007%;
     overflow: hidden;
-    border-radius: 12.6cqw;
+    border-radius: 15.26% / 7.16%;
     background: var(--scr-l, #fff);
   }
   @media (prefers-color-scheme: dark) {
@@ -414,75 +373,33 @@
     }
   }
   .mk-iphone-screen picture,
-  .mk-iphone-screen img {
+  .mk-iphone-screen img,
+  .mk-iphone-screen video {
     display: block;
     width: 100%;
     height: 100%;
   }
-  .mk-iphone-screen img {
+  .mk-iphone-screen img,
+  .mk-iphone-screen video {
     object-fit: cover;
     object-position: top;
     user-select: none;
-  }
-  .mk-iphone-island {
-    position: absolute;
-    top: 2.35cqw;
-    left: 50%;
-    width: 28.6cqw;
-    height: 8.4cqw;
-    transform: translateX(-50%);
-    border-radius: 999px;
-    background:
-      radial-gradient(circle at 79% 50%, #1b2a4a 0 1.05cqw, #0b0f1a 1.25cqw, transparent 1.6cqw),
-      #000;
   }
   /* A faint reflection across the glass. */
   .mk-iphone-glass {
     position: absolute;
     inset: 0;
     pointer-events: none;
-    border-radius: inherit;
-    background: linear-gradient(118deg, rgb(255 255 255 / 0.13) 0%, rgb(255 255 255 / 0.05) 24%, transparent 38%);
-    box-shadow: inset 0 0 0 0.3cqw rgb(255 255 255 / 0.04);
+    background: linear-gradient(118deg, rgb(255 255 255 / 0.12) 0%, rgb(255 255 255 / 0.04) 26%, transparent 40%);
   }
-  .mk-iphone-key {
+  .mk-iphone-frame {
     position: absolute;
-    z-index: 0;
-    width: 1.3cqw;
-    border-radius: 0.7cqw;
-    background: var(--key);
-    box-shadow: 0 0.2cqw 0.5cqw rgb(15 23 42 / 0.18);
-  }
-  .mk-iphone-key--action,
-  .mk-iphone-key--up,
-  .mk-iphone-key--down {
-    left: -0.75cqw;
-  }
-  .mk-iphone-key--side,
-  .mk-iphone-key--camera {
-    right: -0.75cqw;
-  }
-  .mk-iphone-key--action {
-    top: 17.6%;
-    height: 6.6%;
-  }
-  .mk-iphone-key--up {
-    top: 26.4%;
-    height: 10.4%;
-  }
-  .mk-iphone-key--down {
-    top: 38.6%;
-    height: 10.4%;
-  }
-  .mk-iphone-key--side {
-    top: 29%;
-    height: 15.6%;
-  }
-  .mk-iphone-key--camera {
-    top: 58.5%;
-    height: 7.6%;
-    right: -0.45cqw;
-    width: 0.9cqw;
+    z-index: 2;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    user-select: none;
   }
   /* A phone rising out of the bottom of a tile: the tile (overflow: hidden) cuts off the bottom --crop
      of the phone's height. The wrapper is the phone's width, so cqw here is the phone's width. */
@@ -491,7 +408,7 @@
     container-type: inline-size;
   }
   .mk-peek > .mk-iphone {
-    margin-bottom: calc(-207.2cqw * var(--crop));
+    margin-bottom: calc(-199.05cqw * var(--crop));
   }
 
   /* Standing in a scene: a soft contact shadow on the ground. */

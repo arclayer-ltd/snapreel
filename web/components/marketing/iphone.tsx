@@ -1,5 +1,5 @@
-/* The site's one iPhone: an iPhone 16 Pro drawn in CSS (.mk-iphone in marketing.css) with a real Snapreel
-   screenshot on its glass. Light pages show the app's Light screenshot and Dark pages the Dark one, swapped
+/* The site's one iPhone: a rendered iPhone 16 Pro frame (scripts/web-device-frame.py, .mk-iphone in
+   marketing.css) over a real Snapreel screen. Light pages show the app's Light screenshot and Dark pages the Dark one, swapped
    with prefers-color-scheme. Screens come from scripts/web-screens.py. */
 import type { CSSProperties } from "react";
 import { SCREEN_SIZE, SCREEN_WIDTHS, screens, type ScreenSlug } from "./screens-manifest";
@@ -53,34 +53,41 @@ export function IPhone({
   const vars = { "--scr-l": s.bg.light, "--scr-d": s.bg.dark, ...style } as CSSProperties;
   return (
     <div className={`mk-iphone ${ground ? "mk-iphone--ground" : ""} ${className}`} style={vars}>
-      <span className="mk-iphone-key mk-iphone-key--action" aria-hidden="true" />
-      <span className="mk-iphone-key mk-iphone-key--up" aria-hidden="true" />
-      <span className="mk-iphone-key mk-iphone-key--down" aria-hidden="true" />
-      <span className="mk-iphone-key mk-iphone-key--side" aria-hidden="true" />
-      <span className="mk-iphone-key mk-iphone-key--camera" aria-hidden="true" />
-      <div className="mk-iphone-body">
-        <div className="mk-iphone-screen">
-          <picture>
-            <source media="(prefers-color-scheme: dark)" type="image/avif" sizes={sizes} srcSet={srcSet(screen, "dark", "avif")} />
-            <source media="(prefers-color-scheme: dark)" type="image/webp" sizes={sizes} srcSet={srcSet(screen, "dark", "webp")} />
-            <source type="image/avif" sizes={sizes} srcSet={srcSet(screen, "light", "avif")} />
-            <img
-              src={`/marketing/screens/${screen}-light-${SCREEN_WIDTHS[0]}.webp`}
-              srcSet={srcSet(screen, "light", "webp")}
-              sizes={sizes}
-              width={SCREEN_SIZE.width}
-              height={SCREEN_SIZE.height}
-              alt={alt ?? s.alt}
-              loading={priority ? "eager" : "lazy"}
-              fetchPriority={priority ? "high" : "auto"}
-              decoding={priority ? "sync" : "async"}
-              draggable={false}
-            />
-          </picture>
-          <span className="mk-iphone-island" aria-hidden="true" />
-          <span className="mk-iphone-glass" aria-hidden="true" />
-        </div>
+      <span className="mk-iphone-shadow" aria-hidden="true" />
+      <div className="mk-iphone-screen">
+        <picture>
+          <source media="(prefers-color-scheme: dark)" type="image/avif" sizes={sizes} srcSet={srcSet(screen, "dark", "avif")} />
+          <source media="(prefers-color-scheme: dark)" type="image/webp" sizes={sizes} srcSet={srcSet(screen, "dark", "webp")} />
+          <source type="image/avif" sizes={sizes} srcSet={srcSet(screen, "light", "avif")} />
+          <img
+            src={`/marketing/screens/${screen}-light-${SCREEN_WIDTHS[0]}.webp`}
+            srcSet={srcSet(screen, "light", "webp")}
+            sizes={sizes}
+            width={SCREEN_SIZE.width}
+            height={SCREEN_SIZE.height}
+            alt={alt ?? s.alt}
+            loading={priority ? "eager" : "lazy"}
+            fetchPriority={priority ? "high" : "auto"}
+            decoding={priority ? "sync" : "async"}
+            draggable={false}
+          />
+        </picture>
+        <span className="mk-iphone-glass" aria-hidden="true" />
       </div>
+      {/* eslint-disable-next-line @next/next/no-img-element -- a pre-sized frame overlay; next/image adds nothing */}
+      <img
+        className="mk-iphone-frame"
+        src="/marketing/iphone-frame-600.webp"
+        srcSet="/marketing/iphone-frame-600.webp 600w, /marketing/iphone-frame-1200.webp 1200w"
+        sizes={sizes}
+        width={1900}
+        height={3782}
+        alt=""
+        aria-hidden="true"
+        loading={priority ? "eager" : "lazy"}
+        decoding="async"
+        draggable={false}
+      />
     </div>
   );
 }
