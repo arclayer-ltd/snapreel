@@ -189,7 +189,14 @@ copy it, `vercel env add SUPABASE_AUTH_HOOK_SECRET … --force` in all three env
 bash scripts/pro-smoke.sh                           # against https://snapreel.video
 RESOLVE_IP=76.76.21.21 bash scripts/pro-smoke.sh    # pin one Vercel IP
 BASE=http://localhost:3000 bash scripts/pro-smoke.sh   # a local `next start`; skips the two production-only checks
+BASE=https://<preview>.vercel.app BYPASS_HEADER_FILE=<file> ENV_FILE=.env.smoke bash scripts/pro-smoke.sh   # a preview
 ```
+
+A preview deployment is behind Deployment Protection. `BYPASS_HEADER_FILE` is a private file holding one line,
+`x-vercel-protection-bypass: <secret>`, with the project's "Protection Bypass for Automation" secret (Vercel →
+snapreel-push → Settings → Deployment Protection, the same one `vercel curl` uses). The script sends it only to
+`$BASE`, never prints it; delete the file afterwards. On 20 November 2026 the preview of branch
+`claude/silly-swirles-fb25d2` passed 110 checks, 0 failed (the two production-only checks skipped).
 
 It needs curl, ffmpeg, node and `web/.env.local`. It runs about 90 checks:
 - it makes two throwaway users at Resend's test inbox (`delivered+smoke-…@resend.dev`) and signs them in with

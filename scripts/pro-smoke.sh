@@ -4,6 +4,7 @@
 #   bash scripts/pro-smoke.sh                       # https://snapreel.video
 #   RESOLVE_IP=76.76.21.21 bash scripts/pro-smoke.sh  # pin one Vercel IP (the owner's carrier blocks some)
 #   BASE=http://localhost:3000 bash scripts/pro-smoke.sh
+#   BASE=https://<preview>.vercel.app BYPASS_HEADER_FILE=<file> bash scripts/pro-smoke.sh   # a protected preview
 #
 # Needs curl, ffmpeg, node and web/.env.local from `vercel env pull` (NEXT_PUBLIC_SUPABASE_URL,
 # NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY, SUPABASE_SECRET_KEY). Secrets are read into header files in a private temp
@@ -20,6 +21,9 @@ TMP="$(mktemp -d)"
 chmod 700 "$TMP"
 RESOLVE=()
 [ -n "${RESOLVE_IP:-}" ] && RESOLVE=(--resolve "snapreel.video:443:$RESOLVE_IP")
+# A protected Vercel preview: BYPASS_HEADER_FILE holds "x-vercel-protection-bypass: <secret>". It's sent only to $BASE.
+BYPASS=()
+[ -n "${BYPASS_HEADER_FILE:-}" ] && BYPASS=(-H "@$BYPASS_HEADER_FILE")
 
 envget() { grep -E "^$1=" "$ENV_FILE" | head -1 | cut -d= -f2- | sed -e 's/^"//' -e 's/"$//'; }
 SB="$(envget NEXT_PUBLIC_SUPABASE_URL)"
@@ -45,6 +49,7 @@ api() {
   shift 2
   [ $# -gt 0 ] && shift
   local args=(-sS -o "$TMP/out" -w '%{http_code}' -X "$method" "${RESOLVE[@]}" -H "user-agent: ${CALL_UA:-$UA}")
+  [[ "$url" == "$BASE"* ]] && args+=("${BYPASS[@]}")
   [ -n "$data" ] && args+=(-H 'content-type: application/json' --data-binary "$data")
   CODE=$(curl "${args[@]}" "$@" "$url" 2>"$TMP/curl.err") || CODE="curl:$(head -c 120 "$TMP/curl.err")"
   OUT=$(cat "$TMP/out" 2>/dev/null || true)
