@@ -91,9 +91,10 @@ struct WelcomeStep: View {
             HStack(spacing: 6) {
                 Image(systemName: "lock.fill")
                     .font(.system(size: 11, weight: .semibold))
-                Text("No account needed. Recordings stay on this iPhone until you share them.")
+                Text("Nothing leaves this iPhone unless you share it.")
                     .font(.srFootnote)
-                    .multilineTextAlignment(.center)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
             }
             .foregroundStyle(Color.srTextTertiary)
             .accessibilityElement(children: .combine)

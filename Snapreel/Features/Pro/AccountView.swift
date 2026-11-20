@@ -153,7 +153,7 @@ struct AccountView: View {
             SettingsLinkRow(page: .sharedLinks, systemImage: "link", title: "Shared links",
                             value: library.links.isEmpty ? "None" : "\(library.links.count)")
             SettingsDivider()
-            SettingsActionRow(systemImage: "safari.fill", title: "Open the dashboard on the web") {
+            SettingsActionRow(systemImage: "safari.fill", title: "Open the web dashboard") {
                 ShareLinks.openInSafari(CloudConfig.dashboardURL)
             }
         }

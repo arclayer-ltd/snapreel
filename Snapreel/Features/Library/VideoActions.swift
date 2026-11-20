@@ -372,7 +372,7 @@ struct LibraryActionsSheet: View {
             ActionTile(title: "Share", systemImage: "square.and.arrow.up", enabled: ready) {
                 onAction(.share)
             }
-            ActionTile(title: library.link(for: video.id) == nil ? "Copy link" : "Copy link again",
+            ActionTile(title: "Copy link",
                        systemImage: "link", isOn: library.link(for: video.id) != nil, enabled: ready) {
                 onAction(.copyLink)
             }

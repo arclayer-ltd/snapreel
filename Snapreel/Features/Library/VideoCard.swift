@@ -198,10 +198,18 @@ struct VideoCardBadges: View {
     @ObservedObject private var uploader: Uploader = .shared
 
     var body: some View {
-        HStack(spacing: Space.s) {
+        VStack(alignment: .leading, spacing: 5) {
+            // A shared recording says so on a line of its own ("Shared · 12 views").
             if let link = library.link(for: video.id) {
                 SharedBadge(link: link, state: shareLinks.state(for: video.id))
+                    .fixedSize()
             }
+            counts
+        }
+    }
+
+    private var counts: some View {
+        HStack(spacing: Space.s) {
             if video.needsTitle {
                 HStack(spacing: 3) {
                     Image(systemName: "pencil")

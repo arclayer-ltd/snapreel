@@ -110,9 +110,9 @@ extension DebugCatalog {
                 ProDebugHost(.pro) { player(ids.checkout) { $0.position = 4 } }
             },
             DebugScreen("share.link.creating", "Share link [creating]", wait: 4) {
-                ProDebugHost(.free, states: [ids.mitosis: .creating],
-                             present: { ProPresenter.shareLink(ids.mitosis) }) {
-                    player(ids.mitosis) { $0.position = 3 }
+                ProDebugHost(.free, states: [ids.untitled: .creating],
+                             present: { ProPresenter.shareLink(ids.untitled) }) {
+                    player(ids.untitled) { $0.position = 3 }
                 }
             },
             DebugScreen("share.link.preparing", "Share link [preparing the video]", wait: 4) {
@@ -143,9 +143,9 @@ extension DebugCatalog {
                 }
             },
             DebugScreen("share.link.unavailable", "Share link [not switched on in this build]", wait: 4) {
-                ProDebugHost(.free, states: [ids.mitosis: .failed(CloudError.notConfigured.message)],
-                             present: { ProPresenter.shareLink(ids.mitosis) }) {
-                    player(ids.mitosis) { $0.position = 3 }
+                ProDebugHost(.free, states: [ids.untitled: .failed(CloudError.notConfigured.message)],
+                             present: { ProPresenter.shareLink(ids.untitled) }) {
+                    player(ids.untitled) { $0.position = 3 }
                 }
             },
             DebugScreen("share.link.settings", "Link settings [Pro]") {
@@ -321,9 +321,10 @@ enum CloudFixtures {
         APIClient.shared.stub = CloudStub(pro: scenario == .pro)
         guard links, scenario != .signedOut else { return }
         for link in sampleLinks { library.saveLink(link) }
-        Uploader.shared.debugPhases = [FixtureStorage.IDs.onboardingFeedback: .uploading(0.64)]
-        ShareLinks.shared.debugStates[FixtureStorage.IDs.weeklyUpdate] =
-            .failed("The connection dropped too many times. What was sent is kept: try again on Wi-Fi.")
+        Uploader.shared.debugPhases = [
+            FixtureStorage.IDs.onboardingFeedback: .uploading(0.64),
+            FixtureStorage.IDs.weeklyUpdate: .failed("The connection dropped too many times. What was sent is kept: try again on Wi-Fi."),
+        ]
     }
 
     static func me(pro: Bool, links: Int) -> CloudMe {

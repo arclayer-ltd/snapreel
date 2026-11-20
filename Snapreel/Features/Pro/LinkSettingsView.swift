@@ -58,6 +58,7 @@ struct LinkSettingsView: View {
                         .font(.srHeadline)
                         .foregroundStyle(Color.srRed)
                         .disabled(draft == original || draft == nil)
+                        .opacity(draft == original || draft == nil ? 0.4 : 1)
                 }
             }
         }
@@ -166,7 +167,7 @@ struct LinkSettingsView: View {
 
     private var viewersGroup: some View {
         SettingsGroup(title: "Viewers can") {
-            toggleRow("Download the video", systemImage: "arrow.down.circle.fill", value: \.allowDownload, pro: .downloads)
+            toggleRow("Download", systemImage: "arrow.down.circle.fill", value: \.allowDownload, pro: .downloads)
             SettingsDivider()
             toggleRow("Comment", systemImage: "text.bubble.fill", value: \.allowComments)
             SettingsDivider()

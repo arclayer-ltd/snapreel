@@ -97,9 +97,10 @@ struct ShareLinkSheet: View {
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundStyle(Color.srRed)
             Text(verbatim: link.url.replacingOccurrences(of: "https://", with: ""))
-                .font(.srBody.monospaced())
+                .font(.srSubheadline.weight(.medium))
                 .foregroundStyle(Color.srText)
                 .lineLimit(1)
+                .minimumScaleFactor(0.8)
                 .truncationMode(.middle)
             Spacer(minLength: Space.xs)
             Button {
@@ -146,10 +147,10 @@ struct ShareLinkSheet: View {
             .srCard()
         case .preparing:
             progressCard(title: "Preparing the video", fraction: nil,
-                         message: "Making a web copy. You can paste the link now: it plays as soon as the upload finishes.")
+                         message: "Making a web copy. Paste the link now: it plays once the upload is done.")
         case .uploading(let fraction):
             progressCard(title: "Uploading \(Int((fraction * 100).rounded()))%", fraction: fraction,
-                         message: "You can paste the link now. It plays as soon as the upload finishes, and carries on if you leave Snapreel.")
+                         message: "Paste it anywhere now. It plays once the upload is done, even if you leave Snapreel.")
         case .waitingForNetwork(let fraction):
             VStack(alignment: .leading, spacing: Space.s) {
                 statusRow(systemImage: "wifi.slash", tint: .srTextSecondary, title: "Waiting for a connection",
@@ -169,7 +170,8 @@ struct ShareLinkSheet: View {
             VStack(alignment: .leading, spacing: Space.s) {
                 statusRow(systemImage: "exclamationmark.triangle.fill", tint: .srRedText,
                           title: link == nil ? "Couldn't make the link" : "The upload stopped", message: message)
-                if CloudConfig.isConfigured {
+                // Nothing to retry while links aren't switched on in this build.
+                if link != nil || CloudConfig.isConfigured {
                     Button {
                         Haptics.tap()
                         ShareLinks.shared.retry(videoID)

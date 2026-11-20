@@ -404,23 +404,6 @@ struct PlayerScrubber: View {
     private func markerRow(width: CGFloat) -> some View {
         ZStack(alignment: .topLeading) {
             Color.clear
-            ForEach(viewerReactions) { reaction in
-                Button {
-                    Haptics.tap()
-                    onSeek(reaction.atS)
-                } label: {
-                    Text(reaction.emoji)
-                        .font(.system(size: 11))
-                        .frame(width: 20, height: 20)
-                        .background(Circle().fill(onPicture ? Color.white.opacity(0.85) : ViewerMarkerStyle.fill))
-                        .overlay(Circle().strokeBorder(onPicture ? Color.white : ViewerMarkerStyle.ring, lineWidth: 1.5))
-                        .frame(width: 26, height: 22)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(PressScaleStyle(scale: 0.8))
-                .position(x: xPosition(reaction.atS, width: width), y: 11)
-                .accessibilityLabel("A viewer reacted with \(reaction.emoji) at \(Format.stamp(reaction.atS))")
-            }
             ForEach(reactions) { reaction in
                 Button {
                     Haptics.tap()
@@ -438,6 +421,27 @@ struct PlayerScrubber: View {
         .frame(width: width)
     }
 
+    /// Viewers' reactions sit on the line itself in small ringed discs, apart from your own
+    /// above it. They don't take touches, so scrubbing works across them; the Comments tab
+    /// lists them.
+    private func viewerMarkers(width: CGFloat) -> some View {
+        ZStack(alignment: .topLeading) {
+            Color.clear
+            ForEach(viewerReactions) { reaction in
+                Text(reaction.emoji)
+                    .font(.system(size: 9))
+                    .frame(width: 17, height: 17)
+                    .background(Circle().fill(onPicture ? Color.white.opacity(0.9) : ViewerMarkerStyle.fill))
+                    .overlay(Circle().strokeBorder(onPicture ? Color.srRed.opacity(0.9) : ViewerMarkerStyle.ring,
+                                                   lineWidth: 1.2))
+                    .position(x: xPosition(reaction.atS, width: width), y: 13)
+            }
+        }
+        .frame(width: width, height: 26)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+
     private func track(width: CGFloat) -> some View {
         let dragging = dragFraction != nil
         let lineHeight: CGFloat = dragging ? 5 : 3
@@ -450,6 +454,7 @@ struct PlayerScrubber: View {
             Capsule()
                 .fill(Color.srRed)
                 .frame(width: max(0, filled), height: lineHeight)
+            viewerMarkers(width: width)
             Circle()
                 .fill(Color.srRed)
                 .frame(width: thumb, height: thumb)

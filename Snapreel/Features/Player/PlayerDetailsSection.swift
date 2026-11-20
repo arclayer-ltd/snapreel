@@ -190,6 +190,10 @@ struct PlayerDetailsSection: View {
 
     private var progressLine: String {
         let watched = "\(PlayerStatsText.percent(video.furthestProgress)) watched"
+        if let link {
+            // A shared recording's stats open on its viewers.
+            return "\(watched) · \(ProText.views(link.views)) on its link"
+        }
         return "\(watched) · \(PlayerStatsText.shares(video.shareCount))"
     }
 }

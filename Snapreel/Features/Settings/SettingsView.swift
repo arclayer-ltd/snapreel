@@ -132,7 +132,7 @@ struct SettingsView: View {
                     .font(.srBody)
                     .foregroundStyle(Color.srText)
                     .lineLimit(1)
-                Text(auth.isSignedIn ? (auth.email ?? "Signed in") : "Share recordings as links and see who watched")
+                Text(auth.isSignedIn ? (auth.email ?? "Signed in") : "Share links and see who watched")
                     .font(.srFootnote)
                     .foregroundStyle(Color.srTextSecondary)
                     .lineLimit(1)

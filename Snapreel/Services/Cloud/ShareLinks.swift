@@ -104,8 +104,8 @@ final class ShareLinks: ObservableObject {
             return
         }
         guard AuthService.shared.isSignedIn else {
-            ProPresenter.signIn(reason: .link) { [weak self] signedIn in
-                if signedIn { self?.copyLink(videoID) }
+            ProPresenter.signIn(reason: .link) { signedIn in
+                if signedIn { ShareLinks.shared.copyLink(videoID) }
             }
             return
         }
@@ -157,8 +157,8 @@ final class ShareLinks: ObservableObject {
             } catch CloudError.signedOut {
                 self.creating.remove(id)
                 ProPresenter.dismissShareLink()
-                ProPresenter.signIn(reason: .link) { [weak self] signedIn in
-                    if signedIn { self?.copyLink(id) }
+                ProPresenter.signIn(reason: .link) { signedIn in
+                    if signedIn { ShareLinks.shared.copyLink(id) }
                 }
             } catch {
                 self.creating.remove(id)

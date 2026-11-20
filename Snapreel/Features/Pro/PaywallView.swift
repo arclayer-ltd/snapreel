@@ -106,8 +106,11 @@ struct PaywallView: View {
         .background(ProHeroBackground())
     }
 
+    /// Already Pro, or just subscribed.
+    private var showsProHero: Bool { outcome == .purchased || (auth.isPro && outcome == .none) }
+
     private var heroTitle: String {
-        if auth.isPro && outcome == .none { return "You're on Pro" }
+        if showsProHero { return "You're on Pro" }
         switch reason {
         case .settings: return "Share without limits"
         case .duration(let seconds): return "This recording is \(Format.clock(seconds))"
@@ -117,7 +120,7 @@ struct PaywallView: View {
     }
 
     private var heroMessage: String {
-        if auth.isPro && outcome == .none { return "Thanks for supporting Snapreel. Everything below is switched on for your links." }
+        if showsProHero { return "Thanks for supporting Snapreel. Everything below is switched on for your links." }
         switch reason {
         case .settings:
             return "Unlimited share links, longer videos in sharper quality, and the full story of who watched."
@@ -197,7 +200,7 @@ struct PaywallView: View {
         guard let plan = selectedPlan else { return "Subscribe" }
         if store.purchasing != nil { return "Waiting for the App Store…" }
         if !plan.isPurchasable && !isDebugPlans { return store.isLoading ? "Loading prices…" : "Subscribe" }
-        if let days = plan.trialDays { return "Start your free \(ProPlan.trialText(days))" }
+        if let days = plan.trialDays { return "Try \(ProPlan.trialText(days)) free" }
         return "Subscribe for \(plan.displayPrice) \(plan.periodText)"
     }
 
@@ -511,10 +514,11 @@ struct ProHeroBackground: View {
                            center: UnitPoint(x: 0.2, y: 0.35), startRadius: 0, endRadius: 200)
             GridPattern()
                 .stroke(Color.white.opacity(0.06), lineWidth: 1)
-            sparkle(size: 26, x: 0.82, y: 0.36)
-            sparkle(size: 14, x: 0.92, y: 0.58)
-            sparkle(size: 11, x: 0.64, y: 0.22)
-            sparkle(size: 18, x: 0.74, y: 0.66)
+            // Kept in the band above the text, clear of the close button.
+            sparkle(size: 24, x: 0.66, y: 0.15)
+            sparkle(size: 11, x: 0.53, y: 0.08)
+            sparkle(size: 14, x: 0.78, y: 0.27)
+            sparkle(size: 9, x: 0.42, y: 0.2)
         }
         .clipped()
         .accessibilityHidden(true)
