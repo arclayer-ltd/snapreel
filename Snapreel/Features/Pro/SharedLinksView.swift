@@ -116,15 +116,20 @@ private struct UploadRow: View {
                 if let fraction = fraction(state) {
                     LinkProgressBar(fraction: fraction)
                 }
+                if isFailed(state) {
+                    // Under the reason, so a long reason keeps the row's width.
+                    Button {
+                        Haptics.tap()
+                        ShareLinks.shared.retry(videoID)
+                    } label: {
+                        Label("Try again", systemImage: "arrow.clockwise")
+                    }
+                    .buttonStyle(.srPrimaryCompact)
+                    .padding(.top, 2)
+                }
             }
             Spacer(minLength: Space.xs)
-            if isFailed(state) {
-                Button("Try again") {
-                    Haptics.tap()
-                    ShareLinks.shared.retry(videoID)
-                }
-                .buttonStyle(.srPrimaryCompact)
-            } else if state == .ready {
+            if state == .ready {
                 Image(systemName: "checkmark.circle.fill")
                     .font(.system(size: 20))
                     .foregroundStyle(Color.srRed)
@@ -132,7 +137,6 @@ private struct UploadRow: View {
         }
         .padding(.horizontal, Space.m)
         .padding(.vertical, Space.s)
-        .accessibilityElement(children: .combine)
     }
 
     private var title: String {

@@ -165,14 +165,18 @@ extension DebugCatalog {
             },
             DebugScreen("share.link.library", "Library [shared badges]") {
                 ProDebugHost(.pro) {
-                    DebugShellHost(tab: .library, configure: { _, _ in BrowseIntent.shared.libraryTab = .videos })
+                    DebugShellHost(tab: .library, configure: { router, _ in
+                        BrowseIntent.shared.libraryTab = .videos
+                        holdLibraryTab(router)
+                    })
                 }
             },
             DebugScreen("share.link.actions", "Library actions [Copy link]") {
                 ProDebugHost(.pro) {
-                    DebugShellHost(tab: .library, configure: { _, _ in
+                    DebugShellHost(tab: .library, configure: { router, _ in
                         BrowseIntent.shared.libraryTab = .videos
                         BrowseIntent.shared.librarySheet = .video(.actions(ids.checkout))
+                        holdLibraryTab(router)
                     })
                 }
             },
@@ -232,6 +236,18 @@ extension DebugCatalog {
                 ProDebugHost(.free) { player(ids.launchMemo) { $0.position = 4; $0.sheet = .stats } }
             },
         ]
+    }
+
+    /// Runs 33 and 34 sometimes shot these screens on Home: set the Library tab again once
+    /// the shell has settled.
+    @MainActor
+    private static func holdLibraryTab(_ router: AppRouter) {
+        Task { @MainActor in
+            for _ in 0..<4 {
+                try? await Task.sleep(nanoseconds: 400_000_000)
+                if router.tab != .library { router.tab = .library }
+            }
+        }
     }
 
     /// The paywall as its sheet shows it.
