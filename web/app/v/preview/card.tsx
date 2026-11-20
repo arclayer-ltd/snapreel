@@ -3,31 +3,11 @@ import { ImageResponse } from "next/og";
 
 function Mark({ size }: { size: number }) {
   return (
-    <div
-      style={{
-        width: size,
-        height: size,
-        borderRadius: size * 0.25,
-        background: "#13141b",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-      }}
-    >
-      <div
-        style={{
-          width: size * 0.56,
-          height: size * 0.56,
-          borderRadius: "50%",
-          border: `${size * 0.072}px solid #f04850`,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-        }}
-      >
-        <div style={{ width: size * 0.29, height: size * 0.29, borderRadius: "50%", background: "#f04850" }} />
-      </div>
-    </div>
+    <svg width={size} height={size} viewBox="0 0 32 32">
+      <rect width="32" height="32" rx="8" fill="#13141b" />
+      <circle cx="16" cy="16" r="8.9" fill="none" stroke="#f04850" strokeWidth="2.3" />
+      <circle cx="16" cy="16" r="4.7" fill="#f04850" />
+    </svg>
   );
 }
 

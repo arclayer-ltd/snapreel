@@ -28,7 +28,8 @@ export function TranscriptList({ transcript, onSeek }: { transcript: Transcript;
   const userScrolledAt = useRef(0);
 
   const segments = transcript.segments;
-  const active = started
+  // Highlight once playback has started or the viewer has moved the playhead.
+  const active = started || time > 0
     ? segments.findIndex((s, i) => time >= s.start && (time < s.start + s.duration || (i < segments.length - 1 && time < segments[i + 1].start)))
     : -1;
 
