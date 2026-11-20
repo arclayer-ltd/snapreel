@@ -36,7 +36,7 @@ struct LinkSettingsView: View {
                                title: link == nil ? "Not shared" : "Settings didn't load",
                                message: error ?? "This recording doesn't have a share link.",
                                actionTitle: link == nil ? nil : "Try again",
-                               action: link == nil ? nil : { Task { await load() } })
+                               action: link == nil ? nil : { retryLoad() })
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
@@ -278,6 +278,10 @@ struct LinkSettingsView: View {
     }
 
     // MARK: Loading and saving
+
+    private func retryLoad() {
+        Task { await load() }
+    }
 
     private func load() async {
         guard let link else { return }

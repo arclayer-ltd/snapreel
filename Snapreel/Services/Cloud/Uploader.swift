@@ -118,7 +118,10 @@ final class Uploader: ObservableObject {
     private var lastProgressPublish: [UUID: Date] = [:]
     private var backgroundCompletion: (() -> Void)?
 
-    private init() {}
+    /// Jobs are read at once, so the first screens already know which links are uploading.
+    private init() {
+        jobs = Self.loadJobs()
+    }
 
     // MARK: - Lifecycle
 
@@ -127,7 +130,6 @@ final class Uploader: ObservableObject {
     func setUp() {
         guard !started else { return }
         started = true
-        jobs = Self.loadJobs()
         monitor.pathUpdateHandler = { path in
             let online = path.status == .satisfied
             Task { @MainActor in Uploader.shared.networkChanged(online: online) }
@@ -661,7 +663,7 @@ struct ChunkTag {
 
 /// The background session's delegate. Its callbacks arrive on the session's queue and hop to
 /// the main actor.
-final class UploadSessionDelegate: NSObject, URLSessionTaskDelegate, URLSessionDataDelegate {
+final class UploadSessionDelegate: NSObject, URLSessionTaskDelegate {
     func urlSession(_ session: URLSession, task: URLSessionTask, didSendBodyData bytesSent: Int64,
                     totalBytesSent: Int64, totalBytesExpectedToSend: Int64) {
         guard let tag = ChunkTag(description: task.taskDescription) else { return }

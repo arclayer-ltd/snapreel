@@ -34,33 +34,34 @@ struct PaywallView: View {
     private var selectedPlan: ProPlan? { plans.first { $0.id == selected } ?? plans.first }
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 0) {
-                hero
-                VStack(spacing: Space.xl) {
-                    if auth.isPro && outcome == .none {
-                        activeCard
-                    } else if outcome == .purchased {
-                        welcomeCard
-                    } else {
-                        planPicker
-                        buyBlock
+        // The hero runs up under the top edge; the close button stays inside the safe area.
+        ZStack(alignment: .topTrailing) {
+            ScrollView {
+                VStack(spacing: 0) {
+                    hero
+                    VStack(spacing: Space.xl) {
+                        if auth.isPro && outcome == .none {
+                            activeCard
+                        } else if outcome == .purchased {
+                            welcomeCard
+                        } else {
+                            planPicker
+                            buyBlock
+                        }
+                        features
+                        finePrint
+                        links
                     }
-                    features
-                    finePrint
-                    links
+                    .padding(.horizontal, Space.gutter)
+                    .padding(.top, Space.l)
+                    .padding(.bottom, Space.xxxl)
                 }
-                .padding(.horizontal, Space.gutter)
-                .padding(.top, Space.l)
-                .padding(.bottom, Space.xxxl)
             }
-        }
-        .background(Color.srCanvas.ignoresSafeArea())
-        .ignoresSafeArea(edges: .top)
-        .overlay(alignment: .topTrailing) {
+            .ignoresSafeArea(edges: .top)
             CircleIconButton(systemName: "xmark", label: "Close", tone: .glass, size: 32) { onClose() }
                 .padding(Space.m)
         }
+        .background(Color.srCanvas.ignoresSafeArea())
         .toolbar(.hidden, for: .navigationBar)
         .navigationDestination(for: LegalDocument.self) { document in
             LegalDocumentView(document: document)
