@@ -2,6 +2,7 @@
 
 // Dashboard building blocks: cards, switches, Pro locks.
 import type { ReactNode } from "react";
+import { isPast } from "@/lib/client/format";
 import { LockIcon, SparkIcon } from "@/components/player/icons";
 
 export function Card({
@@ -126,11 +127,20 @@ export function SwitchRow({
 export const inputClass =
   "block h-11 w-full rounded-xl border border-line bg-canvas px-3 text-[15px] placeholder:text-text-3 focus:border-sr-red focus:outline-none focus:ring-2 focus:ring-sr-red/25 disabled:cursor-not-allowed disabled:opacity-60";
 
-export function StatusDot({ status }: { status: "ready" | "uploading" | "failed" }) {
-  const colour = status === "ready" ? "bg-[#1f9d63]" : status === "uploading" ? "bg-[#e0a100]" : "bg-sr-red";
+export type LinkState = "ready" | "uploading" | "failed" | "expired";
+
+/** What the owner needs to know about a link at a glance. */
+export function linkState(v: { status: "ready" | "uploading" | "failed"; expiresAt: string | null }): LinkState {
+  if (v.status !== "ready") return v.status;
+  return v.expiresAt && isPast(v.expiresAt) ? "expired" : "ready";
+}
+
+export function StatusDot({ status }: { status: LinkState }) {
+  const colour =
+    status === "ready" ? "bg-[#1f9d63]" : status === "uploading" ? "bg-[#e0a100]" : status === "expired" ? "bg-text-3" : "bg-sr-red";
   return <span aria-hidden="true" className={`inline-block h-2 w-2 shrink-0 rounded-full ${colour}`} />;
 }
 
-export function statusLabel(status: "ready" | "uploading" | "failed"): string {
-  return status === "ready" ? "Live" : status === "uploading" ? "Uploading" : "Upload failed";
+export function statusLabel(status: LinkState): string {
+  return status === "ready" ? "Live" : status === "uploading" ? "Uploading" : status === "expired" ? "Expired" : "Upload failed";
 }

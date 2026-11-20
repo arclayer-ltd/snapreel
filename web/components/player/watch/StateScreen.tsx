@@ -36,8 +36,8 @@ export function StateScreen({ state, ownerName = null, extra }: { state: WatchSt
         <div className="mb-7 w-56 overflow-hidden rounded-[2rem] bg-[#f3eee6] shadow-[0_10px_40px_rgb(19_20_27/0.12)] sm:w-64">
           <Image src={watching} alt="" priority sizes="256px" className="h-auto w-full" />
         </div>
-        <h1 className="text-2xl font-semibold tracking-tight">{copy.title}</h1>
-        <p className="mt-3 text-[15px] leading-relaxed text-text-2">{copy.body(ownerName)}</p>
+        <h1 className="text-balance text-2xl font-semibold tracking-tight">{copy.title}</h1>
+        <p className="mt-3 text-pretty text-[15px] leading-relaxed text-text-2">{copy.body(ownerName)}</p>
         {extra}
         <a href={SITE_URL} className={btn("secondary", "md", "mt-7")}>
           What&rsquo;s Snapreel?

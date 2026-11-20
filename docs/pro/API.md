@@ -155,8 +155,8 @@ Bodies are JSON with camelCase keys. Errors look like `{error: "<code>", message
 | `POST /api/account/delete` | | 204. Deletes everything, including the auth user, and revokes Sign in with Apple |
 
 Shapes:
-- `VideoSummary`: `{id, slug, url, localId, title, kind, durationS, status, posterUrl, createdAt, views, uniqueViewers, lastViewedAt, commentCount}`
-- `VideoDetail`: VideoSummary plus `{access, hasPassword, expiresAt, allowDownload, allowComments, allowReactions, cta, width, height, sizeBytes}`
+- `VideoSummary`: `{id, slug, url, localId, title, kind, durationS, status, posterUrl, createdAt, views, uniqueViewers, lastViewedAt, commentCount, access, expiresAt}` (`access` and `expiresAt` let the dashboard list mark password and expired links)
+- `VideoDetail`: VideoSummary plus `{hasPassword, allowDownload, allowComments, allowReactions, cta, width, height, sizeBytes}`
 - `Comment`: `{id, authorName, isOwner, body, atS, parentId, createdAt}`
 - `Reaction`: `{id, emoji, atS, authorName, createdAt}`
 

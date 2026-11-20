@@ -209,7 +209,12 @@ export function WatchView({ slug, initial }: { slug: string; initial: PublicVide
                     comments={comments}
                     loading={loadingActivity}
                     allowComments={video.allowComments && ready}
-                    onPosted={(c) => setComments((all) => [...all, c])}
+                    closedMessage={
+                      video.allowComments && !ready
+                        ? "You can comment once the video has finished uploading."
+                        : undefined
+                    }
+                    onPosted={(c) => setComments((all) => (all.some((x) => x.id === c.id) ? all : [...all, c]))}
                     onSeek={seek}
                   />
                 ) : (

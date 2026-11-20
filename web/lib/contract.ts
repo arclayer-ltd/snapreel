@@ -96,12 +96,13 @@ export interface VideoSummary {
   uniqueViewers: number;
   lastViewedAt: string | null;
   commentCount: number;
+  /** So the list can mark password-protected and expired links. */
+  access: Access;
+  expiresAt: string | null;
 }
 
 export interface VideoDetail extends VideoSummary {
-  access: Access;
   hasPassword: boolean;
-  expiresAt: string | null;
   allowDownload: boolean;
   allowComments: boolean;
   allowReactions: boolean;

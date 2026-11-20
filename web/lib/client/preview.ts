@@ -104,7 +104,7 @@ function route(method: string, p: string[], body: unknown): unknown {
       document.cookie = `sr_unlock_${slug}=1; Path=/; Max-Age=${60 * 60 * 12}; SameSite=Lax`;
       return undefined;
     }
-    if (action === "activity") return activityFor(slug);
+    if (action === "activity") return structuredClone(activityFor(slug));
     if (action === "view") return { viewId: "preview-view" };
     if (action === "report") return undefined;
     if (action === "comments") {
@@ -147,7 +147,7 @@ function route(method: string, p: string[], body: unknown): unknown {
     const found = byId(id);
     if (!found) throw new ApiError(404, "not_found");
     if (p[2] === "insights") return insightsForTier(found.insights, tier());
-    if (p[2] === "activity") return activityFor(found.detail.slug);
+    if (p[2] === "activity") return structuredClone(activityFor(found.detail.slug));
     if (method === "DELETE") return undefined;
     if (method === "PATCH") {
       const patch = body as UpdateVideoRequest;

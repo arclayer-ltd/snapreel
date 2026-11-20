@@ -35,11 +35,11 @@ export function DropoffChart({
   const area = `${line} L${x(values.length - 1).toFixed(1)},${y(0)} L${x(0)},${y(0)} Z`;
 
   const halfIndex = values.findIndex((v) => v < 0.5);
+  const endShare = Math.round((values[values.length - 1] ?? 0) * 100);
   const summary =
     halfIndex < 0
-      ? "More than half of viewers watched to the end."
-      : `Half of viewers were still watching at ${formatTime((halfIndex / 100) * durationS)}.`;
-  const endShare = Math.round((values[values.length - 1] ?? 0) * 100);
+      ? `Most viewers stayed: ${endShare}% reached the end.`
+      : `Half had stopped by ${formatTime((halfIndex / 100) * durationS)}, and ${endShare}% reached the end.`;
 
   const indexAt = (clientX: number) => {
     const rect = svgRef.current!.getBoundingClientRect();
@@ -55,7 +55,7 @@ export function DropoffChart({
           viewBox={`0 0 ${W} ${H}`}
           className="h-auto w-full touch-none select-none"
           role="img"
-          aria-label={`Drop-off chart. ${summary} ${endShare}% reached the end.`}
+          aria-label={`Drop-off chart. ${summary}`}
           onPointerMove={(e) => setHover(indexAt(e.clientX))}
           onPointerDown={(e) => setHover(indexAt(e.clientX))}
           onPointerLeave={() => setHover(null)}
@@ -102,9 +102,7 @@ export function DropoffChart({
           </div>
         )}
       </div>
-      <figcaption className="mt-2 text-sm text-text-2">
-        {summary} {endShare}% reached the end.
-      </figcaption>
+      <figcaption className="mt-2 text-sm text-text-2">{summary}</figcaption>
     </figure>
   );
 }

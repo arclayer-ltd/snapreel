@@ -162,7 +162,7 @@ export function LoginForm({
       {step === "email" ? (
         <>
           <h1 className="text-2xl font-semibold tracking-tight">Sign in to Snapreel</h1>
-          <p className="mt-2 text-[15px] leading-relaxed text-text-2">
+          <p className="mt-2 text-pretty text-[15px] leading-relaxed text-text-2">
             See who watched your links, reply to comments and change link settings.
           </p>
 
@@ -262,10 +262,16 @@ export function LoginForm({
                   setCode(digits);
                   if (digits.length === 6) void verify(digits);
                 }}
+                onPaste={(e) => {
+                  // "123 456" or "Your code is 123456": keep the digits. No maxLength, so nothing is cut first.
+                  const digits = e.clipboardData.getData("text").replace(/\D/g, "").slice(0, 6);
+                  if (!digits) return;
+                  e.preventDefault();
+                  setCode(digits);
+                  if (digits.length === 6) void verify(digits);
+                }}
                 inputMode="numeric"
                 autoComplete="one-time-code"
-                pattern="[0-9]*"
-                maxLength={6}
                 aria-invalid={!!error}
                 aria-describedby={error ? `${ids}-error` : undefined}
                 className="absolute inset-0 h-full w-full bg-transparent text-transparent caret-transparent selection:bg-transparent focus:outline-none"

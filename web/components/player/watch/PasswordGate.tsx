@@ -52,7 +52,7 @@ export function PasswordGate({ slug }: { slug: string }) {
             <LockIcon size={26} />
           </span>
           <h1 className="mt-4 text-xl font-semibold tracking-tight">This video has a password</h1>
-          <p className="mt-2 text-[15px] leading-relaxed text-text-2">Enter the password you were given to watch it.</p>
+          <p className="mt-2 text-pretty text-[15px] leading-relaxed text-text-2">Enter the password you were given to watch it.</p>
           <label htmlFor={id} className="sr-only">
             Password
           </label>

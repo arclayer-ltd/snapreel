@@ -3,7 +3,7 @@
 // Views, viewers, how far people watched, where they stopped, where they are. Free sees the counts.
 import type { ReactNode } from "react";
 import type { Insights, VideoDetail, Viewer } from "@/lib/contract";
-import { countryFlag, countryName, formatCount } from "@/lib/client/format";
+import { countryName, formatCount } from "@/lib/client/format";
 import { DesktopIcon, EyeIcon, LockIcon, PhoneIcon, TabletIcon, UsersIcon } from "@/components/player/icons";
 import { usePlaybackStore } from "@/components/player/playback";
 import { Avatar, RelativeTime } from "@/components/player/ui";
@@ -77,7 +77,7 @@ function Countries({ countries }: { countries: { code: string; count: number }[]
           <li key={c.code} className="text-sm">
             <div className="flex items-center justify-between gap-2">
               <span className="flex min-w-0 items-center gap-2">
-                <span aria-hidden="true">{countryFlag(c.code)}</span>
+                <CountryCode code={c.code} />
                 <span className="truncate">{countryName(c.code)}</span>
               </span>
               <span className="tabular-nums text-text-2">{formatCount(c.count)}</span>
@@ -89,6 +89,19 @@ function Countries({ countries }: { countries: { code: string; count: number }[]
         ))}
       </ul>
     </div>
+  );
+}
+
+/** Two-letter country code in a chip: flag emoji don't draw on Windows, so codes read the same everywhere. */
+function CountryCode({ code, title }: { code: string; title?: string }) {
+  return (
+    <span
+      aria-hidden="true"
+      title={title}
+      className="inline-flex h-[18px] min-w-[26px] items-center justify-center rounded-md bg-fill px-1 text-[10px] font-semibold tracking-wide text-text-2"
+    >
+      {code.toUpperCase()}
+    </span>
   );
 }
 
@@ -115,7 +128,7 @@ function Viewers({ viewers }: { viewers: Viewer[] }) {
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-medium">{v.anonymous || !v.name ? "Anonymous" : v.name}</p>
               <p className="flex items-center gap-1.5 text-xs text-text-2">
-                <span aria-hidden="true">{countryFlag(v.country)}</span>
+                {v.country && <CountryCode code={v.country} title={countryName(v.country)} />}
                 <span className="sr-only">{countryName(v.country)}</span>
                 <span className="text-text-3">
                   <DeviceIcon device={v.device} />

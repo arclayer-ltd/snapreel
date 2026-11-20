@@ -89,12 +89,6 @@ export function countryName(code: string | null): string {
   }
 }
 
-/** "GB" to the flag emoji. */
-export function countryFlag(code: string | null): string {
-  if (!code || code.length !== 2) return "🌐";
-  return String.fromCodePoint(...[...code.toUpperCase()].map((c) => 0x1f1e6 + c.charCodeAt(0) - 65));
-}
-
 /** Initials for an avatar: "Priya Shah" to "PS". */
 export function initials(name: string | null): string {
   if (!name) return "?";

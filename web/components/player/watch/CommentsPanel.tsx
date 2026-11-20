@@ -16,6 +16,7 @@ export function CommentsPanel({
   comments,
   loading,
   allowComments,
+  closedMessage = "Comments are turned off for this video.",
   onPosted,
   onSeek,
 }: {
@@ -23,6 +24,7 @@ export function CommentsPanel({
   comments: Comment[];
   loading: boolean;
   allowComments: boolean;
+  closedMessage?: string;
   onPosted: (c: Comment) => void;
   onSeek: (t: number) => void;
 }) {
@@ -51,7 +53,7 @@ export function CommentsPanel({
         </div>
       ) : (
         <p className="order-first border-b border-line px-4 py-3 text-sm text-text-2 lg:order-last lg:border-b-0 lg:border-t">
-          Comments are turned off for this video.
+          {closedMessage}
         </p>
       )}
 

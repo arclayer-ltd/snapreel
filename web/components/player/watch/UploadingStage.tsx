@@ -70,9 +70,9 @@ export function UploadingStage({
   return (
     <div
       className={`relative isolate flex items-center justify-center overflow-hidden bg-[#07080c] text-white ${
-        variant === "embed" ? "h-full w-full" : "w-full max-h-[72svh] sm:rounded-2xl lg:max-h-[calc(100svh-11rem)]"
+        variant === "embed" ? "h-full w-full" : `w-full max-h-[72svh] sm:rounded-2xl lg:max-h-[calc(100svh-11rem)] ${isAudio ? "aspect-[4/3] sm:aspect-video" : ""}`
       }`}
-      style={variant === "embed" ? undefined : { aspectRatio: String(ratio) }}
+      style={variant === "embed" || isAudio ? undefined : { aspectRatio: String(ratio) }}
       role="status"
       aria-live="polite"
     >
@@ -108,7 +108,7 @@ export function UploadingStage({
         </div>
         <div>
           <p className="text-lg font-semibold">{processing ? "Getting it ready…" : "Uploading…"}</p>
-          <p className="mt-1 max-w-xs text-sm text-white/75">
+          <p className="mt-1 max-w-xs text-pretty text-sm text-white/75">
             {processing
               ? "Nearly there. It will start playing here by itself."
               : "This video is still on its way from the phone. It will start playing here by itself."}

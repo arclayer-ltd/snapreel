@@ -224,7 +224,7 @@ export function AccountPanel({ initial }: { initial: Me }) {
               onChange={(e) => setColour(e.target.value)}
               maxLength={7}
               spellCheck={false}
-              className={`${inputClass} w-32 font-mono uppercase`}
+              className={`${inputClass.replace("w-full", "w-32")} font-mono uppercase`}
             />
             <span
               className="inline-flex h-11 items-center rounded-full px-4 text-[15px] font-semibold"

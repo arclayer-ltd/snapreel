@@ -6,10 +6,10 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import type { Me, VideoSummary } from "@/lib/contract";
 import { formatCount, formatTime, plural } from "@/lib/client/format";
-import { AlertIcon, ChevronRightIcon, MicIcon, SearchIcon } from "@/components/player/icons";
+import { AlertIcon, ChevronRightIcon, LockIcon, MicIcon, SearchIcon } from "@/components/player/icons";
 import { RelativeTime } from "@/components/player/ui";
 import settingUp from "./art/setting-up.webp";
-import { ProBadge, StatusDot, statusLabel } from "./kit";
+import { ProBadge, StatusDot, linkState, statusLabel } from "./kit";
 
 type Sort = "newest" | "oldest" | "views" | "viewers" | "recent" | "title";
 
@@ -173,7 +173,10 @@ function Thumb({ video }: { video: VideoSummary }) {
   return (
     <div className="relative aspect-video w-28 shrink-0 overflow-hidden rounded-xl bg-sr-ink sm:w-32">
       {video.posterUrl ? (
-        <Image src={video.posterUrl} alt="" fill unoptimized sizes="128px" className="object-cover" />
+        <>
+          <Image src={video.posterUrl} alt="" fill unoptimized sizes="128px" className="scale-110 object-cover opacity-50 blur-md" />
+          <Image src={video.posterUrl} alt="" fill unoptimized sizes="128px" className="object-contain" />
+        </>
       ) : (
         <div className="flex h-full w-full items-center justify-center text-white/70">
           {video.status === "failed" ? <AlertIcon size={22} /> : <MicIcon size={22} />}
@@ -187,6 +190,7 @@ function Thumb({ video }: { video: VideoSummary }) {
 }
 
 function VideoRow({ video }: { video: VideoSummary }) {
+  const state = linkState(video);
   return (
     <Link
       href={`/app/v/${video.id}`}
@@ -196,6 +200,12 @@ function VideoRow({ video }: { video: VideoSummary }) {
         <Thumb video={video} />
         <div className="min-w-0">
           <p className="line-clamp-2 font-semibold leading-snug group-hover:underline group-hover:decoration-line group-hover:underline-offset-4">
+            {video.access === "password" && (
+              <>
+                <LockIcon size={14} className="mr-1.5 inline-block align-[-1px] text-text-2" />
+                <span className="sr-only">Password protected: </span>
+              </>
+            )}
             {video.title}
           </p>
           <p className="mt-1 text-[13px] text-text-2 lg:hidden">
@@ -203,10 +213,10 @@ function VideoRow({ video }: { video: VideoSummary }) {
             {video.commentCount > 0 && <> · {plural(video.commentCount, "comment")}</>}
           </p>
           <p className="mt-0.5 flex items-center gap-1.5 text-[13px] text-text-3 lg:hidden">
-            {video.status !== "ready" ? (
+            {state !== "ready" ? (
               <>
-                <StatusDot status={video.status} />
-                <span className={video.status === "failed" ? "text-red-text" : ""}>{statusLabel(video.status)}</span>
+                <StatusDot status={state} />
+                <span className={state === "failed" ? "text-red-text" : ""}>{statusLabel(state)}</span>
               </>
             ) : video.lastViewedAt ? (
               <>
@@ -228,9 +238,9 @@ function VideoRow({ video }: { video: VideoSummary }) {
       <span className="hidden text-sm text-text-2 lg:block">
         {video.lastViewedAt ? <RelativeTime iso={video.lastViewedAt} /> : <span className="text-text-3">Not yet</span>}
       </span>
-      <span className={`hidden items-center gap-2 text-sm lg:flex ${video.status === "failed" ? "text-red-text" : "text-text-2"}`}>
-        <StatusDot status={video.status} />
-        {statusLabel(video.status)}
+      <span className={`hidden items-center gap-2 text-sm lg:flex ${state === "failed" ? "text-red-text" : "text-text-2"}`}>
+        <StatusDot status={state} />
+        {statusLabel(state)}
       </span>
       <ChevronRightIcon size={18} className="justify-self-end text-text-3" />
     </Link>

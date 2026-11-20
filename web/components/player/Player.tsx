@@ -301,11 +301,11 @@ export function Player({
   const handleKey = useCallback(
     (e: KeyboardEvent | ReactKeyboardEvent, scoped: boolean) => {
       if (e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey) return;
-      const target = e.target as HTMLElement | null;
+      const target = e.target instanceof Element ? e.target : null;
       if (target?.closest("input, textarea, select, [contenteditable='true'], [role='slider'], [role='menu']")) return;
       if (document.querySelector("dialog[open]")) return;
       const onControl = !!target?.closest("button, a, summary, [role='button']");
-      const inPlayer = scoped || !!containerRef.current?.contains(target);
+      const inPlayer = scoped || (!!target && !!containerRef.current?.contains(target));
       const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
       switch (key) {
         case " ":
@@ -499,6 +499,8 @@ export function Player({
 
   const progress = duration > 0 ? shownTime / duration : 0;
 
+  // Audio has no picture to fit, so it gets a taller stage on phones for the waveform and controls.
+  const audioShape = isAudio && variant !== "embed" && !fullscreen ? "aspect-[4/3] sm:aspect-video" : "";
   const stageClass =
     variant === "embed"
       ? "h-full w-full"
@@ -509,10 +511,10 @@ export function Player({
   return (
     <div
       ref={containerRef}
-      className={`group/player relative isolate select-none overflow-hidden bg-[#07080c] text-white ${stageClass} ${
+      className={`group/player relative isolate select-none overflow-hidden bg-[#07080c] text-white ${stageClass} ${audioShape} ${
         visible ? "" : "cursor-none"
       }`}
-      style={variant === "embed" || fullscreen ? undefined : { aspectRatio: String(ratio) }}
+      style={variant === "embed" || fullscreen || isAudio ? undefined : { aspectRatio: String(ratio) }}
       onPointerMove={(e) => {
         if (e.pointerType === "mouse") poke();
       }}
@@ -599,12 +601,12 @@ export function Player({
       </video>
 
       {isAudio && (
-        <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-4 bg-[radial-gradient(ellipse_at_center,rgb(255_255_255/0.07),transparent_70%)] px-[7%]">
-          <div className="flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-[13px] font-medium text-white/85">
+        <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center bg-[radial-gradient(ellipse_at_center,rgb(255_255_255/0.07),transparent_70%)] px-[7%] pb-10">
+          <div className="absolute left-1/2 top-4 flex -translate-x-1/2 items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-[13px] font-medium text-white/85">
             <MicIcon size={15} />
             Voice recording
           </div>
-          <div className="h-[34%] w-full max-w-[720px]">
+          <div className="h-[30%] w-full max-w-[720px]">
             <Waveform seed={title} progress={progress} playing={playing} bars={finePointer ? 64 : 40} />
           </div>
         </div>

@@ -343,23 +343,16 @@ export const AppleIcon = ({ size = 20, ...p }: IconProps) => (
   </svg>
 );
 
-/** Snapreel's mark: the app icon's ring and dot on ink. */
+/** Snapreel's mark: the app icon's ring and dot on ink. Solid fills, so every copy renders even when
+ *  another copy on the page is hidden (shared SVG gradient ids break there). */
 export function SnapreelMark({ size = 28, className }: { size?: number; className?: string }) {
   return (
     <svg width={size} height={size} viewBox="0 0 32 32" aria-hidden="true" focusable="false" className={className}>
-      <defs>
-        <linearGradient id="sr-mark-ring" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stopColor="#fe6262" />
-          <stop offset="1" stopColor="#d32434" />
-        </linearGradient>
-        <radialGradient id="sr-mark-dot" cx="0.38" cy="0.32" r="0.75">
-          <stop offset="0" stopColor="#fe6262" />
-          <stop offset="1" stopColor="#d32434" />
-        </radialGradient>
-      </defs>
       <rect width="32" height="32" rx="8" fill="#13141b" />
-      <circle cx="16" cy="16" r="8.9" fill="none" stroke="url(#sr-mark-ring)" strokeWidth="2.3" />
-      <circle cx="16" cy="16" r="4.7" fill="url(#sr-mark-dot)" />
+      <rect x="0.5" y="0.5" width="31" height="31" rx="7.5" fill="none" stroke="rgb(255 255 255 / 0.1)" />
+      <circle cx="16" cy="16" r="8.9" fill="none" stroke="#f04850" strokeWidth="2.3" />
+      <circle cx="16" cy="16" r="4.7" fill="#f04850" />
+      <circle cx="14.6" cy="14.6" r="1.6" fill="#fe6262" />
     </svg>
   );
 }

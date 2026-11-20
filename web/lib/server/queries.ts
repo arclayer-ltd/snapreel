@@ -44,6 +44,8 @@ function summary(detail: VideoDetail): VideoSummary {
     uniqueViewers: detail.uniqueViewers,
     lastViewedAt: detail.lastViewedAt,
     commentCount: detail.commentCount,
+    access: detail.access,
+    expiresAt: detail.expiresAt,
   };
 }
 

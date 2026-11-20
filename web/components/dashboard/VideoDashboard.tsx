@@ -15,7 +15,7 @@ import { Player } from "@/components/player/Player";
 import { CopyLinkButton, Dialog, Spinner, btn } from "@/components/player/ui";
 import { ActivityPanel } from "./ActivityPanel";
 import { InsightsPanel } from "./InsightsPanel";
-import { StatusDot, statusLabel } from "./kit";
+import { StatusDot, linkState, statusLabel } from "./kit";
 import { SettingsForm } from "./SettingsForm";
 
 type Tab = "insights" | "activity" | "settings";
@@ -79,8 +79,8 @@ export function VideoDashboard({
           <h1 className="text-[26px] font-semibold leading-tight tracking-tight text-balance sm:text-[30px]">{video.title}</h1>
           <p className="mt-2 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-sm text-text-2">
             <span className="inline-flex items-center gap-1.5">
-              <StatusDot status={video.status} />
-              {expired ? "Expired" : statusLabel(video.status)}
+              <StatusDot status={linkState(video)} />
+              {statusLabel(linkState(video))}
             </span>
             <span aria-hidden="true">·</span>
             <span>Shared {formatDate(video.createdAt)}</span>
@@ -141,7 +141,7 @@ export function VideoDashboard({
         </div>
         <div className={`lg:sticky lg:top-24 ${shown("settings")}`}>
           <SettingsForm
-            key={`${video.id}-${video.access}-${video.expiresAt}`}
+            key={video.id}
             video={video}
             pro={pro}
             onSaved={(next) => {
