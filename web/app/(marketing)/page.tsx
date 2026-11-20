@@ -1,39 +1,111 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { AppStoreBadge } from "@/components/marketing/app-store-badge";
-import { Art } from "@/components/marketing/art";
-import { ArrowRight, Check, Loop, MotionStrokes, Sparkle } from "@/components/marketing/marks";
+import { Art, SceneStage, Spot, sceneVars, type SceneSlot } from "@/components/marketing/art";
+import { getArticle } from "@/components/marketing/content";
+import { ArrowRight, Check, Icon, type IconName } from "@/components/marketing/marks";
 import {
   Container,
-  DownloadCta,
   Faq,
+  InAppNote,
   PRICE_MONTHLY,
   PRICE_YEARLY,
   SectionHeading,
   type FaqItem,
 } from "@/components/marketing/sections";
+import { LEGAL_ENTITY } from "@/lib/legal-entity";
 
 export const metadata: Metadata = {
   title: { absolute: "Snapreel: record your iPhone screen, camera or voice and send a link" },
   alternates: { canonical: "/" },
 };
 
+/* What the stats bar says. Not user counts or ratings: three things that are simply true. */
+const facts = [
+  { value: "3", label: "ways to record: screen, camera and voice" },
+  { value: "0", label: "apps or accounts needed to watch a link" },
+  { value: "25", label: "share links free, before you need Pro" },
+];
+
 const ways = [
   {
     slot: "record-screen" as const,
+    icon: "screen" as IconName,
+    tone: "mk-tile--blue",
     title: "Screen",
     text: "Show anything on your iPhone, with your voice over it. Snapreel keeps recording while you use other apps.",
   },
   {
     slot: "record-camera" as const,
+    icon: "camera" as IconName,
+    tone: "mk-tile--peach",
     title: "Camera",
     text: "Talk to the front or back camera, with your notes on screen so you never lose your place.",
   },
   {
     slot: "record-voice" as const,
+    icon: "mic" as IconName,
+    tone: "mk-tile--mint",
     title: "Voice",
     text: "Just your voice, with a live waveform. Lock your iPhone and it keeps going.",
   },
+];
+
+/* The floating cards around the phone in the features scene. */
+const linkFeatures: { icon: IconName; title: string; text: string; pro?: boolean }[] = [
+  { icon: "link", title: "Ready the moment you stop", text: "Tap Copy link and paste it anywhere. The video uploads while people open it." },
+  { icon: "browser", title: "Plays in any browser", text: "On a phone, a tablet or a laptop. Previews show in Messages, Slack and WhatsApp." },
+  { icon: "chat", title: "Comments at the second", text: "Viewers comment or react at the exact moment they mean. You get an alert." },
+  { icon: "chart", title: "See who watched", text: "Views and unique viewers on every link. With Pro: who, how far, and where." },
+];
+
+const privateTiles: { icon: IconName; tone: string; title: string; text: string }[] = [
+  {
+    icon: "person",
+    tone: "mk-tile--blue",
+    title: "No account to record",
+    text: "Open the app and press record. You sign in only when you make your first link.",
+  },
+  {
+    icon: "text",
+    tone: "mk-tile--mint",
+    title: "Transcripts made on your iPhone",
+    text: "Read a recording, search it, and jump to the moment you need.",
+  },
+  {
+    icon: "stop",
+    tone: "mk-tile--butter",
+    title: "Stop sharing deletes the copy",
+    text: "Turn a link off and the uploaded video is deleted. The recording stays on your iPhone.",
+  },
+  {
+    icon: "photo",
+    tone: "mk-tile--peach",
+    title: "Save to Photos or Files",
+    text: "It's your video. Keep a copy in Photos, or send the file with any app.",
+  },
+  {
+    icon: "lock",
+    tone: "mk-tile--rose",
+    title: "Free on your iPhone, forever",
+    text: "No trial and no catch. Pro only changes what your share links can do.",
+  },
+];
+
+const proList = [
+  "Unlimited links, up to 2 hours",
+  "1080p on the web",
+  "Full viewer insights",
+  "Password and expiry",
+  "Downloads on or off",
+  "Your logo, colour and button",
+];
+
+const guides: { id: string; spot: SceneSlot; tag: string }[] = [
+  { id: "first-recording", spot: "spot-record", tag: "Getting started" },
+  { id: "share-links", spot: "spot-share", tag: "Share links" },
+  { id: "privacy", spot: "spot-private", tag: "Privacy" },
+  { id: "snapreel-pro", spot: "spot-pro", tag: "Snapreel Pro" },
 ];
 
 const faq: FaqItem[] = [
@@ -67,84 +139,102 @@ const faq: FaqItem[] = [
   },
 ];
 
+const structuredData = {
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  name: "Snapreel",
+  operatingSystem: "iOS 16 or later",
+  applicationCategory: "MultimediaApplication",
+  description:
+    "Record your iPhone screen, camera or voice. Tap Copy link and anyone can watch in a browser, no app or account needed.",
+  url: "https://snapreel.video/",
+  offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
+  author: { "@type": "Person", name: LEGAL_ENTITY.name, email: LEGAL_ENTITY.email },
+};
+
 export default function Home() {
   return (
     <>
-      {/* ------------------------------------------------------------------ Hero */}
-      <section aria-labelledby="hero-title" className="pt-3 sm:pt-5">
-        <Container>
-          <div className="mk-field grid grid-cols-1 overflow-hidden [--pool-size:50%] [--pool-x:50%] [--pool-y:95%] lg:min-h-[640px] lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)] lg:[--pool-size:52%] lg:[--pool-x:74%] lg:[--pool-y:54%]">
-            <div className="relative z-10 flex flex-col justify-center px-6 pb-4 pt-10 sm:px-12 sm:pt-14 lg:py-16 lg:pl-16 lg:pr-4">
-              <p className="mk-pill w-fit">
-                <span className="size-2 rounded-full bg-sr-cream" aria-hidden="true" />
-                Screen, camera and voice recorder for iPhone
-              </p>
-              <h1 id="hero-title" className="mk-headline mt-6 text-[2.75rem] sm:text-[4rem] xl:text-[4.75rem]">
-                Record it on your iPhone. <b>They watch it anywhere.</b>
-              </h1>
-              <p className="mt-5 max-w-xl text-lg leading-relaxed text-white sm:text-xl">
-                Snapreel records your screen, camera or voice. Stop, tap Copy link, and anyone can watch in their
-                browser, with no app or account on their side.
-              </p>
-              <div className="mt-8 flex flex-wrap items-center gap-3">
-                <AppStoreBadge />
-                <Link href="/pricing" className="mk-button mk-button--ghost">
-                  See what&rsquo;s free
-                  <ArrowRight size={18} />
-                </Link>
-              </div>
-              <p className="mk-pill mt-5 w-fit !font-medium">Free on your iPhone, forever. In TestFlight now.</p>
-            </div>
+      <script
+        type="application/ld+json"
+        // JSON.stringify of our own constant; "<" is escaped so it can't close the tag.
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData).replace(/</g, "\\u003c") }}
+      />
 
-            <div className="relative mx-auto w-full max-w-[560px] self-end lg:-ml-10 lg:max-w-none">
-              <Sparkle size={40} top="9%" right="10%" delay={0} />
-              <Sparkle size={20} top="27%" right="4%" delay={1.2} />
-              <Sparkle size={16} top="5%" left="40%" delay={2.1} />
-              <Sparkle size={26} top="62%" left="3%" delay={0.7} />
-              <MotionStrokes size={64} top="4%" right="22%" rotate={8} />
-              <MotionStrokes size={44} top="44%" left="1%" rotate={-110} count={2} />
-              <Art slot="hero" priority className="relative" sizes="(min-width: 1280px) 640px, (min-width: 1024px) 50vw, (min-width: 640px) 560px, calc(100vw - 32px)" />
-            </div>
+      {/* ------------------------------------------------------------------ Hero */}
+      <section
+        aria-labelledby="hero-title"
+        className="mk-scene mk-scene--flow mk-scene--top"
+        style={sceneVars("scene-hero", {
+          "--tuck": "96px",
+          "--tuck-d": "calc(17vw - 20px)",
+          "--pw": "19%",
+          "--pb": "3.5%",
+          "--pw-m": "45%",
+          "--pb-m": "3%",
+        })}
+      >
+        <div className="mk-scene-content mx-auto max-w-[920px] px-[var(--mk-gutter)] pt-28 text-center sm:pt-32 lg:pt-36">
+          <h1 id="hero-title" className="mk-title text-[2.625rem] sm:text-[3.5rem] lg:text-[4.25rem]">
+            Record it on your iPhone. They watch it anywhere.
+          </h1>
+          <p className="mx-auto mt-5 max-w-2xl text-lg leading-relaxed text-[var(--mk-sky-ink-2)] sm:text-xl">
+            Snapreel records your screen, camera or voice. Stop, tap Copy link, and anyone can watch in their browser,
+            with no app or account on their side.
+          </p>
+          <div className="mt-7 flex flex-wrap items-center justify-center gap-3">
+            <AppStoreBadge />
+            <Link href="/pricing" className="mk-button mk-button--white">
+              See what&rsquo;s free
+              <ArrowRight size={18} />
+            </Link>
           </div>
-        </Container>
+        </div>
+        <SceneStage slot="scene-hero" priority sizes="100vw">
+          <Art slot="phone-hero" priority sizes="(min-width: 1024px) 19vw, 45vw" />
+        </SceneStage>
       </section>
+
+      {/* ------------------------------------------------------------------ Stats bar */}
+      <div className="relative z-10 -mt-10 px-[var(--mk-gutter)] lg:-mt-16">
+        <div className="mk-panel mx-auto grid max-w-[1080px] grid-cols-1 items-center gap-6 px-6 py-7 sm:px-10 sm:py-8 lg:grid-cols-[minmax(0,1.1fr)_repeat(3,minmax(0,1fr))] lg:gap-8">
+          <p className="mk-display text-[1.6rem] font-bold leading-tight tracking-[-0.02em]">
+            Free on your iPhone, forever.
+          </p>
+          <ul className="contents">
+            {facts.map((f) => (
+              <li key={f.value} className="flex items-center gap-4 border-t border-white/10 pt-5 lg:block lg:border-0 lg:pt-0">
+                <span className="mk-display block w-14 shrink-0 text-[2.75rem] font-bold leading-none tracking-[-0.03em] lg:w-auto lg:text-5xl">
+                  {f.value}
+                </span>
+                <span className="block text-[0.9375rem] leading-snug text-white/75 lg:mt-2">{f.label}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
 
       {/* ------------------------------------------------------------------ Three ways */}
       <section id="record" aria-labelledby="record-title" className="mt-20 scroll-mt-24 sm:mt-28">
         <Container>
-          <div className="mk-field grid grid-cols-1 items-end [--pool-x:50%] [--pool-y:80%] md:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)] md:[--pool-x:76%] md:[--pool-y:50%]">
-            <div className="relative z-10 self-center px-6 pt-10 sm:px-12 md:py-14">
-              <h2 id="record-title" className="mk-headline text-[2.25rem] sm:text-[3.25rem]">
-                Three ways to record. <b>One red button.</b>
-              </h2>
-              <p className="mt-4 max-w-md text-lg leading-relaxed text-white">
-                Pick Screen, Camera or Voice, tap record, and Snapreel counts you in. When you stop, you can watch it
-                back, give it a title and send it.
-              </p>
-            </div>
-            <div className="relative mx-auto w-full max-w-[340px] py-6 md:max-w-[420px] md:py-8">
-              <Sparkle size={30} top="8%" right="6%" delay={0.5} />
-              <Sparkle size={14} top="30%" left="2%" delay={1.7} />
-              <MotionStrokes size={50} top="2%" left="12%" rotate={-20} />
-              <div className="mk-float">
-                <Art slot="jump" sizes="(min-width: 768px) 420px, 340px" />
-              </div>
-              <span className="mk-ground" aria-hidden="true" />
-            </div>
-          </div>
-
-          <ul className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
-            {ways.map((w, i) => (
-              <li key={w.slot} className="grid grid-cols-[42%_minmax(0,1fr)] items-center gap-4 sm:grid-cols-1 sm:items-start">
-                <div className="mk-field flex aspect-[4/5] items-center justify-center px-[12%] py-[8%] [--pool-x:50%] [--pool-y:45%] [--pool-size:70%]">
-                  <Sparkle size={16} top="9%" right="12%" delay={i * 0.6} />
-                  <div className="w-full max-w-[220px]">
-                    <Art slot={w.slot} sizes="(min-width: 640px) 220px, 120px" />
-                  </div>
-                </div>
-                <div className="sm:px-2">
-                  <h3 className="mk-display text-2xl font-semibold">{w.title}</h3>
+          <SectionHeading
+            id="record-title"
+            label="Record"
+            title="Three ways to record. One red button."
+            intro="Pick Screen, Camera or Voice, tap record, and Snapreel counts you in. When you stop, you can watch it back, give it a title and send it."
+          />
+          <ul className="mt-10 grid grid-cols-1 gap-4 md:grid-cols-3">
+            {ways.map((w) => (
+              <li key={w.slot} className={`mk-tile ${w.tone} flex flex-col overflow-hidden`}>
+                <div className="px-6 pt-6 sm:px-7 sm:pt-7">
+                  <span className="mk-icon !bg-white/80 dark:!bg-white/10">
+                    <Icon name={w.icon} />
+                  </span>
+                  <h3 className="mk-display mt-4 text-2xl font-bold">{w.title}</h3>
                   <p className="mt-1.5 leading-relaxed text-text-2">{w.text}</p>
+                </div>
+                <div className="mx-auto -mb-[32%] mt-6 w-[72%] max-w-[260px]">
+                  <Art slot={w.slot} sizes="(min-width: 768px) 260px, 72vw" />
                 </div>
               </li>
             ))}
@@ -152,154 +242,97 @@ export default function Home() {
         </Container>
       </section>
 
-      {/* ------------------------------------------------------------------ Links */}
-      <section id="links" aria-labelledby="links-title" className="mt-20 scroll-mt-24 sm:mt-28">
-        <Container>
+      {/* ------------------------------------------------------------------ Share links (scene) */}
+      <section
+        id="features"
+        aria-labelledby="features-title"
+        className="mk-scene mk-scene--flow mt-20 scroll-mt-24 sm:mt-28"
+        style={sceneVars("scene-features", {
+          "--px": "44%",
+          "--pw": "17%",
+          "--pb": "9%",
+          "--px-m": "46%",
+          "--pw-m": "44%",
+          "--pb-m": "8%",
+        })}
+      >
+        <div className="mk-scene-content px-[var(--mk-gutter)] pt-16 sm:pt-24">
           <SectionHeading
-            id="links-title"
-            eyebrow="Share links"
-            title={
-              <>
-                Copy link. <b>They watch anywhere.</b>
-              </>
-            }
+            center
+            id="features-title"
+            label="Share links"
+            title="Copy link. They watch anywhere."
             intro="Every recording can become a link. Paste it in a message, an email or a ticket, and people press play in their browser."
+            className="[&_p:last-child]:text-[var(--mk-sky-ink-2)]"
           />
-          <div className="mt-10 grid grid-cols-1 gap-4 md:grid-cols-2">
-            <article className="mk-field flex flex-col [--pool-x:52%] [--pool-y:72%]">
-              <div className="relative z-10 px-6 pt-10 text-center sm:px-10">
-                <h3 className="mk-headline text-[2rem] sm:text-[2.5rem]">
-                  The link is ready <b>the moment you stop.</b>
-                </h3>
-                <p className="mx-auto mt-3 max-w-sm text-white">
-                  Tap Copy link and paste it anywhere. The video uploads in the background while people open it.
-                </p>
-              </div>
-              <div className="relative mx-auto mt-auto w-[88%] max-w-[460px] pt-4">
-                <Sparkle size={26} top="12%" left="2%" delay={0.3} />
-                <MotionStrokes size={56} top="30%" left="-4%" rotate={-100} />
-                <Art slot="run-link" sizes="(min-width: 768px) 460px, 88vw" />
-              </div>
-            </article>
-            <article className="mk-field flex flex-col [--pool-x:58%] [--pool-y:68%]">
-              <div className="relative z-10 px-6 pt-10 text-center sm:px-10">
-                <h3 className="mk-headline text-[2rem] sm:text-[2.5rem]">
-                  They watch <b>in any browser.</b>
-                </h3>
-                <p className="mx-auto mt-3 max-w-sm text-white">
-                  On a laptop, a phone or a tablet. No app, no account. Links show a preview in Messages, Slack and
-                  WhatsApp.
-                </p>
-              </div>
-              <div className="relative mx-auto mt-auto w-[92%] max-w-[500px] pt-4">
-                <Sparkle size={30} top="8%" right="4%" delay={1.1} />
-                <Sparkle size={14} top="30%" right="14%" delay={2.3} />
-                <Art slot="watch-laptop" sizes="(min-width: 768px) 500px, 92vw" />
-              </div>
-            </article>
-          </div>
-        </Container>
+        </div>
+        <div className="relative">
+          <SceneStage slot="scene-features" sizes="100vw">
+            <Art slot="phone-features" sizes="(min-width: 1024px) 17vw, 44vw" />
+          </SceneStage>
+          <ul className="relative z-10 grid grid-cols-1 gap-3 bg-canvas px-[var(--mk-gutter)] pt-6 sm:grid-cols-2 lg:absolute lg:inset-0 lg:block lg:bg-transparent lg:p-0">
+            {linkFeatures.map((f, i) => (
+              <li
+                key={f.title}
+                className={`mk-card flex items-start gap-3.5 p-4 sm:p-5 lg:absolute lg:w-[300px] lg:!shadow-[var(--mk-float-shadow)] ${
+                  [
+                    "lg:left-[max(var(--mk-gutter),calc(50%-560px))] lg:top-[3%]",
+                    "lg:left-[max(var(--mk-gutter),calc(50%-520px))] lg:top-[22%]",
+                    "lg:right-[max(var(--mk-gutter),calc(50%-560px))] lg:top-[8%]",
+                    "lg:right-[max(var(--mk-gutter),calc(50%-600px))] lg:top-[27%]",
+                  ][i]
+                }`}
+              >
+                <span className="mk-icon">
+                  <Icon name={f.icon} />
+                </span>
+                <span className="min-w-0">
+                  <span className="block font-semibold leading-snug">{f.title}</span>
+                  <span className="mt-1 block text-sm leading-snug text-text-2">{f.text}</span>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
       </section>
 
-      {/* ------------------------------------------------------------------ Insights + comments */}
-      <section aria-labelledby="insights-title" className="mt-20 sm:mt-28">
-        <Container>
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            <article id="insights" className="scroll-mt-24 rounded-[28px] bg-surface p-3 ring-1 ring-line">
-              <div className="mk-field flex justify-center px-6 pb-2 pt-8 [--pool-x:50%] [--pool-y:55%]">
-                <Sparkle size={22} top="12%" left="14%" delay={0.4} />
-                <Sparkle size={12} top="28%" right="16%" delay={1.9} />
-                <Loop width={150} top="62%" left="8%" rotate={-12} opacity={0.75} />
-                <div className="w-[62%] max-w-[260px]">
-                  <Art slot="insights" sizes="(min-width: 640px) 260px, 60vw" />
-                </div>
-              </div>
-              <div className="mk-on-canvas px-4 pb-5 pt-6 sm:px-6">
-                <h2 id="insights-title" className="mk-headline text-[2rem] text-text sm:text-[2.5rem]">
-                  See who <b>watched.</b>
-                </h2>
-                <p className="mt-3 leading-relaxed text-text-2">
-                  Every link counts its views and unique viewers, free. With Pro, see who watched, how far they got,
-                  where they dropped off and which countries they&rsquo;re in.
-                </p>
-                <ul className="mt-4 space-y-2 text-[0.9375rem]">
-                  <li className="flex gap-2.5">
-                    <Check className="mt-0.5 shrink-0 text-red-text" />A view counts after 5 seconds of watching.
-                  </li>
-                  <li className="flex gap-2.5">
-                    <Check className="mt-0.5 shrink-0 text-red-text" />
-                    Your own views never count.
-                  </li>
-                </ul>
-              </div>
-            </article>
-
-            <article id="comments" className="scroll-mt-24 rounded-[28px] bg-surface p-3 ring-1 ring-line">
-              <div className="mk-field flex justify-center px-6 pb-2 pt-8 [--pool-x:50%] [--pool-y:55%]">
-                <Sparkle size={24} top="10%" right="14%" delay={0.9} />
-                <Sparkle size={12} top="40%" left="12%" delay={2.4} />
-                <MotionStrokes size={48} top="8%" left="14%" rotate={-24} />
-                <div className="w-[62%] max-w-[260px]">
-                  <Art slot="comments" sizes="(min-width: 640px) 260px, 60vw" />
-                </div>
-              </div>
-              <div className="mk-on-canvas px-4 pb-5 pt-6 sm:px-6">
-                <h2 className="mk-headline text-[2rem] text-text sm:text-[2.5rem]">
-                  Comments and <b>reactions.</b>
-                </h2>
-                <p className="mt-3 leading-relaxed text-text-2">
-                  Viewers can leave a comment or an emoji at the exact second they mean. You get a notification on your
-                  iPhone and see every comment next to the video in the app.
-                </p>
-                <ul className="mt-4 space-y-2 text-[0.9375rem]">
-                  <li className="flex gap-2.5">
-                    <Check className="mt-0.5 shrink-0 text-red-text" />
-                    Delete any comment, and block someone from all your videos.
-                  </li>
-                  <li className="flex gap-2.5">
-                    <Check className="mt-0.5 shrink-0 text-red-text" />
-                    Turn comments or reactions off for any link.
-                  </li>
-                </ul>
-              </div>
-            </article>
+      {/* ------------------------------------------------------------------ Private by default */}
+      <section id="private" aria-labelledby="private-title" className="mt-20 scroll-mt-24 sm:mt-28">
+        <Container className="grid grid-cols-1 gap-10 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)] lg:gap-14">
+          <div className="lg:sticky lg:top-28 lg:self-start">
+            <SectionHeading
+              id="private-title"
+              label="Private by default"
+              title="Your phone. Your files."
+              intro="Everything you record stays on your iPhone. Nothing is uploaded until you tap Copy link, and Stop sharing deletes the uploaded copy."
+            />
+            <Link href="/privacy" className="mk-button mk-button--quiet mt-7">
+              Read the privacy policy
+              <ArrowRight size={18} />
+            </Link>
           </div>
-        </Container>
-      </section>
-
-      {/* ------------------------------------------------------------------ Your files */}
-      <section id="private" aria-labelledby="files-title" className="mt-20 scroll-mt-24 sm:mt-28">
-        <Container>
-          <div className="mk-field mk-field--deep grid grid-cols-1 items-center gap-2 [--pool-x:50%] [--pool-y:82%] md:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)] md:[--pool-x:76%] md:[--pool-y:50%]">
-            <div className="relative z-10 px-6 pt-10 sm:px-12 md:py-16">
-              <h2 id="files-title" className="mk-headline text-[2.25rem] sm:text-[3.25rem]">
-                Your phone. <b>Your files.</b>
-              </h2>
-              <p className="mt-4 max-w-lg text-lg leading-relaxed text-white">
-                Everything you record stays on your iPhone, private by default. Nothing is uploaded until you tap Copy
-                link, and Stop sharing deletes the uploaded copy.
-              </p>
-              <ul className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
-                {[
-                  "No account to record",
-                  "Library, folders and tags",
-                  "Transcripts made on your iPhone",
-                  "Save to Photos or Files",
-                ].map((t) => (
-                  <li key={t} className="flex items-center gap-2.5 text-white">
-                    <span className="grid grid-cols-1 size-6 shrink-0 place-items-center rounded-full bg-white/15">
-                      <Check size={14} className="text-sr-cream" />
-                    </span>
-                    {t}
-                  </li>
-                ))}
-              </ul>
-              <p className="mt-6 text-sm font-semibold text-sr-cream">Local recording is free, forever.</p>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="flex flex-col gap-4">
+              <div className="mk-tile mk-tile--lilac overflow-hidden">
+                <div className="px-6 pt-6">
+                  <span className="mk-icon !bg-white/80 dark:!bg-white/10">
+                    <Icon name="folder" />
+                  </span>
+                  <h3 className="mt-4 text-lg font-semibold leading-snug">Library, folders and tags</h3>
+                  <p className="mt-1 text-[0.9375rem] leading-relaxed text-text-2">Find any recording with folders, tags and search.</p>
+                </div>
+                <div className="mx-auto -mb-[30%] mt-5 w-[70%] max-w-[240px]">
+                  <Art slot="files" sizes="(min-width: 640px) 240px, 70vw" />
+                </div>
+              </div>
+              {privateTiles.slice(0, 1).map((t) => (
+                <PrivateTile key={t.title} {...t} />
+              ))}
             </div>
-            <div className="relative mx-auto w-[64%] max-w-[300px] py-10 md:w-full md:max-w-[320px]">
-              <Sparkle size={30} top="6%" right="2%" delay={0.2} />
-              <Sparkle size={14} top="50%" left="-6%" delay={1.5} />
-              <Art slot="files" sizes="(min-width: 768px) 320px, 64vw" />
+            <div className="flex flex-col gap-4">
+              {privateTiles.slice(1).map((t) => (
+                <PrivateTile key={t.title} {...t} />
+              ))}
             </div>
           </div>
         </Container>
@@ -308,118 +341,130 @@ export default function Home() {
       {/* ------------------------------------------------------------------ Pro */}
       <section id="pro" aria-labelledby="pro-title" className="mt-20 scroll-mt-24 sm:mt-28">
         <Container>
-          <div className="mk-field grid grid-cols-1 items-end [--pool-size:50%] [--pool-x:50%] [--pool-y:93%] lg:[--pool-size:58%] lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:[--pool-x:72%] lg:[--pool-y:55%]">
-            <div className="relative z-10 self-center px-6 pt-10 sm:px-12 lg:py-16">
-              <p className="mk-pill w-fit">Snapreel Pro</p>
-              <h2 id="pro-title" className="mk-headline mt-5 text-[2.25rem] sm:text-[3.25rem]">
-                Links that look <b>like yours.</b>
+          <div className="mk-card grid grid-cols-1 gap-8 overflow-hidden p-6 sm:p-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:p-12">
+            <div className="self-center">
+              <p className="mk-label">Snapreel Pro</p>
+              <h2 id="pro-title" className="mk-title mt-4 text-[2.25rem] sm:text-[3rem]">
+                Links that look like yours.
               </h2>
               <ul className="mt-6 grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2">
-                {[
-                  "Unlimited links, up to 2 hours",
-                  "1080p on the web",
-                  "Full viewer insights",
-                  "Password and expiry",
-                  "Downloads on or off",
-                  "Your logo, colour and button",
-                ].map((t) => (
-                  <li key={t} className="flex items-start gap-2.5 text-white">
-                    <Check className="mt-0.5 shrink-0 text-sr-cream" />
+                {proList.map((t) => (
+                  <li key={t} className="flex items-start gap-2.5">
+                    <Check className="mt-0.5 shrink-0 text-red-text" />
                     {t}
                   </li>
                 ))}
               </ul>
-              <p className="mt-7 text-lg text-white">
+              <p className="mt-7 text-lg">
                 <strong className="font-semibold">{PRICE_MONTHLY} a month</strong> or{" "}
                 <strong className="font-semibold">{PRICE_YEARLY} a year</strong>, with a 7-day free trial on yearly.
               </p>
               <div className="mt-6 flex flex-wrap items-center gap-3">
-                <span className="inline-flex min-h-12 items-center rounded-full bg-white px-5 font-semibold text-sr-ink">
-                  Get Pro in the Snapreel app
-                </span>
-                <Link href="/pricing" className="mk-button mk-button--ghost">
+                <InAppNote className="!bg-sr-ink !text-white dark:!bg-white dark:!text-sr-ink" />
+                <Link href="/pricing" className="mk-button mk-button--quiet">
                   Compare plans
                   <ArrowRight size={18} />
                 </Link>
               </div>
             </div>
-            <div className="relative mx-auto grid w-full max-w-[560px] grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)] items-end px-4 pt-6 sm:px-8">
-              <Sparkle size={36} top="6%" left="8%" delay={0} />
-              <Sparkle size={18} top="26%" left="40%" delay={1} />
-              <Sparkle size={22} top="2%" right="10%" delay={1.8} />
-              <MotionStrokes size={58} top="0%" left="26%" rotate={-6} />
-              <div className="relative -mr-6">
-                <div className="mk-float">
-                  <Art slot="celebrate" sizes="(min-width: 1024px) 300px, 52vw" />
-                </div>
-                <span className="mk-ground" aria-hidden="true" />
+            <div className="mk-tile mk-tile--rose relative -mx-2 -mb-8 flex items-end justify-center gap-2 overflow-hidden px-4 pt-10 sm:-mx-4 sm:-mb-12 lg:-my-6 lg:-mr-6 lg:min-h-[520px]">
+              <div className="mb-[-14%] w-[46%] max-w-[230px] -rotate-2">
+                <Art slot="insights" sizes="(min-width: 1024px) 230px, 44vw" />
               </div>
-              <div className="relative mb-10 pb-4">
-                <Art slot="pro" sizes="(min-width: 1024px) 240px, 40vw" />
+              <div className="mb-[-4%] w-[46%] max-w-[230px] rotate-2">
+                <Art slot="pro" sizes="(min-width: 1024px) 230px, 44vw" />
               </div>
             </div>
           </div>
         </Container>
       </section>
 
-      {/* ------------------------------------------------------------------ Pricing teaser */}
-      <section aria-labelledby="pricing-title" className="mt-20 sm:mt-28">
+      {/* ------------------------------------------------------------------ Guides */}
+      <section id="guides" aria-labelledby="guides-title" className="mt-20 scroll-mt-24 sm:mt-28">
         <Container>
-          <div className="flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
+          <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
             <SectionHeading
-              id="pricing-title"
-              eyebrow="Pricing"
-              title={
-                <>
-                  Free to record. <b>Pro when you share more.</b>
-                </>
-              }
+              id="guides-title"
+              label="Help centre"
+              title="Guides for your first week."
+              intro="Short answers from the help centre: the same ones you find in the app."
             />
-            <Link href="/pricing" className="mk-button mk-button--quiet w-fit shrink-0">
-              See all features
-              <ArrowRight size={18} />
-            </Link>
+            <nav aria-label="Help topics" className="flex flex-wrap gap-2">
+              {[
+                ["/help#start", "Getting started"],
+                ["/help#screen", "Screen recording"],
+                ["/help#links", "Share links"],
+              ].map(([href, label], i) => (
+                <Link
+                  key={href}
+                  href={href}
+                  className={`inline-flex min-h-10 items-center rounded-full px-4 text-sm font-semibold ${
+                    i === 0 ? "bg-sr-ink text-white dark:bg-white dark:text-sr-ink" : "bg-surface text-text shadow-[var(--mk-card-shadow)] hover:bg-fill"
+                  }`}
+                >
+                  {label}
+                </Link>
+              ))}
+            </nav>
           </div>
-          <div className="mt-8 grid grid-cols-1 gap-4 md:grid-cols-2">
-            <Link href="/pricing" className="group rounded-[24px] bg-surface p-6 ring-1 ring-line transition-shadow hover:shadow-lg sm:p-8">
-              <p className="mk-display text-xl font-semibold">Free</p>
-              <p className="mt-2 flex items-baseline gap-2">
-                <span className="mk-display text-4xl font-semibold tracking-[-0.03em]">$0</span>
-                <span className="text-text-2">forever</span>
-              </p>
-              <p className="mt-3 text-text-2">Unlimited recording on your iPhone, and 25 share links of up to 5 minutes.</p>
-            </Link>
-            <Link href="/pricing" className="mk-field mk-field--deep group block p-6 sm:p-8 [--pool-x:90%] [--pool-y:0%]">
-              <p className="mk-display relative text-xl font-semibold">Pro</p>
-              <p className="relative mt-2 flex flex-wrap items-baseline gap-x-2">
-                <span className="mk-display text-4xl font-semibold tracking-[-0.03em]">{PRICE_MONTHLY}</span>
-                <span>a month, or {PRICE_YEARLY} a year</span>
-              </p>
-              <p className="relative mt-3 text-white">Unlimited links up to 2 hours, full insights, passwords and your branding.</p>
-            </Link>
+
+          <div className="mt-10 grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
+            {guides.slice(0, 1).map((g) => {
+              const a = getArticle(g.id);
+              if (!a) return null;
+              return (
+                <Link key={g.id} href={`/help/${a.id}`} className="mk-card group flex flex-col overflow-hidden">
+                  <Spot slot={g.spot} sizes="(min-width: 1024px) 600px, 100vw" className="aspect-[16/9] w-full" />
+                  <span className="flex flex-1 flex-col p-6 sm:p-8">
+                    <span className="w-fit rounded-full bg-red-soft px-2.5 py-1 text-xs font-semibold text-red-text">{g.tag}</span>
+                    <span className="mk-display mt-3 block text-2xl font-bold leading-tight sm:text-[1.75rem]">{a.title}</span>
+                    <span className="mt-2 block leading-relaxed text-text-2">{a.summary}</span>
+                    <span className="mt-auto inline-flex items-center gap-2 pt-5 text-sm font-semibold text-red-text">
+                      Read the guide
+                      <ArrowRight size={16} />
+                    </span>
+                  </span>
+                </Link>
+              );
+            })}
+            <ul className="grid grid-cols-1 gap-4">
+              {guides.slice(1).map((g) => {
+                const a = getArticle(g.id);
+                if (!a) return null;
+                return (
+                  <li key={g.id}>
+                    <Link href={`/help/${a.id}`} className="mk-card group flex h-full items-stretch gap-4 overflow-hidden p-3 pr-5">
+                      <Spot slot={g.spot} sizes="140px" className="w-[32%] max-w-[150px] shrink-0 rounded-[18px]" />
+                      <span className="flex min-w-0 flex-col justify-center py-2">
+                        <span className="text-xs font-semibold uppercase tracking-[0.08em] text-red-text">{g.tag}</span>
+                        <span className="mk-display mt-1 block text-lg font-bold leading-snug">{a.title}</span>
+                        <span className="mt-1 block text-sm leading-snug text-text-2">{a.summary}</span>
+                      </span>
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
           </div>
         </Container>
       </section>
 
       {/* ------------------------------------------------------------------ FAQ */}
       <section id="faq" aria-labelledby="faq-title" className="mt-20 scroll-mt-24 sm:mt-28">
-        <Container className="grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
+        <Container className="grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)] lg:gap-14">
           <SectionHeading
             id="faq-title"
-            title={
-              <>
-                Questions, <b>answered.</b>
-              </>
-            }
+            label="FAQ"
+            title="Questions, answered."
             intro={
               <>
                 Something else? Look in the{" "}
-                <Link href="/help" className="font-medium text-red-text underline underline-offset-4">
+                <Link href="/help" className="mk-link">
                   help centre
                 </Link>{" "}
                 or write to{" "}
-                <a href="mailto:support@snapreel.video" className="font-medium text-red-text underline underline-offset-4">
-                  support@snapreel.video
+                <a href={`mailto:${LEGAL_ENTITY.email}`} className="mk-link">
+                  {LEGAL_ENTITY.email}
                 </a>
                 .
               </>
@@ -428,8 +473,18 @@ export default function Home() {
           <Faq items={faq} />
         </Container>
       </section>
-
-      <DownloadCta />
     </>
+  );
+}
+
+function PrivateTile({ icon, tone, title, text }: { icon: IconName; tone: string; title: string; text: string }) {
+  return (
+    <div className={`mk-tile ${tone} p-6`}>
+      <span className="mk-icon !bg-white/80 dark:!bg-white/10">
+        <Icon name={icon} />
+      </span>
+      <h3 className="mt-4 text-lg font-semibold leading-snug">{title}</h3>
+      <p className="mt-1 text-[0.9375rem] leading-relaxed text-text-2">{text}</p>
+    </div>
   );
 }

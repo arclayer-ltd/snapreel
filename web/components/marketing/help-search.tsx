@@ -5,8 +5,8 @@ import { useId, useMemo, useState } from "react";
 
 type Item = { id: string; title: string; summary: string; category: string };
 
-/** Filters the help articles as you type, showing matches under the box (inside the red panel, which
- *  grows to fit). The full list is server-rendered below it. */
+/** Filters the help articles as you type, showing matches under the box. The full list is
+ *  server-rendered below the banner. */
 export function HelpSearch({ items }: { items: Item[] }) {
   const [q, setQ] = useState("");
   const id = useId();
@@ -22,11 +22,11 @@ export function HelpSearch({ items }: { items: Item[] }) {
   }, [q, items]);
 
   return (
-    <div className="relative">
+    <div className="relative text-left">
       <label htmlFor={id} className="sr-only">
         Search help
       </label>
-      <div className="flex h-14 items-center gap-3 rounded-full bg-white px-5 text-sr-ink shadow-[0_8px_30px_rgb(94_11_22/0.25)]">
+      <div className="flex h-14 items-center gap-3 rounded-full bg-white pl-5 pr-2 text-sr-ink shadow-[0_2px_4px_rgb(19_20_27/0.06),0_16px_36px_-12px_rgb(30_50_90/0.4)]">
         <svg aria-hidden="true" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
           <circle cx="11" cy="11" r="7" />
           <path d="m20 20-3.5-3.5" />

@@ -1,28 +1,32 @@
 #!/usr/bin/env python3
-"""Composite real Snapreel screenshots into the website's iPhones.
+"""Composite real Snapreel screenshots into the website's iPhones, and export its scenes.
 
-Driven by art/web/screens.json (slot -> screenshot id). Run from the repo root:
+Driven by art/web/screens.json (slots, lighting presets, screenshot ids). Run from the repo root:
 
     python scripts/web-compose.py                 # every slot
-    python scripts/web-compose.py hero record-camera
+    python scripts/web-compose.py phone-hero scene-hero
     python scripts/web-compose.py --light-dir D:/ci/screenshots --dark-dir D:/ci/dark/screenshots
-    python scripts/web-compose.py --preview       # also writes PNG previews to art/web/review/compose/
+    python scripts/web-compose.py --preview       # also writes JPEG previews to art/web/review/compose/
 
-Three kinds of slot:
+Kinds of slot:
 
+- "scene": an illustrated environment (Light and Dusk). Exported as AVIF (WebP fallback) at the
+  page's widths, with an optional centre crop for phones ("mobile"), an optional foreground
+  cut-out that sits in front of the phone ("foreground", e.g. the hero's flower bed) and the sky
+  colour along the top edge, which the page uses above the picture. A "wide" box makes a crop
+  (the guide-card spots).
+- "iphone": renders an iPhone 16 Pro (titanium frame with an edge gradient, side buttons, glass
+  rim highlight) in 3D at the slot's pose, puts the lit screenshot on its glass and casts a
+  shadow, all in the colours of the slot's lighting preset for that mode ("day", "dusk",
+  "golden", "studio", "studio-dark"; see LIGHTS and screens.json "lights").
 - "art": a character illustration (transparent PNG) holding a device whose screen is flat
-  #00FF00. The script finds the green quad, warps the screenshot into it with rounded screen
-  corners, adds the Dynamic Island, a thin black glass edge, an inner edge shadow, a glass
-  reflection, a warm-red ambient bounce, matches the art's blur and grain, and drops a soft
-  wine shadow of the hand and device onto the field. A slot with no "screen" just exports the art.
-- "iphone": no hands. Renders an iPhone 16 Pro (titanium frame with an edge gradient, side
-  buttons, glass rim highlight) in 3D at the slot's pose, puts the lit screenshot on its glass and
-  casts a soft long shadow onto the field.
+  #00FF00 (round 1's red-field site). The green quad is found, the screenshot warped in with
+  rounded corners, Dynamic Island, glass edge, reflection and bounce, matched to the art's
+  softness and grain.
 - Every slot with a screen is made twice, with the Light and the Dark screenshot (falling back
   to Light when there's no Dark one), so the page can swap them with prefers-color-scheme.
 
-Outputs AVIF and WebP at 1x and 2x into web/public/marketing/art/, and writes
-web/components/marketing/art-manifest.ts with sizes and paths for the page.
+Writes web/components/marketing/art-manifest.ts with sizes and paths for the page.
 
 Needs Pillow (with AVIF), numpy and OpenCV.
 """
@@ -44,6 +48,31 @@ CONFIG = ROOT / "art/web/screens.json"
 WINE = (94, 11, 22)
 GLOW = (254, 98, 98)
 RNG = np.random.default_rng(7)
+
+# Lighting for an iPhone placed in an illustrated scene. "red" is the old red-field look. A slot
+# picks one per mode with "lighting": {"light": "day", "dark": "dusk"} (or one name for both);
+# screens.json can add or override presets under "lights".
+#   sky / ground: colours bounced onto the frame from above and below (and onto the glass)
+#   key:          the main light's direction (x right, y up, z towards the viewer) and colour
+#   bounce:       how much of the ground colour tints the screen, and from which side
+#   shadow:       the cast shadow's colour
+LIGHTS: dict[str, dict] = {
+    "red": dict(sky=GLOW, ground=GLOW, key=([-0.55, 0.65, 0.52], (255, 255, 255)), sky_amt=0.0,
+                ground_amt=0.22, bounce=0.08, bounce_side="right", tint=GLOW, shadow=WINE),
+}
+
+
+def lighting(name: str | None, overrides: dict) -> dict:
+    base = dict(LIGHTS["red"])
+    if name:
+        spec = overrides.get(name) or LIGHTS.get(name)
+        if spec is None:
+            raise SystemExit(f"unknown lighting preset {name}")
+        base.update({k: (tuple(v) if isinstance(v, list) and k not in ("key",) else v) for k, v in spec.items()})
+    key = base["key"]
+    if isinstance(key, dict):
+        base["key"] = (key["dir"], tuple(key.get("color", (255, 255, 255))))
+    return base
 
 
 # ----------------------------------------------------------------------------------------------
@@ -113,24 +142,32 @@ def shadow_layer(alpha: np.ndarray, dx: float, dy: float, sigma: float, strength
 # ----------------------------------------------------------------------------------------------
 
 def lit_screen(shot: Image.Image, size: tuple[int, int], *, island: bool, radius_frac: float,
-               edge_frac: float, bounce: float, bounce_side: str, exposure: float) -> Image.Image:
+               edge_frac: float, bounce: float, bounce_side: str, exposure: float,
+               tint=GLOW, sky=None, sky_amt: float = 0.0) -> Image.Image:
     """Return an RGBA image of `size`: black glass with the screenshot inset by a thin edge,
-    rounded corners, Dynamic Island, inner edge shadow, glass reflection and red bounce."""
+    rounded corners, Dynamic Island, inner edge shadow, glass reflection and an ambient bounce
+    in the scene's colour (`tint`), plus an optional faint reflection of the sky (`sky`)."""
     w, h = size
     edge = max(1.0, w * edge_frac)
     sw, sh = int(round(w - 2 * edge)), int(round(h - 2 * edge))
     content = shot.convert("RGB").resize((sw, sh), Image.LANCZOS)
     c = to_np(content)
 
-    # Exposure and a warm-red ambient bounce from the field, stronger on one side.
+    # Exposure and an ambient bounce from the surroundings, stronger on one side.
     yy, xx = np.mgrid[0:sh, 0:sw].astype(np.float32)
     u = xx / max(1, sw - 1)
     v = yy / max(1, sh - 1)
     side = {"right": u, "left": 1 - u, "bottom": v, "none": np.zeros_like(u)}[bounce_side]
-    glow = np.array(GLOW, np.float32) / 255
+    glow = np.array(tint, np.float32) / 255
     amount = (bounce * (0.45 + 0.9 * side))[..., None]
     c = c * exposure
     c = c * (1 - amount) + (c * glow * 1.15 + glow * 0.18) * amount  # tinted multiply-ish bounce
+
+    # The sky reflected in the glass: strongest at the top, fading by the middle (screen blend).
+    if sky is not None and sky_amt > 0:
+        s = np.array(sky, np.float32) / 255
+        refl = (np.clip(1 - v / 0.55, 0, 1) ** 1.4 * sky_amt)[..., None]
+        c = 1 - (1 - c) * (1 - s * refl)
 
     # Inner screen-edge shadow (the glass edge throws a soft shade onto the pixels).
     d = np.minimum(np.minimum(xx, sw - 1 - xx), np.minimum(yy, sh - 1 - yy))
@@ -476,7 +513,7 @@ def rr_outline(w: float, h: float, r: float, n: int = 18) -> np.ndarray:
     return np.array(pts)
 
 
-def phone_front_texture(shot: Image.Image, tex_w: int, finish: str, slot: dict) -> Image.Image:
+def phone_front_texture(shot: Image.Image, tex_w: int, finish: str, slot: dict, L: dict) -> Image.Image:
     P = PHONE
     scale = tex_w / P["W"]
     tw, th = tex_w, int(round(P["H"] * scale))
@@ -501,8 +538,9 @@ def phone_front_texture(shot: Image.Image, tex_w: int, finish: str, slot: dict) 
     sw_mm = sh_mm * shot.width / shot.height
     sw, shp = int(round(sw_mm * scale)), int(round(sh_mm * scale))
     screen = lit_screen(shot, (sw, shp), island=True, radius_frac=0.135, edge_frac=0.0,
-                        bounce=slot.get("bounce", 0.08), bounce_side=slot.get("bounceSide", "right"),
-                        exposure=slot.get("exposure", 0.96))
+                        bounce=slot.get("bounce", L["bounce"]), bounce_side=slot.get("bounceSide", L["bounce_side"]),
+                        exposure=slot.get("exposure", L.get("exposure", 0.96)), tint=L["tint"],
+                        sky=L["sky"], sky_amt=L.get("glass_sky", 0.0))
     tex.alpha_composite(screen, ((tw - sw) // 2, (th - shp) // 2))
 
     # Glass rim highlight: a thin bright line just inside the titanium, brighter top-left.
@@ -520,7 +558,7 @@ def phone_front_texture(shot: Image.Image, tex_w: int, finish: str, slot: dict) 
     return from_np(t)
 
 
-def render_iphone(slot: dict, shot: Image.Image) -> Image.Image:
+def render_iphone(slot: dict, shot: Image.Image, L: dict) -> Image.Image:
     P = PHONE
     pose = slot.get("pose", {})
     yaw, pitch, roll = pose.get("yaw", -16), pose.get("pitch", 8), pose.get("roll", -6)
@@ -547,10 +585,12 @@ def render_iphone(slot: dict, shot: Image.Image) -> Image.Image:
 
     canvas = Image.new("RGBA", (cw, ch), (0, 0, 0, 0))
     draw = ImageDraw.Draw(canvas)
-    light = np.array([-0.55, 0.65, 0.52])
+    light = np.array(L["key"][0], np.float64)
     light /= np.linalg.norm(light)
+    key_col = np.array(L["key"][1], np.float32) / 255
     cam = np.array([0, 0, dist])
-    glow = np.array(GLOW, np.float32)
+    sky_col = np.array(L["sky"], np.float32)
+    ground_col = np.array(L["ground"], np.float32)
 
     # Side faces of the frame, split in depth bands for a machined edge gradient.
     bands = [(0.5, 0.40, 1.35), (0.40, 0.18, 1.0), (0.18, -0.30, 0.78), (-0.30, -0.5, 0.58)]
@@ -567,10 +607,13 @@ def render_iphone(slot: dict, shot: Image.Image) -> Image.Image:
         lam = max(0.0, nrm @ light)
         refl = nrm - 2 * (nrm @ np.array([0, 0, -1.0])) * np.array([0, 0, -1.0])
         spec = max(0.0, refl @ light) ** 18
-        side_red = 0.14 + max(0.0, nrm[0]) * 0.22 + max(0.0, -nrm[1]) * 0.14  # red field bounce
+        # Ambient bounce: sky on faces that look up or sideways, ground on faces that look down.
+        g_amt = L["ground_amt"] * (0.6 + max(0.0, nrm[0]) * 1.0 + max(0.0, -nrm[1]) * 0.7)
+        s_amt = L["sky_amt"] * (0.5 + max(0.0, nrm[1]) * 1.0 + abs(nrm[0]) * 0.4)
         for z0, z1, k in bands:
-            col = base * (0.30 + 0.55 * lam) * k + hi * spec * (1.1 if k > 1.2 else 0.5)
-            col = col * (1 - side_red) + glow * side_red * 0.85
+            col = base * (0.30 + 0.55 * lam) * k * key_col + hi * spec * (1.1 if k > 1.2 else 0.5) * key_col
+            col = col * (1 - g_amt) + ground_col * g_amt * 0.85
+            col = col * (1 - s_amt) + sky_col * s_amt * 0.85
             col = np.clip(col, 0, 255).astype(int)
             quad = np.array([
                 [outline[i][0], outline[i][1], z0 * P["D"]], [outline[j][0], outline[j][1], z0 * P["D"]],
@@ -589,7 +632,7 @@ def render_iphone(slot: dict, shot: Image.Image) -> Image.Image:
         if nrm @ (cam - mid) <= 0:
             continue
         lam = max(0.0, nrm @ light)
-        col = np.clip(base * (0.5 + 0.55 * lam) * 1.05 + glow * 0.08, 0, 255).astype(int)
+        col = np.clip(base * (0.5 + 0.55 * lam) * 1.05 * key_col + ground_col * L["ground_amt"] * 0.35, 0, 255).astype(int)
         cam_ctrl = sgn == 1 and y0 > 80
         if cam_ctrl:
             col = np.clip(col * 0.55, 0, 255).astype(int)
@@ -600,7 +643,7 @@ def render_iphone(slot: dict, shot: Image.Image) -> Image.Image:
 
     # Front glass, mapped with a homography from the flat texture.
     tex_w = int(np.linalg.norm(pf[0] - pf[-1]) * 0 + cw * 0.9)
-    tex = phone_front_texture(shot, tex_w, finish, slot)
+    tex = phone_front_texture(shot, tex_w, finish, slot, L)
     tw, th = tex.size
     corners3 = np.array([[-P["W"] / 2, P["H"] / 2, P["D"] / 2], [P["W"] / 2, P["H"] / 2, P["D"] / 2],
                          [P["W"] / 2, -P["H"] / 2, P["D"] / 2], [-P["W"] / 2, -P["H"] / 2, P["D"] / 2]])
@@ -617,10 +660,123 @@ def render_iphone(slot: dict, shot: Image.Image) -> Image.Image:
     a = arr[..., 3]
     s = slot.get("longShadow", [0.035, 0.045, 0.9, 0.022, 0.42])
     W = arr.shape[1]
-    shadow = shadow_layer(a, s[0] * W, s[1] * W, s[3] * W, s[4], length=s[2], steps=16)
-    contact = shadow_layer(a, 0.008 * W, 0.012 * W, 0.008 * W, 0.28)
+    shadow = shadow_layer(a, s[0] * W, s[1] * W, s[3] * W, s[4], length=s[2], steps=16, color=L["shadow"])
+    contact = shadow_layer(a, 0.008 * W, 0.012 * W, 0.008 * W, L.get("contact", 0.28), color=L["shadow"])
     final = over(over(shadow, contact), arr)
     return from_np(np.clip(final, 0, 1))
+
+
+# ----------------------------------------------------------------------------------------------
+# Kind "scene": a full-bleed illustrated environment (Light and Dusk), sized for the page
+# ----------------------------------------------------------------------------------------------
+
+def foreground_matte(img: Image.Image, box: list[float]) -> Image.Image:
+    """Cut a foreground object (the hero's round flower bed) out of the scene so it can sit in
+    front of the phone. `box` (fractions x0, y0, x1, y1) must have plain paving along its top and
+    side edges. Paving is flood-filled in from those edges; the inked outline stops the fill, so
+    whatever it can't reach (flowers, leaves and the stone rim) is the object."""
+    arr = np.asarray(img.convert("RGB"))
+    H, W = arr.shape[:2]
+    x0, y0, x1, y1 = int(box[0] * W), int(box[1] * H), int(box[2] * W), int(box[3] * H)
+    crop = arr[y0:y1, x0:x1]
+    lab = cv2.cvtColor(crop, cv2.COLOR_RGB2LAB).astype(np.float32)
+    # Paving colour: the median of the crop's top band and side strips.
+    band = np.concatenate([lab[:12].reshape(-1, 3), lab[:, :12].reshape(-1, 3), lab[:, -12:].reshape(-1, 3)])
+    ref = np.median(band, axis=0)
+    spread = np.percentile(np.linalg.norm(band - ref, axis=1), 90)
+    dist = np.linalg.norm(lab - ref, axis=2)
+    # Dappled shadows on the paving change lightness, not hue: weigh chroma more than L.
+    dchroma = np.linalg.norm(lab[..., 1:] - ref[1:], axis=2)
+    paving = ((dchroma < max(9.0, spread * 0.9)) & (np.abs(lab[..., 0] - ref[0]) < 60) & (dist < max(40.0, spread * 2.5)))
+    paving = paving.astype(np.uint8)
+    h, w = paving.shape
+    seeds = np.zeros_like(paving)
+    seeds[0, :] = 1
+    seeds[:, 0] = 1
+    seeds[:, -1] = 1
+    n, labels = cv2.connectedComponents(paving, connectivity=4)
+    reach = np.unique(labels[(seeds > 0) & (paving > 0)])
+    reach = reach[reach > 0]
+    background = np.isin(labels, reach)
+    obj = (~background).astype(np.uint8)
+    # Keep the biggest blob (the bed) and fill its holes.
+    n, labels, stats, _ = cv2.connectedComponentsWithStats(obj, connectivity=8)
+    if n > 1:
+        big = 1 + int(np.argmax(stats[1:, cv2.CC_STAT_AREA]))
+        obj = (labels == big).astype(np.uint8)
+    cnts, _ = cv2.findContours(obj, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+    filled = np.zeros_like(obj)
+    cv2.drawContours(filled, cnts, -1, 1, thickness=cv2.FILLED)
+    alpha = cv2.GaussianBlur(filled.astype(np.float32), (3, 3), 0.7)
+    full = np.zeros((H, W), np.float32)
+    full[y0:y1, x0:x1] = alpha
+    out = np.dstack([arr, (full * 255).astype(np.uint8)])
+    return Image.fromarray(out, "RGBA")
+
+
+def save_scene(img: Image.Image, base: Path, widths: list[int], q: dict) -> dict:
+    base.parent.mkdir(parents=True, exist_ok=True)
+    files: dict[str, list] = {"avif": [], "webp": []}
+    # WebP is only the fallback for browsers without AVIF (Safari before 16), so it stops at
+    # 1920 px wide to keep the repo and the deploy small.
+    webp_max = q.get("webpMax", 1920)
+    for w in widths:
+        w = min(w, img.width)
+        h = round(img.height * w / img.width)
+        im = img.resize((w, h), Image.LANCZOS) if w != img.width else img
+        for ext, kw in (("avif", dict(quality=q.get("avif", 58), speed=4)), ("webp", dict(quality=q.get("webp", 80), method=5))):
+            if ext == "webp" and w > webp_max and files["webp"]:
+                continue
+            path = base.with_name(f"{base.name}-{w}.{ext}")
+            im.save(path, **kw)
+            files[ext].append([w, "/" + path.relative_to(ROOT / "web/public").as_posix()])
+    return files
+
+
+def hex_of(rgb) -> str:
+    return "#%02x%02x%02x" % tuple(int(round(c)) for c in rgb)
+
+
+def compose_scene(name: str, slot: dict, out_dir: Path, preview: bool) -> dict:
+    """Export a scene's Light and Dark images at the page's widths: the full frame for wide
+    screens and a centre crop for phones (art direction), plus an optional foreground cut-out
+    that sits in front of the phone. Also records the colour along the top and bottom edges so
+    the page can blend the sky into the background."""
+    entry: dict = {"kind": "scene", "alt": slot.get("alt", "")}
+    q = slot.get("quality", {})
+    for mode in ("light", "dark"):
+        src = slot.get(mode)
+        if not src:
+            continue
+        img = Image.open(ROOT / src).convert("RGB")
+        W, H = img.size
+        arr = np.asarray(img).astype(np.float32)
+        # The sky colour: the middle of the top edge (the corners often have leaves or clouds).
+        entry.setdefault("top", {})[mode] = hex_of(arr[: max(2, H // 200), int(W * 0.3):int(W * 0.7)].reshape(-1, 3).mean(axis=0))
+        entry.setdefault("bottom", {})[mode] = hex_of(arr[-max(2, H // 200):].reshape(-1, 3).mean(axis=0))
+        wide = slot.get("wide", [0, 0, 1, 1])
+        crops = {"wide": (wide, slot.get("widths", [1600, 2880]))}
+        if slot.get("mobile"):
+            crops["mobile"] = (slot["mobile"], slot.get("mobileWidths", [800, 1200]))
+        fg_img = foreground_matte(img, slot["foreground"]) if slot.get("foreground") else None
+        for crop_name, (c, widths) in crops.items():
+            box = (round(c[0] * W), round(c[1] * H), round(c[2] * W), round(c[3] * H))
+            im = img.crop(box)
+            info = entry.setdefault(crop_name, {"width": im.width, "height": im.height})
+            info[mode] = save_scene(im, out_dir / f"{name}-{crop_name}-{mode}", widths, q)
+            if fg_img is not None:
+                fim = fg_img.crop(box)
+                finfo = entry.setdefault("fg", {}).setdefault(crop_name, {"width": fim.width, "height": fim.height})
+                finfo[mode] = save_scene(fim, out_dir / f"{name}-fg-{crop_name}-{mode}", widths[:1] + widths[1:], q)
+            if preview:
+                prev = ROOT / "art/web/review/compose" / f"{name}-{crop_name}-{mode}.jpg"
+                prev.parent.mkdir(parents=True, exist_ok=True)
+                p_im = im if fg_img is None else Image.alpha_composite(
+                    Image.new("RGBA", im.size, (255, 0, 255, 255)), fg_img.crop(box))
+                p_im = p_im.convert("RGB")
+                p_im.resize((1000, round(p_im.height * 1000 / p_im.width)), Image.LANCZOS).save(prev, quality=82)
+        print(f"{name}-{mode}: {W}x{H}")
+    return entry
 
 
 # ----------------------------------------------------------------------------------------------
@@ -695,10 +851,16 @@ def main() -> None:
         except json.JSONDecodeError:
             manifest = {}
 
+    # Drop entries for slots that no longer exist.
+    manifest = {k: v for k, v in manifest.items() if k in cfg["slots"]}
     wanted = args.slots or list(cfg["slots"].keys())
+    presets = cfg.get("lights", {})
     for name in wanted:
         slot = cfg["slots"][name]
         kind = slot["kind"]
+        if kind == "scene":
+            manifest[name] = compose_scene(name, slot, out_dir, args.preview)
+            continue
         entry = {"alt": slot.get("alt", "")}
         screen_id = slot.get("screen")
         modes = ["light", "dark"] if screen_id else [None]
@@ -707,7 +869,9 @@ def main() -> None:
             if kind == "art":
                 img = compose_art(slot, shot)
             elif kind == "iphone":
-                img = render_iphone(slot, shot)
+                lit = slot.get("lighting")
+                lit = lit.get(mode or "light") if isinstance(lit, dict) else lit
+                img = render_iphone(slot, shot, lighting(lit, presets))
             else:
                 raise SystemExit(f"unknown kind {kind}")
             if slot.get("trim", kind == "iphone"):
@@ -717,7 +881,8 @@ def main() -> None:
             if args.preview:
                 prev = ROOT / "art/web/review/compose" / f"{name}{suffix}.jpg"
                 prev.parent.mkdir(parents=True, exist_ok=True)
-                bg = Image.new("RGBA", img.size, (211, 36, 52, 255))
+                bg_col = slot.get("previewBg", {}).get(mode or "light") if slot.get("previewBg") else None
+                bg = Image.new("RGBA", img.size, tuple(bg_col or (211, 36, 52)) + (255,))
                 bg.alpha_composite(img)
                 rgb = bg.convert("RGB")
                 if rgb.width > 1000:

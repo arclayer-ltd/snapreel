@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
-import { Art } from "@/components/marketing/art";
-import { Check, MotionStrokes, Sparkle } from "@/components/marketing/marks";
+import Link from "next/link";
+import { Art, SceneStage, sceneVars } from "@/components/marketing/art";
+import { Check } from "@/components/marketing/marks";
 import {
   Container,
-  DownloadCta,
   Faq,
   PlanCards,
   PRICE_MONTHLY,
@@ -74,8 +74,8 @@ const faq: FaqItem[] = [
 function Cell({ value }: { value: string | boolean }) {
   if (value === true)
     return (
-      <span className="inline-flex items-center gap-1.5 text-red-text">
-        <Check />
+      <span className="inline-flex size-7 items-center justify-center rounded-full bg-red-soft text-red-text">
+        <Check size={16} />
         <span className="sr-only">Included</span>
       </span>
     );
@@ -85,52 +85,53 @@ function Cell({ value }: { value: string | boolean }) {
         –
       </span>
     );
-  return <span className="font-medium">{value}</span>;
+  return <span className="font-semibold">{value}</span>;
 }
 
 export default function PricingPage() {
   return (
     <>
-      <section aria-labelledby="pricing-hero" className="pt-3 sm:pt-5">
-        <Container>
-          <div className="mk-field grid grid-cols-1 items-end [--pool-x:50%] [--pool-y:86%] md:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)] md:[--pool-x:78%] md:[--pool-y:55%]">
-            <div className="relative z-10 self-center px-6 pt-10 sm:px-12 md:py-16">
-              <p className="mk-pill w-fit">Pricing</p>
-              <h1 id="pricing-hero" className="mk-headline mt-5 text-[2.75rem] sm:text-[4rem]">
-                Free to record. <b>Pro when you share more.</b>
-              </h1>
-              <p className="mt-5 max-w-xl text-lg leading-relaxed text-white">
-                Everything on your iPhone is free, forever. Pro is for people who send a lot of links and want to know
-                what happens to them. Get it in the Snapreel app.
-              </p>
-            </div>
-            <div className="relative mx-auto w-[70%] max-w-[300px] py-8 md:pt-12">
-              <Sparkle size={34} top="6%" right="4%" delay={0.3} />
-              <Sparkle size={16} top="40%" left="-4%" delay={1.4} />
-              <MotionStrokes size={54} top="0%" left="18%" rotate={-12} />
-              <div className="mk-float">
-                <Art slot="celebrate" priority sizes="(min-width: 768px) 300px, 70vw" />
-              </div>
-              <span className="mk-ground" aria-hidden="true" />
-            </div>
-          </div>
-        </Container>
+      <section
+        aria-labelledby="pricing-hero"
+        className="mk-scene mk-scene--flow mk-scene--top"
+        style={sceneVars("scene-pricing", {
+          "--tuck": "80px",
+          "--tuck-d": "calc(17.4vw - 20px)",
+          "--pw": "15%",
+          "--pb": "5%",
+          "--pw-m": "40%",
+          "--pb-m": "4%",
+        })}
+      >
+        <div className="mk-scene-content mx-auto max-w-[920px] px-[var(--mk-gutter)] pt-28 text-center sm:pt-32 lg:pt-36">
+          <p className="mk-label">Pricing</p>
+          <h1 id="pricing-hero" className="mk-title mt-4 text-[2.625rem] sm:text-[3.5rem] lg:text-[4rem]">
+            Free to record. Pro when you share more.
+          </h1>
+          <p className="mx-auto mt-5 max-w-xl text-lg leading-relaxed text-[var(--mk-sky-ink-2)]">
+            Everything on your iPhone is free, forever. Pro is for people who send a lot of links and want to know what
+            happens to them. Get it in the Snapreel app.
+          </p>
+        </div>
+        <SceneStage slot="scene-pricing" priority sizes="100vw">
+          <Art slot="phone-pricing" priority sizes="(min-width: 1024px) 15vw, 40vw" />
+        </SceneStage>
       </section>
 
-      <section aria-label="Plans" className="mt-6">
+      <section aria-label="Plans" className="relative z-10 mt-8">
         <Container>
           <PlanCards detailed />
-          <p className="mt-4 text-sm leading-relaxed text-text-2">
+          <p className="mt-5 max-w-4xl text-sm leading-relaxed text-text-2">
             Prices in US dollars. Payment is charged to your Apple Account when you confirm. Subscriptions renew
             automatically unless you cancel at least 24 hours before the end of the current period, and you can manage
             or cancel them in your iPhone&rsquo;s Settings. See the{" "}
-            <a href="/terms" className="text-red-text underline underline-offset-4">
+            <Link href="/terms" className="mk-link !font-medium">
               terms of use
-            </a>{" "}
+            </Link>{" "}
             and{" "}
-            <a href="/privacy" className="text-red-text underline underline-offset-4">
+            <Link href="/privacy" className="mk-link !font-medium">
               privacy policy
-            </a>
+            </Link>
             .
           </p>
         </Container>
@@ -138,31 +139,24 @@ export default function PricingPage() {
 
       <section aria-labelledby="compare-title" className="mt-20 sm:mt-28">
         <Container>
-          <SectionHeading
-            id="compare-title"
-            title={
-              <>
-                Compare <b>Free and Pro.</b>
-              </>
-            }
-          />
-          <div className="mt-8 overflow-hidden rounded-[24px] bg-surface ring-1 ring-line">
+          <SectionHeading id="compare-title" label="Compare" title="Free and Pro, side by side." />
+          <div className="mk-card mt-8 overflow-hidden">
             <table className="w-full table-fixed border-collapse text-left text-[0.9375rem]">
               <caption className="sr-only">What Free and Pro include</caption>
               <colgroup>
                 <col />
-                <col className="w-[27%] sm:w-[22%]" />
-                <col className="w-[27%] sm:w-[22%]" />
+                <col className="w-[27%] sm:w-[20%]" />
+                <col className="w-[27%] sm:w-[20%]" />
               </colgroup>
               <thead>
-                <tr className="border-b border-line">
-                  <th scope="col" className="px-4 py-4 font-semibold sm:px-7">
+                <tr>
+                  <th scope="col" className="px-4 py-5 font-semibold sm:px-7">
                     <span className="sr-only">Feature</span>
                   </th>
-                  <th scope="col" className="mk-display px-2 py-4 text-lg font-semibold sm:px-4">
+                  <th scope="col" className="mk-display px-2 py-5 text-lg font-bold sm:px-4">
                     Free
                   </th>
-                  <th scope="col" className="mk-display px-2 py-4 text-lg font-semibold text-red-text sm:px-4">
+                  <th scope="col" className="mk-display px-2 py-5 text-lg font-bold text-red-text sm:px-4">
                     Pro
                   </th>
                 </tr>
@@ -170,7 +164,7 @@ export default function PricingPage() {
               {rows.map((g) => (
                 <tbody key={g.group}>
                   <tr>
-                    <th scope="colgroup" colSpan={3} className="bg-fill/60 px-4 py-2.5 text-xs font-semibold uppercase tracking-[0.1em] text-text-2 sm:px-7">
+                    <th scope="colgroup" colSpan={3} className="bg-fill/70 px-4 py-2.5 text-xs font-semibold uppercase tracking-[0.1em] text-text-2 sm:px-7">
                       {g.group}
                     </th>
                   </tr>
@@ -195,39 +189,35 @@ export default function PricingPage() {
       </section>
 
       <section aria-labelledby="pricing-faq" className="mt-20 sm:mt-28">
-        <Container className="grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
+        <Container className="grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)] lg:gap-14">
           <SectionHeading
             id="pricing-faq"
-            title={
-              <>
-                Billing, <b>plainly.</b>
-              </>
-            }
+            label="Billing"
+            title="Billing, plainly."
             intro="Pro is bought, managed and cancelled through the App Store, like any other iPhone subscription."
           />
           <Faq items={faq} />
         </Container>
       </section>
 
-      <section aria-label="Pro in the app" className="mt-20 sm:mt-28">
+      <section aria-labelledby="in-app-title" className="mt-20 sm:mt-28">
         <Container>
-          <div className="grid grid-cols-1 items-center gap-8 rounded-[28px] bg-surface p-3 ring-1 ring-line md:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
-            <div className="mk-field flex justify-center px-6 py-8 [--pool-x:50%] [--pool-y:50%]">
-              <Sparkle size={24} top="10%" left="14%" delay={0.5} />
-              <Sparkle size={12} top="30%" right="16%" delay={1.6} />
-              <div className="w-[58%] max-w-[240px]">
-                <Art slot="pro" sizes="(min-width: 768px) 240px, 58vw" />
+          <div className="mk-card grid grid-cols-1 items-center gap-8 overflow-hidden p-3 md:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]">
+            <div className="mk-tile mk-tile--rose flex justify-center overflow-hidden px-6 pt-10">
+              <div className="-mb-[18%] w-[62%] max-w-[250px]">
+                <Art slot="support" sizes="(min-width: 768px) 250px, 62vw" />
               </div>
             </div>
-            <div className="mk-on-canvas px-4 pb-6 md:px-6 md:pb-0">
-              <h2 className="mk-headline text-[2rem] text-text sm:text-[2.75rem]">
-                Get Pro <b>in the Snapreel app.</b>
+            <div className="px-4 pb-8 md:px-6 md:pb-0">
+              <p className="mk-label">In the app</p>
+              <h2 id="in-app-title" className="mk-title mt-4 text-[2rem] sm:text-[2.5rem]">
+                Get Pro in the Snapreel app.
               </h2>
-              <ol className="mt-5 space-y-3 text-[1.0625rem]">
+              <ol className="mt-6 space-y-3 text-[1.0625rem]">
                 {["Open Snapreel on your iPhone.", "Go to Settings › Snapreel Pro.", "Pick monthly or yearly and confirm with your Apple Account."].map(
                   (step, i) => (
                     <li key={step} className="flex items-start gap-3">
-                      <span className="grid grid-cols-1 size-7 shrink-0 place-items-center rounded-full bg-red-soft text-sm font-semibold text-red-text">
+                      <span className="grid size-7 shrink-0 place-items-center rounded-full bg-red-soft text-sm font-semibold text-red-text">
                         {i + 1}
                       </span>
                       <span className="pt-0.5">{step}</span>
@@ -235,13 +225,14 @@ export default function PricingPage() {
                   ),
                 )}
               </ol>
-              <p className="mt-5 text-text-2">You also see the Pro offer when you reach a Free limit, like your 26th link or a recording over 5 minutes.</p>
+              <p className="mt-5 text-text-2">
+                You also see the Pro offer when you reach a Free limit, like your 26th link or a recording over 5 minutes.
+                Manage or cancel it later from your Account page.
+              </p>
             </div>
           </div>
         </Container>
       </section>
-
-      <DownloadCta />
     </>
   );
 }
