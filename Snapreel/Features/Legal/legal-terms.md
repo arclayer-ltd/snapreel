@@ -56,7 +56,7 @@ People who watch your links can comment and react if you allow it. Their comment
 
 ## How we moderate
 
-We don't watch or scan shared recordings in advance. We act on reports from viewers and others, on what we notice ourselves, and on orders from courts and authorities. Every report is reviewed by a person, the developer, not by an automated system. To keep snapreel.video working, we also limit how often anyone can comment, react or report, and we filter obvious automated spam.
+We don't watch or scan shared recordings in advance. We act on reports from viewers and others, on what we notice ourselves, and on orders from courts and authorities. Every report is reviewed by a person, the developer, not by an automated system. To keep snapreel.video working, we also limit how often anyone can comment, react or report, and we filter obvious automated spam. Comments whose name or text contains words from a short list of slurs and abuse are held, unseen by viewers, until the link's owner approves or deletes them.
 
 If content breaks these terms or the law, we may remove it, stop its link from playing, or suspend or close the account that shared it. We close the accounts of people who seriously or repeatedly break these terms, including repeat copyright infringers, and we report child sexual abuse material and threats to life or safety to the authorities.
 

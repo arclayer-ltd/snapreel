@@ -54,7 +54,7 @@ Anyone you send a link to can watch the recording, read its title and transcript
 
 ## People who watch your links
 
-Watching a link doesn't need an account. The watch page at snapreel.video sets a first-party cookie (`sr_vs`) that holds a random ID and lasts a year, so we can count views and unique viewers, keep a viewer's place, apply blocks and stop abuse. A link with a password sets a second cookie for 12 hours after you type the password. Neither is used for advertising, shared with anyone else, or read on other websites. The counts they give are statistics about each video, not a profile of you. You can block or delete these cookies in your browser and still watch; you'll just be counted as a new viewer each time, and a password link will ask for its password again.
+Watching a link doesn't need an account. The watch page at snapreel.video sets a first-party cookie (`sr_vs`) that holds a random ID and lasts a year, so we can count views and unique viewers, keep a viewer's place, apply blocks and stop abuse. A link with a password sets a second cookie for 12 hours after you type the password. Neither is used for advertising, shared with anyone else, or read on other websites. The counts they give are statistics about each video, not a profile of you. You can block or delete these cookies in your browser and still watch; you'll just be counted as a new viewer each time, and a password link will ask for its password again. To stop your views being counted at all, turn on **Don't count my views** at the bottom of any watch page: it sets a small cookie (`sr_nocount`, for a year) and we then record no views from that browser, while `sr_vs` stays so that blocks and abuse limits still work.
 
 For each view we record:
 

@@ -72,6 +72,8 @@ begin
       ('A hides B''s comment',           'authenticated', a, 'with u as (update public.comments set deleted_at = now() where id = :cb returning 1) select count(*) from u', '0'),
       ('A hides comment on own video',   'authenticated', a, 'with u as (update public.comments set deleted_at = now() where id = :ca returning 1) select count(*) from u', '1'),
       ('A edits a comment body',         'authenticated', a, 'with u as (update public.comments set body = ''x'' where id = :ca returning 1) select count(*) from u', 'denied'),
+      ('A reads the held flag',          'authenticated', a, 'select count(*) from public.comments where not held', '1'),
+      ('A approves a comment directly',  'authenticated', a, 'with u as (update public.comments set held = false where id = :ca returning 1) select count(*) from u', 'denied'),
       ('A posts a comment directly',     'authenticated', a, 'insert into public.comments (video_id, session_id, author_name, body) values (:va, ''x'', ''x'', ''x'') returning 1', 'denied'),
       ('A sees views on own videos',     'authenticated', a, 'select count(*) from public.views', '1'),
       ('A deletes views on B''s video',  'authenticated', a, 'with d as (delete from public.views where video_id = :vb returning 1) select count(*) from d', '0'),
