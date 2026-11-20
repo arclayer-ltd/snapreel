@@ -107,20 +107,59 @@ tus_upload() { # tus_upload FILE OBJECT CONTENT_TYPE: 6 MB chunks, as the app do
 echo "== Snapreel Pro smoke test against $BASE ${RESOLVE_IP:+(pinned to $RESOLVE_IP)}"
 RAND=$("$NODE" -e 'process.stdout.write(require("crypto").randomBytes(4).toString("hex"))')
 
+# Leftovers from an earlier run that was killed before its cleanup (older than 15 minutes): delete their files
+# and accounts so nothing piles up.
+admin GET "/auth/v1/admin/users?per_page=1000"
+for stale in $(j 'v.users.filter(u => /^delivered\+smoke-.*@resend\.dev$/.test(u.email) && Date.now() - Date.parse(u.created_at) > 15 * 60e3).map(u => u.id).join(" ")'); do
+  admin POST "/storage/v1/object/list/videos" "{\"prefix\":\"$stale/\",\"limit\":100}"
+  for folder in $(j 'v.map(o => o.name).join(" ")'); do
+    admin POST "/storage/v1/object/list/videos" "{\"prefix\":\"$stale/$folder/\",\"limit\":100}"
+    files=$(j "v.map(o => '\"$stale/$folder/' + o.name + '\"').join(',')")
+    [ -n "$files" ] && admin DELETE "/storage/v1/object/videos" "{\"prefixes\":[$files]}"
+  done
+  admin DELETE "/auth/v1/admin/users/$stale"
+  echo "      removed a leftover smoke-test user ($CODE)"
+done
+
+PROD=0
+[ "$BASE" = "https://snapreel.video" ] && PROD=1
+skip() { echo "SKIP  $* (only against https://snapreel.video)"; }
+
 # --- Service checks
 api GET "$BASE/api/health"
 expect 200 "GET /api/health"
-check "$(j 'v.ok && v.configured')" "true" "health says APNs is configured"
+if [ $PROD = 1 ]; then check "$(j 'v.ok && v.configured')" "true" "health says APNs is configured"; else skip "APNs configured"; fi
 api GET "$BASE/.well-known/apple-app-site-association"
 expect 200 "apple-app-site-association"
 check "$(j 'v.applinks.details[0].appIDs[0]')" "N3DBKUVJS5.co.arclayer.snapreel" "AASA app ID"
 
-# --- Sign-in email through the Send Email hook (Supabase -> /api/auth/send-email -> Resend)
-OTP_EMAIL="delivered+smoke-otp-$RAND@resend.dev"
-api POST "$SB/auth/v1/otp" "{\"email\":\"$OTP_EMAIL\",\"create_user\":true}" -H @"$TMP/pub.h"
-expect 200 "POST /auth/v1/otp sends a code through the hook"
-admin POST /auth/v1/admin/generate_link "{\"type\":\"magiclink\",\"email\":\"$OTP_EMAIL\"}"
-USERS+=("$(j 'v.id || (v.user && v.user.id)')")
+# --- The Send Email hook, called directly with a Standard Webhooks signature (as Supabase signs it)
+HOOK_EMAIL="delivered+smoke-hook-$RAND@resend.dev"
+HOOK_BODY="{\"user\":{\"id\":\"00000000-0000-4000-8000-000000000000\",\"email\":\"$HOOK_EMAIL\"},\"email_data\":{\"token\":\"123456\",\"email_action_type\":\"magiclink\"}}"
+envget SUPABASE_AUTH_HOOK_SECRET | "$NODE" -e '
+  const fs = require("fs"), crypto = require("crypto");
+  const secret = fs.readFileSync(0, "utf8").trim().replace(/^v1,whsec_/, "");
+  const [out, body] = process.argv.slice(1);
+  const id = "msg_" + crypto.randomBytes(8).toString("hex"), ts = Math.floor(Date.now() / 1000);
+  const sig = crypto.createHmac("sha256", Buffer.from(secret, "base64")).update(`${id}.${ts}.${body}`).digest("base64");
+  fs.writeFileSync(out, `webhook-id: ${id}\nwebhook-timestamp: ${ts}\nwebhook-signature: v1,${sig}\n`);
+' "$TMP/hook.h" "$HOOK_BODY"
+api POST "$BASE/api/auth/send-email" "$HOOK_BODY" -H @"$TMP/hook.h"
+expect 200 "Send Email hook sends a signed code email through Resend"
+api POST "$BASE/api/auth/send-email" "$HOOK_BODY" -H "webhook-id: msg_x" -H "webhook-timestamp: $(date +%s)" -H "webhook-signature: v1,AAAA"
+expect 401 "Send Email hook refuses a bad signature"
+
+# --- Sign-in email end to end (Supabase Auth -> the deployed hook -> Resend)
+if [ $PROD = 1 ]; then
+  OTP_EMAIL="delivered+smoke-otp-$RAND@resend.dev"
+  api POST "$SB/auth/v1/otp" "{\"email\":\"$OTP_EMAIL\",\"create_user\":true}" -H @"$TMP/pub.h"
+  expect 200 "POST /auth/v1/otp sends a code through the hook"
+  admin POST /auth/v1/admin/generate_link "{\"type\":\"magiclink\",\"email\":\"$OTP_EMAIL\"}"
+  USERS+=("$(j 'v.id || (v.user && v.user.id)')")
+else
+  skip "POST /auth/v1/otp through the deployed hook"
+  USERS+=("")
+fi
 
 # --- Two throwaway users
 EMAIL_A="delivered+smoke-a-$RAND@resend.dev"
@@ -140,12 +179,12 @@ TOKEN_B=$(signin "$EMAIL_B")
 as_a GET /api/me
 expect 200 "GET /api/me"
 check "$(j 'v.plan.tier + "/" + v.usage.linkLimit + "/" + v.user.displayName')" "free/25/Smoke Owner" "Free plan, 25 links, profile name from metadata"
-api GET "$BASE/api/me" -H "authorization: Bearer not-a-token"
+api GET "$BASE/api/me" "" -H "authorization: Bearer not-a-token"
 expect 401 "bad bearer token is refused"
 
-# --- Media made with ffmpeg: a noisy 1280x720 clip so the video needs two 6 MB TUS chunks
+# --- Media made with ffmpeg: a noisy 1280x720 clip at 30 Mbit/s (about 8 MB) so the video needs two 6 MB TUS chunks
 ffmpeg -v error -f lavfi -i "testsrc2=size=1280x720:rate=30,noise=alls=60:allf=t+u" -f lavfi -i "sine=frequency=440:sample_rate=44100" \
-  -t 2 -c:v libx264 -preset ultrafast -crf 8 -pix_fmt yuv420p -c:a aac -movflags +faststart -shortest "$TMP/video.mp4"
+  -t 2 -c:v libx264 -preset ultrafast -b:v 30M -maxrate 30M -bufsize 60M -pix_fmt yuv420p -c:a aac -movflags +faststart -shortest "$TMP/video.mp4"
 ffmpeg -v error -i "$TMP/video.mp4" -frames:v 1 -q:v 4 "$TMP/poster.jpg"
 ffmpeg -v error -i "$TMP/video.mp4" -t 1 -an -vf scale=480:-2 -c:v libx264 -pix_fmt yuv420p -movflags +faststart "$TMP/preview.mp4"
 SIZE=$(wc -c <"$TMP/video.mp4" | tr -d ' ')
@@ -230,7 +269,8 @@ expect 201 "comment"
 COMMENT_ID=$(j 'v.id')
 viewer POST "/api/public/v/$SLUG/comments" '{"name":"Bot","body":"spam","atS":1,"website":"http://spam.example"}'
 expect 201 "honeypot comment looks accepted"
-viewer POST "/api/public/v/$SLUG/reactions" '{"emoji":"👍","atS":1}'
+# JSON escape for 👍: Windows mangles non-ASCII command-line arguments.
+viewer POST "/api/public/v/$SLUG/reactions" '{"emoji":"\ud83d\udc4d","atS":1}'
 expect 201 "reaction"
 viewer POST "/api/public/v/$SLUG/reactions" '{"emoji":"not an emoji","atS":1}'
 expect 400 "non-emoji reaction is refused"
@@ -319,8 +359,9 @@ expect 204 "stop sharing"
 viewer GET "/api/public/v/$SLUG"
 expect 410 "stopped link says removed"
 check "$(j 'v.error')" "removed" "error is removed"
-api GET "$VIDEO_URL" "" -r 0-1023
-[ "$CODE" != 206 ] && [ "$CODE" != 200 ] && ok "files are gone ($CODE)" || bad "signed URL still serves after delete ($CODE)"
+# The bucket itself is checked: Supabase's CDN may keep answering an already-issued signed URL for about a minute.
+admin POST "/storage/v1/object/list/videos" "{\"prefix\":\"$UID_A/$VID/\",\"limit\":100}"
+check "$OUT" "[]" "the video's files are deleted from the bucket"
 for who in A B; do
   token_var="TOKEN_$who"
   api POST "$BASE/api/account/delete" "{}" -H "authorization: Bearer ${!token_var}"

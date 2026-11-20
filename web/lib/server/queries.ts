@@ -153,7 +153,8 @@ export async function getOwnerVideo(userId: string, id: string): Promise<VideoDe
 
 const ones = (bits: unknown) => (typeof bits === "string" ? bits.split("").filter((c) => c === "1").length : 0);
 
-// Free gets views and unique viewers; Pro also gets the detail (avgPercent and completionRate are 0 to 100).
+// Free gets views and unique viewers; Pro also gets the detail. avgPercent, completionRate and viewers[].percent
+// are 0 to 100; dropoff is 100 counts (how many counted views watched each 1% of the video).
 export async function getInsights(userId: string, id: string): Promise<Insights | null> {
   const video = await ownerVideoRow(userId, id);
   if (!video) return null;
@@ -229,7 +230,7 @@ export async function getInsights(userId: string, id: string): Promise<Insights 
     ...base,
     avgPercent: n ? Math.round((percentSum / n) * 10) / 10 : 0,
     completionRate: n ? Math.round((completed / n) * 1000) / 10 : 0,
-    dropoff: perBucket.map((c) => (n ? Math.round((c / n) * 100) : 0)),
+    dropoff: perBucket,
     countries: [...countries.entries()].sort((a, b) => b[1] - a[1]).map(([code, count]) => ({ code, count })),
     viewers: [...sessions.values()]
       .sort((a, b) => (a.lastSeenAt < b.lastSeenAt ? 1 : -1))

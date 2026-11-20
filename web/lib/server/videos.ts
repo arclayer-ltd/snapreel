@@ -75,9 +75,31 @@ export async function createVideo(userId: string, raw: Record<string, unknown>):
     .eq("local_id", input.localId)
     .is("deleted_at", null)
     .maybeSingle();
-  if (existing) return [200, createResponse(existing, plan.tier)];
-
   const limits = limitsFor(plan.tier);
+  if (existing) {
+    // Already shared. A link whose upload never finished (the app lost its upload job) is set back to
+    // "uploading" with the phone's current file details, so the app can upload again to the same paths.
+    if (existing.status === "ready") return [200, createResponse(existing, plan.tier)];
+    if (input.durationS > limits.maxDurationS + 0.5) {
+      throw limitError("duration", plan.isPro ? "Shared videos can be up to 2 hours." : "Free links are for videos up to 5 minutes.");
+    }
+    const { data: reset, error } = await supabase
+      .from("videos")
+      .update({
+        status: "uploading",
+        uploaded_bytes: 0,
+        duration_s: input.durationS,
+        width: input.width,
+        height: input.height,
+        size_bytes: input.sizeBytes,
+      })
+      .eq("id", existing.id)
+      .select("*")
+      .single();
+    if (error) throw error;
+    return [200, createResponse(reset, plan.tier)];
+  }
+
   if (input.durationS > limits.maxDurationS + 0.5) {
     throw limitError(
       "duration",
