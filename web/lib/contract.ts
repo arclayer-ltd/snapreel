@@ -27,7 +27,15 @@ export interface Plan {
 }
 
 export interface Me {
-  user: { id: string; email: string | null; displayName: string | null };
+  user: {
+    id: string;
+    email: string | null;
+    displayName: string | null;
+    /** Email alerts for views, comments and reactions (profiles.email_alerts). Added by the backend. */
+    emailAlerts?: boolean;
+    /** Pro branding colour (#RRGGBB) or null. Added by the backend. */
+    brandColor?: string | null;
+  };
   plan: Plan;
   usage: {
     activeLinks: number;
@@ -35,6 +43,13 @@ export interface Me {
     maxDurationS: number;
     quality: "720p" | "1080p";
   };
+}
+
+export interface UpdateMeRequest {
+  displayName?: string | null;
+  /** Pro only (402 pro_feature on Free); null clears it. */
+  brandColor?: string | null;
+  emailAlerts?: boolean;
 }
 
 export interface TranscriptSegment {
@@ -185,6 +200,10 @@ export interface ViewEvent {
   event: "start" | "progress" | "end";
   positionS: number;
   watched: number[];
+  /** Optional: the viewId the first beacon returned. Without it the session's latest view (last hour) is used. */
+  viewId?: string | null;
+  /** Optional: document.referrer, so insights can show where viewers came from. */
+  referrer?: string | null;
 }
 
 export interface NewComment {
@@ -205,6 +224,13 @@ export interface NewReport {
   reason: "spam" | "abuse" | "illegal" | "copyright" | "other";
   details: string;
   email?: string | null;
+}
+
+export interface DeleteAccountRequest {
+  /** A fresh Sign in with Apple authorization code, so the server can revoke the Apple grant (guideline 5.1.1(v)). */
+  appleAuthorizationCode?: string;
+  /** The client ID that code was issued to; defaults to the app's bundle ID. */
+  appleClientId?: string;
 }
 
 export interface PushPayload {

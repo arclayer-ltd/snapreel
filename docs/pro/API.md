@@ -22,21 +22,26 @@ Product rules (owner decisions, 20 November 2026):
 
 | Key | Value |
 |---|---|
-| `SUPABASE_URL` | _filled in by the backend session_ |
-| `SUPABASE_PUBLISHABLE_KEY` | _filled in by the backend session_ |
+| `SUPABASE_URL` | `https://jaajkutdglblwtpfcgag.supabase.co` (project ref `jaajkutdglblwtpfcgag`) |
+| `SUPABASE_PUBLISHABLE_KEY` | `sb_publishable_TMSX2mDy_fE7eYhJggL8hg_tMU_Eq91` |
+| TUS upload endpoint | `https://jaajkutdglblwtpfcgag.storage.supabase.co/storage/v1/upload/resumable` |
+
+In Vercel the two public values are `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
+(production, preview and development; `vercel env pull` gets them).
 
 Server-only secrets live in Vercel env and never in git:
 - `SUPABASE_SECRET_KEY`
 - `RESEND_API_KEY`
 - `APNS_KEY_ID`, `APNS_TEAM_ID`, `APNS_KEY_P8`
-- `SIWA_KEY_ID`, `SIWA_KEY_P8`, `SIWA_CLIENT_IDS`
+- `SIWA_KEY_ID`, `SIWA_KEY_P8`, `SIWA_TEAM_ID`, `SIWA_CLIENT_IDS`
 - `APPLE_BUNDLE_ID=co.arclayer.snapreel`, `APPLE_APP_ID` (numeric, 6836019517)
 - `VIEWER_COOKIE_SECRET`
+- `SUPABASE_AUTH_HOOK_SECRET` (Send Email hook), `CRON_SECRET` (daily cron)
 
 ## Sign-in (Supabase Auth)
 
 - Methods:
-  - **email code**: 6 digits, sent through Resend SMTP;
+  - **email code**: 6 digits, valid 10 minutes. Supabase's Send Email hook calls `POST /api/auth/send-email`, which sends a branded email through Resend from `Snapreel <hello@snapreel.video>`;
   - **Sign in with Apple**: native in the app through `id_token`; OAuth on the web through the Services ID.
 - **The app** talks to GoTrue directly with URLSession; no SDK is needed:
   - `POST /auth/v1/otp` `{email, create_user: true}`;
@@ -138,21 +143,21 @@ Bodies are JSON with camelCase keys. Errors look like `{error: "<code>", message
 
 | Method and path | Body | Returns |
 |---|---|---|
-| `GET /api/me` | | `{user: {id, email, displayName}, plan: {tier: "free"\|"pro", productId, expiresAt}, usage: {activeLinks, linkLimit, maxDurationS, quality}}` |
-| `PATCH /api/me` | `{displayName?, brandColor?}` | the same as `GET` |
-| `POST /api/videos` | `{localId, title, kind, durationS, width, height, sizeBytes, transcript?}` | 201 `{id, slug, url, status, upload: {bucket, videoPath, posterPath, previewPath}, limits: {maxDurationS, maxLongSide}}`. If the `localId` is already shared, returns the existing link with 200 |
+| `GET /api/me` | | `{user: {id, email, displayName, emailAlerts, brandColor}, plan: {tier: "free"\|"pro", productId, expiresAt}, usage: {activeLinks, linkLimit, maxDurationS, quality}}` |
+| `PATCH /api/me` | `{displayName?, brandColor?, emailAlerts?}` (`brandColor` is Pro; `null` clears it) | the same as `GET` |
+| `POST /api/videos` | `{localId, title, kind, durationS, width, height, sizeBytes, transcript?}` | 201 `{id, slug, url, status, upload: {bucket, videoPath, posterPath, previewPath}, limits: {maxDurationS, maxLongSide}}`. If the `localId` is already shared, returns the existing link with 200; a link whose upload never finished is set back to `uploading` (same upload paths) so the app can upload again |
 | `GET /api/videos` | | `[VideoSummary]` |
 | `GET /api/videos/{id}` | | `VideoDetail` |
-| `PATCH /api/videos/{id}` | any of `{title, status, uploadedBytes, access, password, expiresAt, allowDownload, allowComments, allowReactions, cta, transcript}` | `VideoDetail` |
+| `PATCH /api/videos/{id}` | any of `{title, status, uploadedBytes, access, password, expiresAt, allowDownload, allowComments, allowReactions, cta, transcript}` | `VideoDetail`. `{status: "ready"}` before all three files are up: 409 `{error: "upload_incomplete", missing: ["video.mp4", …]}`. Password (4–128 characters), a non-null `expiresAt`, `allowDownload: true` and a non-null `cta` are Pro (402 `pro_feature`); `null`/`false` always works |
 | `DELETE /api/videos/{id}` | | 204. Stops sharing, deletes the files, keeps nothing |
-| `GET /api/videos/{id}/insights` | | `{views, uniqueViewers, avgPercent, completionRate, dropoff: [100 ints], countries: [{code, count}], viewers: [{name, anonymous, country, device, firstSeenAt, lastSeenAt, percent}]}`. Free gets `views` and `uniqueViewers`; the rest is `null` |
+| `GET /api/videos/{id}/insights` | | `{views, uniqueViewers, avgPercent, completionRate, dropoff: [100 ints], countries: [{code, count}], viewers: [{name, anonymous, country, device, firstSeenAt, lastSeenAt, percent}]}`. Free gets `views` and `uniqueViewers`; the rest is `null`. `avgPercent`, `completionRate` and `viewers[].percent` are 0–100; `dropoff[i]` is how many counted views watched the i-th 1% of the video |
 | `GET /api/videos/{id}/activity` | | `{comments: [Comment], reactions: [Reaction]}` |
 | `DELETE /api/comments/{id}` | | 204 |
 | `POST /api/blocks` | `{commentId}` or `{reactionId}` | 204. Blocks that viewer from all your videos |
 | `POST /api/devices` | `{token, environment: "production"\|"sandbox", appVersion}` | 204 |
 | `DELETE /api/devices/{token}` | | 204 |
 | `POST /api/purchases/verify` | `{signedTransaction}` (StoreKit 2 JWS) | `{plan}`. The server checks the x5c chain to Apple Root CA G3, the bundle ID, and that `appAccountToken` equals the user ID |
-| `POST /api/account/delete` | | 204. Deletes everything, including the auth user, and revokes Sign in with Apple |
+| `POST /api/account/delete` | `{appleAuthorizationCode?, appleClientId?}` | 204. Deletes everything, including the auth user. Sign in with Apple is revoked when the app sends a fresh `appleAuthorizationCode` (from an `ASAuthorizationAppleIDCredential`; `appleClientId` defaults to the bundle ID) |
 
 Shapes:
 - `VideoSummary`: `{id, slug, url, localId, title, kind, durationS, status, posterUrl, createdAt, views, uniqueViewers, lastViewedAt, commentCount}`
@@ -166,13 +171,21 @@ Shapes:
 |---|---|---|
 | `GET /api/public/v/{slug}` | | `{title, ownerName, brand: {color, logoUrl} \| null, durationS, width, height, status, posterUrl, videoUrl, previewUrl, captionsUrl, transcript, allowDownload, allowComments, allowReactions, cta, showBadge, createdAt}`, or 401 `{error: "password"}`, or 410 `{error: "expired" \| "removed"}` |
 | `POST /api/public/v/{slug}/unlock` | `{password}` | 204 and sets the `sr_unlock_{slug}` cookie (12 h) |
-| `POST /api/public/v/{slug}/view` | `{event: "start"\|"progress"\|"end", positionS, watched: [bucketIndex]}` | `{viewId}`. Sent with `sendBeacon` on pagehide |
+| `POST /api/public/v/{slug}/view` | `{event: "start"\|"progress"\|"end", positionS, watched: [bucketIndex], viewId?, referrer?}` | `{viewId}`. Sent with `sendBeacon` on pagehide. `watched` holds the 0–99 indexes of the 1% slices played since the last beacon; send back the `viewId` from the first answer, and `document.referrer` as `referrer`. `viewId` is `null` for the owner and for link-preview bots (not recorded) |
 | `GET /api/public/v/{slug}/activity` | | `{comments, reactions}` |
 | `POST /api/public/v/{slug}/comments` | `{name, body, atS, parentId?, website}`. `website` is a honeypot and must be empty | `Comment` |
 | `POST /api/public/v/{slug}/reactions` | `{emoji, atS, name?}` | `Reaction` |
 | `POST /api/public/v/{slug}/report` | `{reason, details, email?}` | 204 |
 | `GET /api/public/v/{slug}/captions.vtt` | | `text/vtt` |
 | `GET /api/oembed?url=…&format=json` | | `{type: "video", version: "1.0", title, provider_name: "Snapreel", provider_url, html, width, height, thumbnail_url, thumbnail_width, thumbnail_height, duration}` |
+
+Also public, added by the backend:
+- `GET /api/public/v/{slug}/poster.jpg` and `/preview.mp4`: 302 to a fresh signed URL. Stable addresses for `og:image`, `og:video`, oEmbed thumbnails and emails. Only for links anyone can open (404 for password, expired or removed links, so their previews stay generic).
+- `GET /api/email/unsubscribe?u=…&s=…` (and one-click `POST`): turns email alerts off. Every alert email links to it and carries `List-Unsubscribe`.
+
+Public error codes: 401 `password`, 401 `wrong_password` (unlock), 403 `comments_off` / `reactions_off`, 403 `blocked`, 410 `expired` / `removed`, 404 `not_found`, 429 `rate_limited`, 400 `bad_request`. The `website` honeypot gets a normal-looking 201 and nothing is stored.
+
+Server-only routes: `POST /api/auth/send-email` (Supabase Send Email hook, Standard Webhooks signature) and `GET /api/cron/daily` (Vercel Cron, `Authorization: Bearer $CRON_SECRET`). See docs/pro/BACKEND.md.
 
 **A view counts** once it has 5 s watched, or 75% of the length, or reaches the last second. The owner's own views (signed-in owner) never count. Unique viewers are counted by `session_id`.
 
