@@ -64,6 +64,7 @@ enum DebugCatalog {
             + browseScreens     // D: Features/Home, Library, Search
             + inboxScreens      // E: Features/Notifications, Storage, Sharing
             + proScreens        // Snapreel Pro: Features/Pro (pro., account., share.link., insights.)
+            + flowScreens       // flow.*: scripted runs the website records (Debug/DebugFlows.swift)
     }
 
     static func screen(_ id: String) -> DebugScreen? { all.first { $0.id == id } }

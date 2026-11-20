@@ -9,7 +9,7 @@ final class FixtureStorage: LibraryStorage {
     private var records: [String: [String: Data]] = [:]
 
     /// Bump when the drawn fixture media changes, so cached files are regenerated.
-    private static let mediaVersion = 2
+    private static let mediaVersion = 3
 
     init(set: FixtureSet) {
         // Media is drawn once per install and reused by every later launch (screenshots launch
@@ -105,6 +105,16 @@ final class FixtureStorage: LibraryStorage {
         if !FileManager.default.fileExists(atPath: media.videoURL(clipName).path) {
             FixtureArt.writeSampleClip(to: media.videoURL(clipName))
         }
+        // The desk camera recording plays a real 6-second talking clip (fixture-camera-desk.mp4, DEBUG
+        // only), so the player and the website's recorded flows show a person, not the drawn slides.
+        var deskClip: String?
+        if let bundled = Bundle.main.url(forResource: "fixture-camera-desk", withExtension: "mp4") {
+            let name = "fixture-camera-desk.mp4"
+            if !FileManager.default.fileExists(atPath: media.videoURL(name).path) {
+                try? FileManager.default.copyItem(at: bundled, to: media.videoURL(name))
+            }
+            deskClip = name
+        }
 
         for sample in samples {
             var thumbName: String?
@@ -117,8 +127,10 @@ final class FixtureStorage: LibraryStorage {
                     thumbName = try? MediaInspector.writeThumbnail(image, named: sample.id.uuidString, in: media.thumbnails)
                 }
             }
+            var fileName = clipName
+            if case .camera(let hue) = sample.style, hue == 0, let deskClip { fileName = deskClip }
             let video = Video(id: sample.id, title: sample.title, createdAt: ago(sample.minutesAgo), kind: sample.kind,
-                              fileName: clipName, thumbnailFileName: thumbName, duration: sample.duration,
+                              fileName: fileName, thumbnailFileName: thumbName, duration: sample.duration,
                               fileSize: Int64(sample.duration * (sample.kind == .audio ? 16_000 : 1_400_000)),
                               pixelWidth: sample.size.0, pixelHeight: sample.size.1, needsTitle: sample.needsTitle,
                               folderID: sample.folder, tags: sample.tags,

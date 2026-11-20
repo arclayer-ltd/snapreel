@@ -24,6 +24,12 @@ on:
         description: Dark-mode screenshot prefixes (none = skip)
         type: string
         default: "start.welcome start.intro start.use.selected start.tour.1 start.tour.intro home.filled home.empty lib.videos lib.folders lib.actions notif.feed search.results settings.root settings.appearance settings.recording settings.storage.confirm help.home help.article legal.menu rec.shell rec.camera.recording rec.review video.player video.details photos.audio video.photos.alert share.sheet kit.components"
+      flows:
+        # Screen recordings of the debug flows (Debug/DebugFlows.swift) for snapreel.video, Light and
+        # Dark, into ci-out/flows and ci-out/dark/flows. Usually run with screenshots=false.
+        description: Record these flow id prefixes as videos (empty = none), e.g. "flow."
+        type: string
+        default: ""
       runner:
         # xcode-27 (Apple silicon, macOS 27) builds with the iOS 27 SDK, which App Store Connect
         # requires for uploads from April 2027 (ITMS-90725). The others build with the iOS 26 SDK.
@@ -102,6 +108,12 @@ jobs:
       - name: Simulator screenshots (Dark mode)
         if: ${{ inputs.screenshots && inputs.dark != 'none' }}
         run: bash scripts/ci-screenshots.sh build/Build/Products/Debug-iphonesimulator/Snapreel.app ci-out/dark/screenshots "${{ inputs.dark }}" dark
+
+      - name: Record app flows
+        if: ${{ inputs.flows != '' }}
+        run: |
+          RECORD=1 bash scripts/ci-screenshots.sh build/Build/Products/Debug-iphonesimulator/Snapreel.app ci-out/flows/light "${{ inputs.flows }}" light
+          RECORD=1 bash scripts/ci-screenshots.sh build/Build/Products/Debug-iphonesimulator/Snapreel.app ci-out/flows/dark "${{ inputs.flows }}" dark
 
       # Reuses the team's existing distribution certificate and three App Store profiles made
       # through the App Store Connect API (app, broadcast extension, Live Activity widget
