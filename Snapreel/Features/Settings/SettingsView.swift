@@ -351,7 +351,7 @@ struct SettingsFooter: View {
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.top, Space.xxs)
-            Text("Made by Arclayer Ltd")
+            Text("Made by \(AppInfo.publisher)")
                 .font(.srCaption)
                 .foregroundStyle(Color.srTextTertiary)
         }
@@ -375,5 +375,6 @@ enum AppInfo {
     static var versionLine: String { "Version \(version) (\(build))" }
 
     static let supportEmail = "support@snapreel.video"
-    static let publisher = "Arclayer Ltd"
+    /// The developer, as App Store Connect names the seller (an individual). Same as web/lib/legal-entity.ts.
+    static let publisher = "Rezan Ferdous"
 }
