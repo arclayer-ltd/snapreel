@@ -69,7 +69,7 @@ Pipe secrets in on stdin (`… | vercel env add NAME --environment production --
 | 20261119232546 storage | private `videos` bucket and owner-folder policies |
 | 20261119233239 advisor_fixes | `rls_auto_enable()` locked down, explicit server-only policies |
 | 20261119233521 device_token_check | fixes a regex Postgres can't run (`{32,400}`) |
-| 20261120010000 prune_rate_limits | cleanup helper for the cron |
+| 20261120001418 prune_rate_limits | cleanup helper for the cron |
 
 To add one: write the file, apply it (Supabase MCP `apply_migration`, or `supabase db push` from a linked
 checkout), rename the file to the recorded version (`list_migrations`), then:
