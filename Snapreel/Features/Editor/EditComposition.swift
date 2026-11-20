@@ -17,8 +17,16 @@ struct EditSource {
     /// Pixel size as shown (turned upright).
     let uprightSize: CGSize
     let orientation: CGImagePropertyOrientation
+    /// Frames a second of the picture (screen recordings are 60, camera ones 30).
+    let frameRate: Float
 
     var hasVideo: Bool { videoTrack != nil }
+
+    /// Frame rate for the saved edit: the recording's own, between 24 and 60.
+    var exportFrameRate: Int32 {
+        guard frameRate.isFinite, frameRate > 1 else { return 30 }
+        return Int32(min(60, max(24, frameRate.rounded())))
+    }
 
     static func load(_ url: URL) async throws -> EditSource {
         let asset = AVURLAsset(url: url, options: [AVURLAssetPreferPreciseDurationAndTimingKey: true])
@@ -37,10 +45,12 @@ struct EditSource {
         var naturalSize = CGSize.zero
         var transform = CGAffineTransform.identity
         var videoRange = CMTimeRange(start: .zero, duration: CMTime(seconds: max(duration, 0), preferredTimescale: 600))
+        var frameRate: Float = 30
         if let track = videoTracks.first {
             naturalSize = try await track.load(.naturalSize)
             transform = try await track.load(.preferredTransform)
             videoRange = try await track.load(.timeRange)
+            frameRate = try await track.load(.nominalFrameRate)
         }
         let turned = CGRect(origin: .zero, size: naturalSize).applying(transform)
         return EditSource(url: url, asset: asset, videoTrack: videoTracks.first, videoRange: videoRange,
@@ -48,7 +58,7 @@ struct EditSource {
                           duration: duration.isFinite ? duration : 0,
                           naturalSize: naturalSize, transform: transform,
                           uprightSize: CGSize(width: abs(turned.width), height: abs(turned.height)),
-                          orientation: Self.orientation(of: transform))
+                          orientation: Self.orientation(of: transform), frameRate: frameRate)
     }
 
     /// The EXIF-style orientation that turns the stored picture upright.
@@ -185,13 +195,15 @@ enum EditCompositionBuilder {
                 if needsPipeline {
                     let pipeline = EditFramePipeline(recipe: shown, source: source, renderSize: renderSize,
                                                      showsBlur: !fullFrame, overlays: [])
-                    videoComposition = makeVideoComposition(composition, pipeline: pipeline, renderSize: renderSize)
+                    videoComposition = makeVideoComposition(composition, pipeline: pipeline, renderSize: renderSize,
+                                                            frameRate: 30)
                 }
             case .export(let quality, let overlays):
                 renderSize = recipe.renderSize(source: source.uprightSize, quality: quality)
                 let pipeline = EditFramePipeline(recipe: recipe, source: source, renderSize: renderSize,
                                                  showsBlur: true, overlays: overlays)
-                videoComposition = makeVideoComposition(composition, pipeline: pipeline, renderSize: renderSize)
+                videoComposition = makeVideoComposition(composition, pipeline: pipeline, renderSize: renderSize,
+                                                        frameRate: source.exportFrameRate)
             }
         }
         return EditBuild(composition: composition, audioMix: mix, videoComposition: videoComposition,
@@ -199,13 +211,13 @@ enum EditCompositionBuilder {
     }
 
     private static func makeVideoComposition(_ composition: AVMutableComposition, pipeline: EditFramePipeline,
-                                             renderSize: CGSize) -> AVVideoComposition {
+                                             renderSize: CGSize, frameRate: Int32) -> AVVideoComposition {
         let videoComposition = AVMutableVideoComposition(asset: composition, applyingCIFiltersWithHandler: { request in
             let frame = pipeline.render(request.sourceImage, at: request.compositionTime.seconds)
             request.finish(with: frame, context: pipeline.context)
         })
         videoComposition.renderSize = renderSize
-        videoComposition.frameDuration = CMTime(value: 1, timescale: 30)
+        videoComposition.frameDuration = CMTime(value: 1, timescale: frameRate)
         return videoComposition
     }
 

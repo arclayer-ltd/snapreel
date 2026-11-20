@@ -88,7 +88,7 @@ struct EditorPanelButton: View {
             Label(title, systemImage: systemImage)
                 .font(.srSubheadlineStrong)
                 .lineLimit(1)
-                .fixedSize()
+                .minimumScaleFactor(0.75)
                 .foregroundStyle(prominent ? Color.white : (isDestructive ? Color.srStageRed : Color.srStageText))
                 .padding(.horizontal, Space.m)
                 .frame(height: 40)
@@ -97,6 +97,21 @@ struct EditorPanelButton: View {
         .buttonStyle(PressScaleStyle())
         .disabled(!enabled)
         .opacity(enabled ? 1 : 0.45)
+        .layoutPriority(1)
+    }
+}
+
+/// Start–end of an overlay, on one line.
+struct EditorSpanLabel: View {
+    let start: Double
+    let end: Double
+
+    var body: some View {
+        Text("\(EditorText.precise(start))–\(EditorText.precise(end))")
+            .font(.srTimerSmall)
+            .foregroundStyle(Color.srStageTextTertiary)
+            .lineLimit(1)
+            .minimumScaleFactor(0.7)
     }
 }
 
@@ -224,9 +239,7 @@ struct EditorTextPanel: View {
                     EditorPanelButton(title: "Edit", systemImage: "pencil") { model.editText(item) }
                     EditorPanelButton(title: "Delete", systemImage: "trash", isDestructive: true) { model.deleteText(item.id) }
                     Spacer(minLength: 0)
-                    Text("\(EditorText.precise(item.start))–\(EditorText.precise(item.end))")
-                        .font(.srTimerSmall)
-                        .foregroundStyle(Color.srStageTextTertiary)
+                    EditorSpanLabel(start: item.start, end: item.end)
                 }
                 .padding(.horizontal, Space.gutter)
             }
@@ -484,7 +497,9 @@ struct EditorVoicePanel: View {
                         .foregroundStyle(Color.srStageText)
                 }
                 HStack(spacing: Space.s) {
-                    EditorPanelButton(title: "Play", systemImage: "play.fill") { model.playTake(take) }
+                    CircleIconButton(systemName: "play.fill", label: "Play the take", tone: .stage, size: 40) {
+                        model.playTake(take)
+                    }
                     EditorPanelButton(title: "Re-record", systemImage: "arrow.counterclockwise") { model.rerecord(take) }
                     Spacer(minLength: 0)
                     EditorPanelButton(title: "Use take", systemImage: "checkmark", prominent: true) { model.keepTake(take) }
@@ -712,9 +727,7 @@ struct EditorBlurPanel: View {
                 }
                 Spacer(minLength: 0)
                 if let blur = model.selectedBlur {
-                    Text("\(EditorText.precise(blur.start))–\(EditorText.precise(blur.end))")
-                        .font(.srTimerSmall)
-                        .foregroundStyle(Color.srStageTextTertiary)
+                    EditorSpanLabel(start: blur.start, end: blur.end)
                 }
             }
             .padding(.horizontal, Space.gutter)

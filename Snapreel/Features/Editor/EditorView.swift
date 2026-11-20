@@ -515,7 +515,7 @@ struct EditorTextEntry: View {
 
     var body: some View {
         ZStack {
-            Color.black.opacity(0.82).ignoresSafeArea()
+            Color.black.opacity(0.9).ignoresSafeArea()
                 .onTapGesture { model.commitTextEntry() }
             VStack(spacing: 0) {
                 HStack {
