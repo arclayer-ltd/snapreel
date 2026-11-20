@@ -40,6 +40,11 @@ export const helpSnapshot: HelpData = {
       "systemImage": "square.and.arrow.up.fill"
     },
     {
+      "id": "links",
+      "title": "Share links and Pro",
+      "systemImage": "link"
+    },
+    {
       "id": "privacy",
       "title": "Privacy and storage",
       "systemImage": "lock.fill"
@@ -75,16 +80,16 @@ export const helpSnapshot: HelpData = {
         },
         {
           "type": "heading",
-          "text": "No account, nothing to sign in to"
+          "text": "No account needed"
         },
         {
           "type": "paragraph",
-          "text": "Your recordings, notes and transcripts are kept on this iPhone. When you want someone to see a recording, you send the video file itself, the same way you'd send a photo."
+          "text": "Recording, your library, transcripts and sending files all work without an account, and your recordings are kept on this iPhone. You only sign in when you want to share a recording as a link that plays in any browser."
         }
       ],
       "related": [
         "first-recording",
-        "find-your-way",
+        "share-links",
         "privacy"
       ]
     },
@@ -625,7 +630,8 @@ export const helpSnapshot: HelpData = {
       ],
       "related": [
         "save-to-photos",
-        "storage"
+        "storage",
+        "share-links"
       ]
     },
     {
@@ -659,28 +665,30 @@ export const helpSnapshot: HelpData = {
       "id": "privacy",
       "category": "privacy",
       "title": "Where your recordings are kept",
-      "summary": "On this iPhone, and nowhere else unless you send them.",
+      "summary": "On this iPhone, plus snapreel.video for the recordings you share as links.",
       "body": [
         {
           "type": "paragraph",
-          "text": "Snapreel has no account and no servers. Recordings, titles, folders, tags, notes, reactions and transcripts are kept in Snapreel's own space on this iPhone, protected by iOS."
+          "text": "Recordings, titles, folders, tags, notes, reactions and transcripts are kept in Snapreel's own space on this iPhone, protected by iOS. Nothing is uploaded until you tap **Copy link**."
         },
         {
           "type": "bullets",
           "items": [
-            "Nothing is uploaded, and Snapreel collects no analytics.",
+            "A recording you share as a link is uploaded to snapreel.video with its title and transcript, and stays there until you stop sharing it or delete your account.",
+            "Snapreel shows no ads and collects no analytics about you. Viewers of your links are counted with an anonymous cookie on the watch page, never across other sites.",
             "Transcripts are made on the device.",
             "If you back up your iPhone to iCloud or a computer, Snapreel's data is part of that backup."
           ]
         },
         {
           "type": "paragraph",
-          "text": "Deleting Snapreel deletes everything in it, so save or send anything you want to keep first."
+          "text": "Deleting Snapreel deletes everything on this iPhone, but not your share links: stop sharing them, or delete your account, to remove them from snapreel.video."
         }
       ],
       "related": [
         "permissions",
-        "storage"
+        "storage",
+        "delete-account"
       ]
     },
     {
@@ -859,10 +867,225 @@ export const helpSnapshot: HelpData = {
         "permissions",
         "screen-stop"
       ]
+    },
+    {
+      "id": "share-links",
+      "category": "links",
+      "title": "Share a recording as a link",
+      "summary": "Copy a link that plays in any browser, no app or account needed to watch.",
+      "useCases": [
+        "work",
+        "school",
+        "personal"
+      ],
+      "body": [
+        {
+          "type": "steps",
+          "items": [
+            "Open a recording, or finish one, and tap **Copy link** (the link button next to Share). It's also in a recording's actions in your Library.",
+            "The first time, sign in with Apple or with a code sent to your email.",
+            "The link is on your clipboard straight away. Paste it into Messages, Mail, Slack or anywhere else.",
+            "Snapreel uploads the video in the background. Until it's done, the watch page says it's uploading; then it plays."
+          ]
+        },
+        {
+          "type": "paragraph",
+          "text": "Uploads carry on when you leave Snapreel, and pick up where they stopped if you lose your connection. You can see them in **Settings › Account › Shared links**."
+        },
+        {
+          "type": "tip",
+          "text": "Pasted into Mail, the link shows a picture of the recording with a play button, so it looks like a video."
+        },
+        {
+          "type": "heading",
+          "text": "What viewers see"
+        },
+        {
+          "type": "paragraph",
+          "text": "Anyone with the link can watch in a browser, with your title, the transcript as captions, and a place to comment and react. Links aren't listed or searchable."
+        }
+      ],
+      "related": [
+        "link-settings",
+        "link-insights",
+        "snapreel-pro"
+      ]
+    },
+    {
+      "id": "link-settings",
+      "category": "links",
+      "title": "Passwords, expiry and comments",
+      "summary": "Decide who can watch a link, for how long, and what they can do.",
+      "body": [
+        {
+          "type": "paragraph",
+          "text": "Open a shared recording, tap **…** then **Link settings**. You can also tap the link in **Settings › Account › Shared links**."
+        },
+        {
+          "type": "bullets",
+          "items": [
+            "**Comments and reactions** – on or off, on every plan.",
+            "**Password** – viewers type it once before watching. Snapreel Pro.",
+            "**Expiry** – the link stops working after a day, a week or 30 days. Snapreel Pro.",
+            "**Downloads** – let viewers save the video. Snapreel Pro.",
+            "**Call to action** – a button under the video, such as “Book a call”. Snapreel Pro."
+          ]
+        },
+        {
+          "type": "heading",
+          "text": "Stop sharing"
+        },
+        {
+          "type": "paragraph",
+          "text": "**Stop sharing** at the bottom of Link settings deletes the link, its video, views and comments from snapreel.video. The recording stays on this iPhone, and you can share it again later with a new link."
+        }
+      ],
+      "related": [
+        "share-links",
+        "snapreel-pro"
+      ]
+    },
+    {
+      "id": "link-insights",
+      "category": "links",
+      "title": "See who watched, and their comments",
+      "summary": "Views, viewers, comments and reactions on your links.",
+      "body": [
+        {
+          "type": "paragraph",
+          "text": "A shared recording says **Shared · 12 views** in your Library and in the player. Open it and tap **Stats** for its numbers, or the **Comments** tab for what viewers wrote."
+        },
+        {
+          "type": "bullets",
+          "items": [
+            "A view counts once someone watches 5 seconds, three-quarters of the video, or the end. Your own views don't count.",
+            "Unique viewers are counted by browser, with an anonymous cookie. Viewers who don't give a name show as Anonymous.",
+            "With Snapreel Pro you also see each viewer, how far they got, a chart of where people stopped, and their countries."
+          ]
+        },
+        {
+          "type": "heading",
+          "text": "Delete a comment or block a viewer"
+        },
+        {
+          "type": "paragraph",
+          "text": "Tap **…** on a comment. **Delete comment** removes it; **Delete and block** also stops that viewer commenting or reacting on any of your videos."
+        },
+        {
+          "type": "tip",
+          "text": "Viewers' reactions appear on the player's timeline in small rings, so you can tell them from your own."
+        }
+      ],
+      "related": [
+        "share-links",
+        "link-settings"
+      ]
+    },
+    {
+      "id": "snapreel-pro",
+      "category": "links",
+      "title": "Snapreel Pro",
+      "summary": "Unlimited links, longer videos and full insights. Everything else stays free.",
+      "body": [
+        {
+          "type": "paragraph",
+          "text": "Recording, your library, transcripts and sending files are free for everyone, for good. Snapreel Pro is only about share links."
+        },
+        {
+          "type": "bullets",
+          "items": [
+            "**Free** – 25 links at a time, each up to 5 minutes, at 720p, with views, comments and reactions.",
+            "**Pro** – unlimited links up to 2 hours at 1080p, who watched and how far, passwords, expiry, downloads, a call-to-action button, and no Snapreel badge."
+          ]
+        },
+        {
+          "type": "paragraph",
+          "text": "Pro is $5.99 a month, or $39.99 a year with a free week first (prices vary by country). Subscribe in **Settings › Snapreel Pro**. It renews automatically until you cancel."
+        },
+        {
+          "type": "heading",
+          "text": "Cancel, restore or get a refund"
+        },
+        {
+          "type": "steps",
+          "items": [
+            "To cancel, open the **Settings** app, tap your name, then **Subscriptions › Snapreel**. You keep Pro until the end of the period you've paid for.",
+            "On a new iPhone, tap **Restore Purchases** on the Snapreel Pro screen.",
+            "Apple handles payments, so refunds are requested from Apple at reportaproblem.apple.com."
+          ]
+        }
+      ],
+      "related": [
+        "share-links",
+        "delete-account"
+      ]
+    },
+    {
+      "id": "delete-account",
+      "category": "links",
+      "title": "Sign out or delete your account",
+      "summary": "What happens to your links, and to your subscription.",
+      "body": [
+        {
+          "type": "paragraph",
+          "text": "Go to **Settings › Account**."
+        },
+        {
+          "type": "bullets",
+          "items": [
+            "**Sign out** – your links keep working and your recordings stay on this iPhone. Sign in again to see their views and comments.",
+            "**Delete account** – your share links stop working, and their videos, views, comments and reactions are deleted from snapreel.video, with your email address and sign-in. If you used Sign in with Apple, Snapreel's access to it is revoked."
+          ]
+        },
+        {
+          "type": "paragraph",
+          "text": "Recordings on this iPhone are not touched. To remove them too, use **Settings › Storage › Delete all my data**."
+        },
+        {
+          "type": "tip",
+          "text": "Deleting your account doesn't cancel Snapreel Pro, because Apple bills it. Cancel it first in the Settings app › your name › Subscriptions."
+        }
+      ],
+      "related": [
+        "snapreel-pro",
+        "privacy"
+      ]
+    },
+    {
+      "id": "upload-stopped",
+      "category": "trouble",
+      "title": "A link's upload stopped",
+      "summary": "Why an upload pauses, and how to get it going again.",
+      "body": [
+        {
+          "type": "paragraph",
+          "text": "Uploads wait by themselves while you're offline and carry on when you're back. If one stops for good, Snapreel tells you and the recording shows **Upload stopped**."
+        },
+        {
+          "type": "steps",
+          "items": [
+            "Open **Settings › Account › Shared links**.",
+            "Tap **Try again** next to the upload.",
+            "Keep Snapreel open for a moment on Wi-Fi if the video is long."
+          ]
+        },
+        {
+          "type": "bullets",
+          "items": [
+            "Free links take recordings up to 5 minutes; longer ones need Snapreel Pro.",
+            "A link can hold up to 2 GB.",
+            "If the recording was deleted from this iPhone before the upload finished, it can't be sent again."
+          ]
+        }
+      ],
+      "related": [
+        "share-links",
+        "snapreel-pro"
+      ]
     }
   ]
 };
 
-export const privacySnapshot = "> **DRAFT for owner review.** Not legal advice. The same text ships in the app at\n> `Snapreel/Features/Legal/legal-privacy.md`; keep the two in step. Before publishing, the owner should\n> confirm or add: Arclayer Ltd's registered address and company number, the governing law and\n> courts, and the minimum age.\n\n# Privacy policy\n\nLast updated: 20 November 2026\n\nThis policy explains how Snapreel, an iPhone app made by Arclayer Ltd, handles your information. The short answer: it stays on your iPhone.\n\n## In short\n\n- No account and no sign-in. The only thing that ever reaches our server is a push code that stops the Lock Screen card, and it isn't kept.\n- We don't collect, store, share or sell any information about you.\n- No analytics, no advertising and no tracking.\n- Your recordings leave your iPhone only when you choose to send them.\n\n## What stays on your iPhone\n\nSnapreel keeps the following on your device, in storage that only Snapreel can reach, protected by iOS data protection:\n\n- your recordings and their thumbnails\n- titles, folders, tags, notes and emoji reactions\n- transcripts, and summaries where your iPhone can make them\n- the list in the Notifications tab\n- your settings and recent searches\n\nWe can't see any of it. Snapreel goes online for one thing only: stopping the Lock Screen card when a screen recording ends (see below).\n\n## Permissions\n\nSnapreel asks for a permission only when a feature needs it. You can change your answer at any time in the Settings app.\n\n- **Camera** – to record camera videos.\n- **Microphone** – to record your voice with a recording.\n- **Photos (add only)** – to save recordings you choose to your Photos library. When you import a video, you pick it in Apple's photo picker, which gives Snapreel only that video.\n- **Speech recognition** – to make transcripts. Snapreel only uses recognition that runs on your iPhone. If that isn't available for your language, no transcript is made and your audio is never sent anywhere.\n- **Notifications** – to tell you when a recording is saved, a transcript is ready or space is running low. These notifications are created on your iPhone; no notification service is involved.\n\nScreen recording uses the broadcast feature built into iOS. You start and stop it yourself, and the recording is written straight into Snapreel's storage on your iPhone.\n\n## The Lock Screen card\n\nWhile you record your screen, Snapreel shows a card with the time on your Lock Screen. iOS can stop a screen recording while Snapreel is in the background (for example when you lock your iPhone), and only Apple's push service can then stop that card. So when a screen recording ends, Snapreel's screen recorder sends our server at snapreel.video two things: the card's push code (a random code Apple makes for that one card) and how long the recording ran. The server passes them straight to Apple's push service so the card stops counting, and keeps nothing. Like any web request it comes from your internet address, which our host, Vercel, may keep in routine logs for a short time. Nothing about your recording, its title or anything else in Snapreel is sent.\n\n## When information leaves your iPhone\n\nOnly when you make it happen:\n\n- **Sharing** – when you share a recording, it goes to the app or person you choose, and what happens next is up to them and that app.\n- **Saving to Photos** – a copy is added to your Photos library, which syncs with iCloud Photos if you use it.\n- **Backups** – if you back up your iPhone with iCloud or a computer, Snapreel's data is included and handled under Apple's terms.\n- **Contacting support** – if you email us, we receive your email address, your message and, only if you choose to include them, your device details (model, iOS version, app version and free space). We use these only to answer you, and delete the conversation when it's no longer needed. Recordings are never attached for you.\n\n## Children\n\nSnapreel isn't aimed at children under 13, and it doesn't collect anything from anyone of any age.\n\n## Deleting your information\n\nDelete a recording to remove it along with its notes, reactions and transcript. **Settings › Storage › Delete all my data** removes all of it at once. Deleting the app removes everything Snapreel stored on your iPhone.\n\n## Changes\n\nIf this policy changes, we'll update the date at the top and mention the change in the app's release notes.\n\n## Contact\n\nArclayer Ltd, [support@snapreel.video](mailto:support@snapreel.video)\n";
+export const privacySnapshot = "> **DRAFT for owner review.** Not legal advice. The same text ships in the app at\n> `Snapreel/Features/Legal/legal-privacy.md`; keep the two in step. Before publishing, the owner should\n> confirm or add: Arclayer Ltd's registered address and company number, the governing law and\n> courts, the minimum age, and the retention periods. The `<!-- DRAFT -->` comments mark each place.\n> Updated 20 November 2026 for accounts, share links on snapreel.video and Snapreel Pro.\n\n# Privacy policy\n\nLast updated: 20 November 2026\n\nThis policy explains how Snapreel, an iPhone app and website (snapreel.video) made by Arclayer Ltd, handles your information. The short answer: your recordings stay on your iPhone, unless you choose to share one as a link.\n\n<!-- DRAFT for owner review: add Arclayer Ltd's registered address and company number, and confirm the minimum age (13 below). -->\n\n## In short\n\n- You can record, organise, transcribe and send files without an account. All of that stays on your iPhone.\n- If you share a recording as a link, you need an account, and that recording is uploaded to snapreel.video until you stop sharing it.\n- We don't sell your information, show ads, or track you across other apps and websites.\n- The people who watch your links are counted with an anonymous cookie, only on snapreel.video.\n\n## What stays on your iPhone\n\nSnapreel keeps the following on your device, in storage that only Snapreel can reach, protected by iOS data protection:\n\n- your recordings and their thumbnails\n- titles, folders, tags, notes and emoji reactions\n- transcripts, and summaries where your iPhone can make them\n- the list in the Notifications tab\n- your settings and recent searches\n\nWe can't see any of it, and none of it is uploaded unless you share that recording as a link.\n\n## Your account\n\nYou need an account only to share recordings as links or to subscribe to Snapreel Pro. You can sign in with Apple or with a code sent to your email address. We keep:\n\n- your email address (with Sign in with Apple you can choose to share a private relay address instead)\n- your name, if you give one or Apple shares it when you first sign in\n- an account ID, and records of when you signed in\n- your Snapreel Pro plan, its renewal date and Apple's transaction ID for it, if you subscribe\n- a push notification token for each iPhone you're signed in on, so we can tell you about new viewers and comments\n\nYour sign-in session is kept in your iPhone's Keychain.\n\n## Recordings you share as links\n\nWhen you tap Copy link, Snapreel uploads that one recording to snapreel.video: a copy of the video made for the web, a still picture and a 3-second preview, with its title, length, size and, if one was made on your iPhone, its transcript (used for captions on the watch page). We keep them, and your link's settings (password, expiry, downloads, comments, reactions and button), until you stop sharing the link or delete your account. A link that expires is deleted.\n\nAnyone you send a link to can watch the recording, read its title and transcript, and see your name. Links aren't listed or searchable. A link with a password is shown only to people who type it.\n\n## People who watch your links\n\nThe watch page at snapreel.video sets one first-party cookie, a random ID, so we can count views and unique viewers and keep a viewer's place. It isn't shared with anyone else and isn't used on other sites. For each view we record:\n\n- roughly where the viewer is (their country, worked out from their internet address, which we don't keep)\n- the kind of device (phone, tablet or computer) and the website they came from\n- how much of the video they watched, and when\n- a name, only if the viewer types one to comment or react\n\nViewers can comment and react, and report a video to us. If a viewer comments, their name and comment are shown to you and to other viewers. You can delete any comment on your videos and block the viewer who wrote it; a block is kept so that viewer can't comment or react on your videos again.\n\n## Snapreel Pro and payments\n\nSnapreel Pro is an auto-renewing subscription sold by Apple through the App Store. Apple handles your payment details; we never see them. Apple tells us which plan you bought and when it renews, changes, is refunded or ends, and we store that against your account. Cancellations and refunds are handled by Apple.\n\n## Who processes your information\n\nWe use these companies to run Snapreel, under contracts that let them use your information only to provide their service to us:\n\n- **Supabase** – our database, sign-in and video storage (United States).\n- **Vercel** – hosts snapreel.video and its servers (United States and worldwide).\n- **Resend** – sends our emails, such as sign-in codes and alerts about viewers and comments.\n- **Apple** – Sign in with Apple, push notifications and App Store payments.\n\nSome of them process information outside the UK, under safeguards such as the UK's International Data Transfer Agreement or Standard Contractual Clauses.\n\n## Permissions\n\nSnapreel asks for a permission only when a feature needs it. You can change your answer at any time in the Settings app.\n\n- **Camera** – to record camera videos.\n- **Microphone** – to record your voice with a recording.\n- **Photos (add only)** – to save recordings you choose to your Photos library. When you import a video, you pick it in Apple's photo picker, which gives Snapreel only that video.\n- **Speech recognition** – to make transcripts. Snapreel only uses recognition that runs on your iPhone; your audio is never sent anywhere to be transcribed.\n- **Notifications** – to tell you when a recording is saved, a transcript is ready, space is running low, or someone watched or commented on one of your links.\n\nScreen recording uses the broadcast feature built into iOS. You start and stop it yourself, and the recording is written straight into Snapreel's storage on your iPhone.\n\n## The Lock Screen card\n\nWhile you record your screen, Snapreel shows a card with the time on your Lock Screen. When a screen recording ends while Snapreel is in the background, Snapreel sends our server the card's push code (a random code Apple makes for that one card) and how long the recording ran, so Apple's push service can stop the card. The server passes them on and keeps nothing. Nothing about your recording is sent.\n\n## Why we use your information\n\nWe use your information to provide Snapreel: to sign you in, host and show the recordings you share, count views, deliver comments and alerts, provide Snapreel Pro, keep the service secure and prevent abuse, and answer you when you contact us. Our legal bases are performing our agreement with you (the terms of use), our legitimate interest in keeping Snapreel safe and working, and our legal obligations.\n\n## How long we keep it\n\n<!-- DRAFT for owner review: confirm the log and support-email retention periods below. -->\n\n- Shared recordings, their views, comments and reactions: until you stop sharing the link, it expires, or you delete your account.\n- Your account and plan: until you delete your account. Records we must keep for tax or accounting are kept for as long as the law requires.\n- Server logs, which include internet addresses: up to 30 days.\n- Emails to support: until your question is resolved, and then for up to a year.\n\n## Your choices and rights\n\n- Stop sharing any link in its **Link settings**. Its video, views and comments are deleted from snapreel.video.\n- Turn alerts about viewers and comments off in **Settings › Notifications**.\n- Delete your account in **Settings › Account › Delete account**. This deletes your links and everything on snapreel.video, your sign-in, and revokes Sign in with Apple. It doesn't cancel an App Store subscription: cancel that in the Settings app › your name › Subscriptions.\n- **Settings › Storage › Delete all my data** removes everything Snapreel keeps on your iPhone.\n\nYou can also ask us for a copy of your information, to correct it, or to delete it, and you can complain to the Information Commissioner's Office (ico.org.uk) or your local data protection authority.\n\n## Children\n\nYou must be 13 or older to create a Snapreel account. We don't knowingly collect information from children under 13; if you think a child has given us information, write to us and we'll delete it.\n\n<!-- DRAFT for owner review: confirm 13 as the minimum age, or the age that applies in each country. -->\n\n## Reporting a video\n\nAnyone can report a shared video from its watch page, or by writing to [support@snapreel.video](mailto:support@snapreel.video). We review reports and remove videos that break our terms.\n\n## Changes\n\nIf this policy changes, we'll update the date at the top, and tell you in the app or by email if the change matters.\n\n## Contact\n\nArclayer Ltd, [support@snapreel.video](mailto:support@snapreel.video)\n";
 
-export const termsSnapshot = "> **DRAFT for owner review.** Not legal advice. The same text ships in the app at\n> `Snapreel/Features/Legal/legal-terms.md`; keep the two in step. Before publishing, the owner should\n> confirm or add: Arclayer Ltd's registered address and company number, the governing law and\n> courts, and the minimum age.\n\n# Terms of use\n\nLast updated: 20 November 2026\n\nThese terms cover your use of Snapreel, an iPhone app made by Arclayer Ltd (\"we\", \"us\"). By using Snapreel you agree to them. If you don't agree, please don't use the app.\n\n## The short version\n\n- Snapreel works on your iPhone. There's no account, and the only online service behind it stops the Lock Screen card when a screen recording ends.\n- What you record belongs to you, and so does the responsibility for it.\n- Snapreel is provided as it is, so keep copies of anything important.\n\n## Using Snapreel\n\nWe give you a personal, non-exclusive, non-transferable licence to use Snapreel on Apple devices you own or control, as the App Store's rules allow. You may not copy, modify, reverse engineer, resell or redistribute the app, except where the law gives you that right.\n\nIf you got Snapreel from the App Store, Apple's Licensed Application End User License Agreement also applies. Where it conflicts with these terms, Apple's agreement wins on that point.\n\n## Your recordings\n\nEverything you make with Snapreel is yours. We never receive your recordings, notes, transcripts or anything else you create: they stay on your device unless you send them somewhere yourself.\n\nYou're responsible for what you record and share. In particular:\n\n- Get permission before recording other people, and follow the laws where you are about recording conversations and calls.\n- Don't record or share material you don't have the right to, such as films, music or other people's private information.\n- Don't use Snapreel to break the law or to harm anyone.\n\n## Sharing\n\nWhen you share a recording, it goes to the app or person you choose, for example through AirDrop, Messages or Mail. Those services have their own terms, and we have no control over what happens to a recording once you've sent it.\n\n## Your data and backups\n\nYour recordings live only on your device. If you delete a recording, use **Delete all my data**, or delete Snapreel, what you removed is gone from Snapreel and we can't get it back. Backups you make of your device with iCloud or a computer may include Snapreel's data and are covered by Apple's terms.\n\n## Features provided by iOS\n\nSnapreel relies on features built into iOS, such as screen recording, speech recognition and, on supported iPhones, Apple Intelligence. What they can do depends on your iPhone, its settings and your language, and some may not be available on every device.\n\n## Changes and availability\n\nWe may update Snapreel, change or remove features, or stop offering it. When these terms change, we'll update the date at the top. Using Snapreel after a change means you accept the updated terms.\n\n## No warranty\n\nSnapreel is provided \"as is\" and \"as available\". As far as the law allows, we don't promise that it will be free of errors, work without interruption, or never lose a recording. Please keep copies of anything that matters to you, for example by saving it to Photos or sending it elsewhere.\n\n## Limits on our liability\n\nAs far as the law allows, Arclayer Ltd isn't liable for indirect or consequential loss, or for loss of data, arising from your use of Snapreel. Our total liability for any claim is limited to the amount you paid for the app, if anything.\n\nNothing in these terms limits any liability that can't be limited by law, or takes away your rights as a consumer.\n\n## Ending these terms\n\nYou can stop using Snapreel at any time by deleting it. These terms end automatically if you break them, and you must then stop using the app.\n\n## Contact\n\nQuestions about these terms? Write to [support@snapreel.video](mailto:support@snapreel.video).\n";
+export const termsSnapshot = "> **DRAFT for owner review.** Not legal advice. The same text ships in the app at\n> `Snapreel/Features/Legal/legal-terms.md`; keep the two in step. Before publishing, the owner should\n> confirm or add: Arclayer Ltd's registered address and company number, the governing law and\n> courts, the minimum age, and the retention periods. The `<!-- DRAFT -->` comments mark each place.\n> Updated 20 November 2026 for accounts, share links on snapreel.video and Snapreel Pro.\n\n# Terms of use\n\nLast updated: 20 November 2026\n\nThese terms cover your use of Snapreel, the iPhone app and the website at snapreel.video, made by Arclayer Ltd (\"we\", \"us\"). By using Snapreel you agree to them. If you don't agree, please don't use it. They are also the end user licence agreement (EULA) for the app.\n\n<!-- DRAFT for owner review: add Arclayer Ltd's registered address and company number, the governing law and courts, and confirm the minimum age (13 below). -->\n\n## The short version\n\n- Recording, your library and sending files work on your iPhone without an account, free.\n- Share links need an account. Snapreel Pro, a paid subscription sold through the App Store, adds more.\n- What you record belongs to you, and so does the responsibility for it. Don't share anything illegal or harmful.\n- Snapreel is provided as it is, so keep copies of anything important.\n\n## Using Snapreel\n\nWe give you a personal, non-exclusive, non-transferable licence to use the Snapreel app on Apple devices you own or control, as the App Store's rules allow. You may not copy, modify, reverse engineer, resell or redistribute the app, except where the law gives you that right.\n\nIf you got Snapreel from the App Store, Apple's Licensed Application End User License Agreement also applies. Where it conflicts with these terms, Apple's agreement wins on that point. Apple isn't responsible for Snapreel or its support.\n\n## Your account\n\nYou need an account to share recordings as links and to subscribe to Snapreel Pro. You must be 13 or older to create one. Keep access to your Apple ID or email account safe: anyone who can sign in as you can manage your links. You can delete your account at any time in **Settings › Account › Delete account**.\n\n## Your recordings and share links\n\nEverything you make with Snapreel is yours. Recordings stay on your device unless you send them somewhere or share them as a link.\n\nWhen you share a recording as a link, you give us a licence to store it, make web copies of it, and show it to the people who open the link, for as long as you share it. This licence ends when you stop sharing the link or delete your account, apart from copies in backups, which we delete in the normal course.\n\nAnyone with a link can watch the recording and, if you allow them, comment, react and download it. You decide who gets your links, and you can stop sharing a link at any time.\n\n## Acceptable use\n\nYou're responsible for what you record and share, and for the comments you leave. Don't use Snapreel to record, share or post anything that:\n\n- breaks the law, or that you don't have the right to share, such as films, music or someone else's work\n- records people without their permission where the law requires it, or shares their private information\n- is sexual content involving minors, or exploits or endangers children in any way\n- harasses, threatens, bullies or incites hatred or violence against anyone\n- is sexually explicit, or glorifies self-harm\n- is spam, malware, phishing or a scam\n- tries to break, overload or get around the security or limits of snapreel.video\n\nWe may remove a video or comment, or suspend or close an account, that breaks these rules, and we may report illegal content to the authorities.\n\n## Comments and viewers\n\nPeople who watch your links can comment and react if you allow it. Their comments belong to them, and they're responsible for them. You can delete any comment on your videos and block the viewer who wrote it from all your videos. Viewers can report a video to us from its watch page.\n\n## Reporting content and takedowns\n\nIf you think a video or comment on snapreel.video breaks these terms or the law, or infringes your copyright, report it from the watch page or write to [support@snapreel.video](mailto:support@snapreel.video) with the link and why. We review reports promptly and remove content that breaks these terms. If we remove your content, we'll tell you why when we can, and you can reply to the same address if you think we got it wrong.\n\n## Snapreel Pro\n\nSnapreel Pro is an auto-renewing subscription, monthly or yearly, sold by Apple through the App Store. The price, the length of any free trial, and what each plan includes are shown before you buy.\n\n- Payment is charged to your Apple Account when you confirm the purchase, or when a free trial ends.\n- The subscription renews automatically at the same price and for the same period unless you cancel at least 24 hours before the current period ends.\n- Manage or cancel it in the Settings app › your name › Subscriptions. If you cancel, Pro continues until the end of the period you've paid for.\n- Refunds are handled by Apple under its policies, at reportaproblem.apple.com.\n- Deleting your Snapreel account doesn't cancel the subscription.\n\nIf you go back to the free plan, links over the free plan's limits may stop being shareable until you upgrade again or stop sharing others; we won't delete them without telling you first. We may change prices or what Pro includes; Apple will tell you before a price change applies to you.\n\n## Features provided by iOS\n\nSnapreel relies on features built into iOS, such as screen recording, speech recognition and, on supported iPhones, Apple Intelligence. What they can do depends on your iPhone, its settings and your language, and some may not be available on every device.\n\n## Changes and availability\n\nWe may update Snapreel, change or remove features, or stop offering it. If we stop offering share links, we'll give you reasonable notice so you can keep copies. When these terms change, we'll update the date at the top, and tell you if the change matters. Using Snapreel after a change means you accept the updated terms.\n\n## No warranty\n\nSnapreel is provided \"as is\" and \"as available\". As far as the law allows, we don't promise that it will be free of errors, work without interruption, or never lose a recording or a link. Please keep copies of anything that matters to you, for example by saving it to Photos.\n\n## Limits on our liability\n\nAs far as the law allows, Arclayer Ltd isn't liable for indirect or consequential loss, or for loss of data, arising from your use of Snapreel. Our total liability for any claim is limited to the amount you paid us for Snapreel in the 12 months before the claim.\n\nNothing in these terms limits any liability that can't be limited by law, or takes away your rights as a consumer.\n\n## Ending these terms\n\nYou can stop using Snapreel at any time by deleting your account and the app. We may suspend or close your account if you seriously or repeatedly break these terms. These terms then end, except the parts meant to continue (such as the limits on liability).\n\n<!-- DRAFT for owner review: add the governing law and courts here. -->\n\n## Contact\n\nQuestions about these terms? Write to [support@snapreel.video](mailto:support@snapreel.video).\n";
