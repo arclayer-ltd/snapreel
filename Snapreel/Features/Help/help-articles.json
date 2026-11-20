@@ -7,6 +7,7 @@
     { "id": "watching", "title": "Watching", "systemImage": "play.rectangle.fill" },
     { "id": "notes", "title": "Notes and reactions", "systemImage": "text.bubble.fill" },
     { "id": "sharing", "title": "Sharing and saving", "systemImage": "square.and.arrow.up.fill" },
+    { "id": "links", "title": "Share links and Pro", "systemImage": "link" },
     { "id": "privacy", "title": "Privacy and storage", "systemImage": "lock.fill" },
     { "id": "trouble", "title": "Troubleshooting", "systemImage": "wrench.and.screwdriver.fill" }
   ],
@@ -24,10 +25,10 @@
           "**Camera** – you, or whatever is in front of you, with the front or back camera.",
           "**Audio** – just your voice, with a live waveform while you talk."
         ] },
-        { "type": "heading", "text": "No account, nothing to sign in to" },
-        { "type": "paragraph", "text": "Your recordings, notes and transcripts are kept on this iPhone. When you want someone to see a recording, you send the video file itself, the same way you'd send a photo." }
+        { "type": "heading", "text": "No account needed" },
+        { "type": "paragraph", "text": "Recording, your library, transcripts and sending files all work without an account, and your recordings are kept on this iPhone. You only sign in when you want to share a recording as a link that plays in any browser." }
       ],
-      "related": ["first-recording", "find-your-way", "privacy"]
+      "related": ["first-recording", "share-links", "privacy"]
     },
     {
       "id": "first-recording",
@@ -328,7 +329,7 @@
         { "type": "paragraph", "text": "You're sending the video file itself, so whoever gets it can watch it without Snapreel." },
         { "type": "tip", "text": "Long recordings make big files. AirDrop is quickest for those, and some email services won't accept large attachments." }
       ],
-      "related": ["save-to-photos", "storage"]
+      "related": ["save-to-photos", "storage", "share-links"]
     },
     {
       "id": "save-to-photos",
@@ -347,17 +348,18 @@
       "id": "privacy",
       "category": "privacy",
       "title": "Where your recordings are kept",
-      "summary": "On this iPhone, and nowhere else unless you send them.",
+      "summary": "On this iPhone, plus snapreel.video for the recordings you share as links.",
       "body": [
-        { "type": "paragraph", "text": "Snapreel has no account and no servers. Recordings, titles, folders, tags, notes, reactions and transcripts are kept in Snapreel's own space on this iPhone, protected by iOS." },
+        { "type": "paragraph", "text": "Recordings, titles, folders, tags, notes, reactions and transcripts are kept in Snapreel's own space on this iPhone, protected by iOS. Nothing is uploaded until you tap **Copy link**." },
         { "type": "bullets", "items": [
-          "Nothing is uploaded, and Snapreel collects no analytics.",
+          "A recording you share as a link is uploaded to snapreel.video with its title and transcript, and stays there until you stop sharing it or delete your account.",
+          "Snapreel shows no ads and collects no analytics about you. Viewers of your links are counted with an anonymous cookie on the watch page, never across other sites.",
           "Transcripts are made on the device.",
           "If you back up your iPhone to iCloud or a computer, Snapreel's data is part of that backup."
         ] },
-        { "type": "paragraph", "text": "Deleting Snapreel deletes everything in it, so save or send anything you want to keep first." }
+        { "type": "paragraph", "text": "Deleting Snapreel deletes everything on this iPhone, but not your share links: stop sharing them, or delete your account, to remove them from snapreel.video." }
       ],
-      "related": ["permissions", "storage"]
+      "related": ["permissions", "storage", "delete-account"]
     },
     {
       "id": "storage",
@@ -466,6 +468,120 @@
         { "type": "paragraph", "text": "Everything Snapreel tells you also appears in the **Notifications** tab, even when alerts are off." }
       ],
       "related": ["permissions", "screen-stop"]
+    },
+    {
+      "id": "share-links",
+      "category": "links",
+      "title": "Share a recording as a link",
+      "summary": "Copy a link that plays in any browser, no app or account needed to watch.",
+      "useCases": ["work", "school", "personal"],
+      "body": [
+        { "type": "steps", "items": [
+          "Open a recording, or finish one, and tap **Copy link** (the link button next to Share). It's also in a recording's actions in your Library.",
+          "The first time, sign in with Apple or with a code sent to your email.",
+          "The link is on your clipboard straight away. Paste it into Messages, Mail, Slack or anywhere else.",
+          "Snapreel uploads the video in the background. Until it's done, the watch page says it's uploading; then it plays."
+        ] },
+        { "type": "paragraph", "text": "Uploads carry on when you leave Snapreel, and pick up where they stopped if you lose your connection. You can see them in **Settings › Account › Shared links**." },
+        { "type": "tip", "text": "Pasted into Mail, the link shows a picture of the recording with a play button, so it looks like a video." },
+        { "type": "heading", "text": "What viewers see" },
+        { "type": "paragraph", "text": "Anyone with the link can watch in a browser, with your title, the transcript as captions, and a place to comment and react. Links aren't listed or searchable." }
+      ],
+      "related": ["link-settings", "link-insights", "snapreel-pro"]
+    },
+    {
+      "id": "link-settings",
+      "category": "links",
+      "title": "Passwords, expiry and comments",
+      "summary": "Decide who can watch a link, for how long, and what they can do.",
+      "body": [
+        { "type": "paragraph", "text": "Open a shared recording, tap **…** then **Link settings**. You can also tap the link in **Settings › Account › Shared links**." },
+        { "type": "bullets", "items": [
+          "**Comments and reactions** – on or off, on every plan.",
+          "**Password** – viewers type it once before watching. Snapreel Pro.",
+          "**Expiry** – the link stops working after a day, a week or 30 days. Snapreel Pro.",
+          "**Downloads** – let viewers save the video. Snapreel Pro.",
+          "**Call to action** – a button under the video, such as “Book a call”. Snapreel Pro."
+        ] },
+        { "type": "heading", "text": "Stop sharing" },
+        { "type": "paragraph", "text": "**Stop sharing** at the bottom of Link settings deletes the link, its video, views and comments from snapreel.video. The recording stays on this iPhone, and you can share it again later with a new link." }
+      ],
+      "related": ["share-links", "snapreel-pro"]
+    },
+    {
+      "id": "link-insights",
+      "category": "links",
+      "title": "See who watched, and their comments",
+      "summary": "Views, viewers, comments and reactions on your links.",
+      "body": [
+        { "type": "paragraph", "text": "A shared recording says **Shared · 12 views** in your Library and in the player. Open it and tap **Stats** for its numbers, or the **Comments** tab for what viewers wrote." },
+        { "type": "bullets", "items": [
+          "A view counts once someone watches 5 seconds, three-quarters of the video, or the end. Your own views don't count.",
+          "Unique viewers are counted by browser, with an anonymous cookie. Viewers who don't give a name show as Anonymous.",
+          "With Snapreel Pro you also see each viewer, how far they got, a chart of where people stopped, and their countries."
+        ] },
+        { "type": "heading", "text": "Delete a comment or block a viewer" },
+        { "type": "paragraph", "text": "Tap **…** on a comment. **Delete comment** removes it; **Delete and block** also stops that viewer commenting or reacting on any of your videos." },
+        { "type": "tip", "text": "Viewers' reactions appear on the player's timeline in small rings, so you can tell them from your own." }
+      ],
+      "related": ["share-links", "link-settings"]
+    },
+    {
+      "id": "snapreel-pro",
+      "category": "links",
+      "title": "Snapreel Pro",
+      "summary": "Unlimited links, longer videos and full insights. Everything else stays free.",
+      "body": [
+        { "type": "paragraph", "text": "Recording, your library, transcripts and sending files are free for everyone, for good. Snapreel Pro is only about share links." },
+        { "type": "bullets", "items": [
+          "**Free** – 25 links at a time, each up to 5 minutes, at 720p, with views, comments and reactions.",
+          "**Pro** – unlimited links up to 2 hours at 1080p, who watched and how far, passwords, expiry, downloads, a call-to-action button, and no Snapreel badge."
+        ] },
+        { "type": "paragraph", "text": "Pro is $5.99 a month, or $39.99 a year with a free week first (prices vary by country). Subscribe in **Settings › Snapreel Pro**. It renews automatically until you cancel." },
+        { "type": "heading", "text": "Cancel, restore or get a refund" },
+        { "type": "steps", "items": [
+          "To cancel, open the **Settings** app, tap your name, then **Subscriptions › Snapreel**. You keep Pro until the end of the period you've paid for.",
+          "On a new iPhone, tap **Restore Purchases** on the Snapreel Pro screen.",
+          "Apple handles payments, so refunds are requested from Apple at reportaproblem.apple.com."
+        ] }
+      ],
+      "related": ["share-links", "delete-account"]
+    },
+    {
+      "id": "delete-account",
+      "category": "links",
+      "title": "Sign out or delete your account",
+      "summary": "What happens to your links, and to your subscription.",
+      "body": [
+        { "type": "paragraph", "text": "Go to **Settings › Account**." },
+        { "type": "bullets", "items": [
+          "**Sign out** – your links keep working and your recordings stay on this iPhone. Sign in again to see their views and comments.",
+          "**Delete account** – your share links stop working, and their videos, views, comments and reactions are deleted from snapreel.video, with your email address and sign-in. If you used Sign in with Apple, Snapreel's access to it is revoked."
+        ] },
+        { "type": "paragraph", "text": "Recordings on this iPhone are not touched. To remove them too, use **Settings › Storage › Delete all my data**." },
+        { "type": "tip", "text": "Deleting your account doesn't cancel Snapreel Pro, because Apple bills it. Cancel it first in the Settings app › your name › Subscriptions." }
+      ],
+      "related": ["snapreel-pro", "privacy"]
+    },
+    {
+      "id": "upload-stopped",
+      "category": "trouble",
+      "title": "A link's upload stopped",
+      "summary": "Why an upload pauses, and how to get it going again.",
+      "body": [
+        { "type": "paragraph", "text": "Uploads wait by themselves while you're offline and carry on when you're back. If one stops for good, Snapreel tells you and the recording shows **Upload stopped**." },
+        { "type": "steps", "items": [
+          "Open **Settings › Account › Shared links**.",
+          "Tap **Try again** next to the upload.",
+          "Keep Snapreel open for a moment on Wi-Fi if the video is long."
+        ] },
+        { "type": "bullets", "items": [
+          "Free links take recordings up to 5 minutes; longer ones need Snapreel Pro.",
+          "A link can hold up to 2 GB.",
+          "If the recording was deleted from this iPhone before the upload finished, it can't be sent again."
+        ] }
+      ],
+      "related": ["share-links", "snapreel-pro"]
     }
   ]
 }

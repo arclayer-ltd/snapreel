@@ -328,8 +328,8 @@ struct BroadcastStepView: View {
                                 : "Leave Microphone off in the next sheet to record screen and app sound only.")
                 if DiskSpace.hasRoom(for: 300_000_000) {
                     BroadcastPoint(systemImage: "lock.fill",
-                                   title: "Stays on this iPhone",
-                                   message: "Nothing is uploaded. You decide who gets the file.")
+                                   title: "Saved on this iPhone",
+                                   message: "Nothing is uploaded unless you copy a link. You decide who sees it.")
                 } else {
                     BroadcastPoint(systemImage: "externaldrive.fill.badge.exclamationmark",
                                    title: "Your iPhone is almost full",

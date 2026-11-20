@@ -70,6 +70,9 @@ struct NotificationRow: View {
         switch item.kind {
         case .needsTitle: return video?.needsTitle == true ? "Add a title" : nil
         case .storageLow: return "See storage"
+        case .newComment: return video == nil ? nil : "See comments"
+        case .uploadFailed: return "Try again"
+        case .newViewer, .uploadFinished: return nil
         case .recordingSaved, .importFinished, .transcriptReady:
             if let video, !video.state.isReady { return "Still saving" }
             return nil

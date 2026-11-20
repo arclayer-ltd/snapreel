@@ -66,7 +66,7 @@ struct LibraryView: View {
         if videos.isEmpty {
             EmptyStateView(character: .emptyLibrary,
                            title: "Your library is ready",
-                           message: "Record your screen, your camera or just your voice. Everything you make lands here and stays on this iPhone.",
+                           message: "Record your screen, your camera or just your voice. Everything you make lands here, on this iPhone.",
                            actionTitle: "Start a recording",
                            action: { router.record() })
                 .padding(.top, Space.l)

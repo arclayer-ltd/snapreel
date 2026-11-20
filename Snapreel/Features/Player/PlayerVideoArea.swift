@@ -30,6 +30,8 @@ struct PlayerVideoArea: View {
     let showsPictureInPicturePlaceholder: Bool
     let rate: Double
     let actions: PlayerVideoActions
+    /// Viewers' reactions on the share link, marked apart from yours on the timeline.
+    var viewerReactions: [CloudReaction] = []
 
     private var duration: Double { video.duration > 0 ? video.duration : session.itemDuration }
     private var isLoadedHere: Bool { session.videoID == video.id }
@@ -123,11 +125,13 @@ struct PlayerVideoArea: View {
         if !canPlay || showsPictureInPicturePlaceholder {
             PlayerControlsOverlay(session: session, mode: .minimal, reactions: reactions, duration: duration,
                                   isFullscreen: isFullscreen, isAudio: video.isAudioOnly, insets: controlInsets,
-                                  rate: rate, overlay: $overlay, actions: actions)
+                                  rate: rate, overlay: $overlay, actions: actions,
+                                  viewerReactions: viewerReactions)
         } else if controlsVisible || overlay == .speed {
             PlayerControlsOverlay(session: session, mode: .full, reactions: reactions, duration: duration,
                                   isFullscreen: isFullscreen, isAudio: video.isAudioOnly, insets: controlInsets,
-                                  rate: rate, overlay: $overlay, actions: actions)
+                                  rate: rate, overlay: $overlay, actions: actions,
+                                  viewerReactions: viewerReactions)
                 .transition(.opacity)
         } else {
             PlayerProgressLine(clock: session.clock, duration: duration, onPicture: !video.isAudioOnly)
@@ -181,6 +185,7 @@ struct PlayerControlsOverlay: View {
     let rate: Double
     @Binding var overlay: PlayerOverlay?
     let actions: PlayerVideoActions
+    var viewerReactions: [CloudReaction] = []
 
     /// Full controls over a video: scrims, glass buttons, white text. An audio recording's
     /// panel (and `.minimal`) has no picture, so the controls take the stage colours instead.
@@ -315,7 +320,8 @@ struct PlayerControlsOverlay: View {
                        onSeek: {
                            session.seek(to: $0)
                            actions.interacted()
-                       })
+                       },
+                       viewerReactions: viewerReactions)
             .padding(.horizontal, Space.m)
             .padding(.bottom, Space.xs)
     }
@@ -357,6 +363,8 @@ struct PlayerScrubber: View {
     let onScrub: @MainActor (Double) -> Void
     let onEnd: @MainActor (Double) -> Void
     let onSeek: @MainActor (Double) -> Void
+    /// Viewers' reactions on the share link: a small disc with a ring, where yours are bare.
+    var viewerReactions: [CloudReaction] = []
 
     @State private var dragFraction: Double?
 
@@ -413,6 +421,27 @@ struct PlayerScrubber: View {
         .frame(width: width)
     }
 
+    /// Viewers' reactions sit on the line itself in small ringed discs, apart from your own
+    /// above it. They don't take touches, so scrubbing works across them; the Comments tab
+    /// lists them.
+    private func viewerMarkers(width: CGFloat) -> some View {
+        ZStack(alignment: .topLeading) {
+            Color.clear
+            ForEach(viewerReactions) { reaction in
+                Text(reaction.emoji)
+                    .font(.system(size: 9))
+                    .frame(width: 17, height: 17)
+                    .background(Circle().fill(onPicture ? Color.white.opacity(0.9) : ViewerMarkerStyle.fill))
+                    .overlay(Circle().strokeBorder(onPicture ? Color.srRed.opacity(0.9) : ViewerMarkerStyle.ring,
+                                                   lineWidth: 1.2))
+                    .position(x: xPosition(reaction.atS, width: width), y: 13)
+            }
+        }
+        .frame(width: width, height: 26)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+
     private func track(width: CGFloat) -> some View {
         let dragging = dragFraction != nil
         let lineHeight: CGFloat = dragging ? 5 : 3
@@ -425,6 +454,7 @@ struct PlayerScrubber: View {
             Capsule()
                 .fill(Color.srRed)
                 .frame(width: max(0, filled), height: lineHeight)
+            viewerMarkers(width: width)
             Circle()
                 .fill(Color.srRed)
                 .frame(width: thumb, height: thumb)

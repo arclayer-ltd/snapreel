@@ -254,6 +254,10 @@ struct NotificationsView: View {
             return
         }
         guard let id = item.videoID else { return }
+        if item.kind.isAboutLinks {
+            openLinkNews(item, videoID: id)
+            return
+        }
         guard let video = library.video(id) else {
             router.showToast("That recording is no longer on this iPhone", systemImage: "exclamationmark.circle.fill")
             return
@@ -265,6 +269,23 @@ struct NotificationsView: View {
         } else {
             // Still saving or failed: the library shows its progress and the retry button.
             router.select(.library)
+        }
+    }
+
+    /// Viewers, comments and uploads: the recording (on its comments for a comment), the
+    /// share-link sheet for a stopped upload, or the dashboard when the recording isn't here.
+    private func openLinkNews(_ item: AppNotification, videoID: UUID) {
+        if item.kind == .uploadFailed {
+            ShareLinks.shared.retry(videoID)
+            ProPresenter.shareLink(videoID)
+            return
+        }
+        if let video = library.video(videoID), video.state.isReady {
+            router.open(videoID: videoID, opensComments: item.kind == .newComment)
+        } else if let link = library.link(for: videoID) {
+            ShareLinks.shared.open(link)
+        } else {
+            router.showToast("That recording is no longer on this iPhone", systemImage: "exclamationmark.circle.fill")
         }
     }
 
@@ -327,6 +348,7 @@ struct NotificationsView: View {
 enum FeedFilter: String, CaseIterable, Identifiable {
     case all
     case recordings
+    case links
     case transcripts
 
     var id: String { rawValue }
@@ -335,6 +357,7 @@ enum FeedFilter: String, CaseIterable, Identifiable {
         switch self {
         case .all: return "All"
         case .recordings: return "Recordings"
+        case .links: return "Links"
         case .transcripts: return "Transcripts"
         }
     }
@@ -343,6 +366,7 @@ enum FeedFilter: String, CaseIterable, Identifiable {
         switch self {
         case .all: return true
         case .recordings: return kind == .recordingSaved || kind == .needsTitle || kind == .importFinished
+        case .links: return kind.isAboutLinks
         case .transcripts: return kind == .transcriptReady
         }
     }
@@ -351,6 +375,7 @@ enum FeedFilter: String, CaseIterable, Identifiable {
         switch self {
         case .all: return "bell"
         case .recordings: return "video.badge.checkmark"
+        case .links: return "link"
         case .transcripts: return "text.quote"
         }
     }
@@ -359,6 +384,7 @@ enum FeedFilter: String, CaseIterable, Identifiable {
         switch self {
         case .all: return "Nothing new"
         case .recordings: return "No recording updates"
+        case .links: return "No link news yet"
         case .transcripts: return "No transcripts yet"
         }
     }
@@ -367,6 +393,7 @@ enum FeedFilter: String, CaseIterable, Identifiable {
         switch self {
         case .all: return "We'll let you know when a recording is saved or a transcript is ready."
         case .recordings: return "Saved recordings, titles to add and finished imports show up here."
+        case .links: return "Viewers, comments and finished uploads on your share links show up here."
         case .transcripts: return "When a recording's transcript is ready to read and search, it shows up here."
         }
     }

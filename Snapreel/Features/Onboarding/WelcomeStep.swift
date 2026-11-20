@@ -1,17 +1,20 @@
 import SwiftUI
 
 /// First screen on a new install: the five characters walking together, the name, the promise
-/// and one way forward. There is nothing to sign in to.
+/// and one way forward. Nothing needs an account; "I already have an account" signs in for
+/// share links.
 struct WelcomeStep: View {
     let onStart: @MainActor () -> Void
+    var onSignIn: (@MainActor () -> Void)? = nil
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dynamicTypeSize) private var typeSize
     @Environment(\.colorScheme) private var colorScheme
     @State private var appeared = false
 
-    init(onStart: @escaping @MainActor () -> Void) {
+    init(onStart: @escaping @MainActor () -> Void, onSignIn: (@MainActor () -> Void)? = nil) {
         self.onStart = onStart
+        self.onSignIn = onSignIn
     }
 
     var body: some View {
@@ -77,11 +80,21 @@ struct WelcomeStep: View {
                 onStart()
             }
             .buttonStyle(.srPrimary)
+            if let onSignIn {
+                Button("I already have an account") {
+                    Haptics.tap()
+                    onSignIn()
+                }
+                .font(.srSubheadlineStrong)
+                .foregroundStyle(Color.srRedText)
+            }
             HStack(spacing: 6) {
                 Image(systemName: "lock.fill")
                     .font(.system(size: 11, weight: .semibold))
-                Text("No account. Everything stays on this iPhone.")
+                Text("Nothing leaves this iPhone unless you share it.")
                     .font(.srFootnote)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
             }
             .foregroundStyle(Color.srTextTertiary)
             .accessibilityElement(children: .combine)

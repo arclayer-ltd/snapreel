@@ -12,6 +12,9 @@ final class Library: ObservableObject {
     @Published private(set) var reactions: [VideoReaction] = []
     @Published private(set) var transcripts: [UUID: Transcript] = [:]
     @Published private(set) var notifications: [AppNotification] = []
+    /// Share links on snapreel.video, by recording id (`CloudLink`). A link outlives its
+    /// recording on this iPhone: deleting the recording here leaves the link working.
+    @Published private(set) var links: [UUID: CloudLink] = [:]
     /// Last storage error in plain language, for a banner. Cleared by the view that shows it.
     @Published var lastError: String?
 
@@ -33,6 +36,8 @@ final class Library: ObservableObject {
             let loadedTranscripts = try storage.all(Transcript.self)
             transcripts = Dictionary(loadedTranscripts.map { ($0.videoID, $0) }, uniquingKeysWith: { a, _ in a })
             notifications = try storage.all(AppNotification.self)
+            let loadedLinks = try storage.all(CloudLink.self)
+            links = Dictionary(loadedLinks.map { ($0.videoID, $0) }, uniquingKeysWith: { a, _ in a })
         } catch {
             lastError = error.localizedDescription
         }
@@ -286,6 +291,34 @@ final class Library: ObservableObject {
         remove(AppNotification.self, id: id.uuidString)
     }
 
+    // MARK: - Share links
+
+    func link(for videoID: UUID) -> CloudLink? { links[videoID] }
+
+    /// Links newest first.
+    var sortedLinks: [CloudLink] { links.values.sorted { $0.createdAt > $1.createdAt } }
+
+    func saveLink(_ link: CloudLink) {
+        links[link.videoID] = link
+        persist(link)
+    }
+
+    func updateLink(_ videoID: UUID, _ change: (inout CloudLink) -> Void) {
+        guard var link = links[videoID] else { return }
+        change(&link)
+        saveLink(link)
+    }
+
+    func removeLink(_ videoID: UUID) {
+        guard links.removeValue(forKey: videoID) != nil else { return }
+        remove(CloudLink.self, id: videoID.uuidString)
+    }
+
+    /// After signing out or deleting the account: this iPhone forgets every link.
+    func removeAllLinks() {
+        for id in Array(links.keys) { removeLink(id) }
+    }
+
     // MARK: - Everything
 
     /// Settings › Storage › Delete all my data. Removes every recording, folder, note,
@@ -302,6 +335,8 @@ final class Library: ObservableObject {
         reactions = []
         transcripts = [:]
         notifications = []
+        // The links keep working on snapreel.video; ShareLinks.refresh() lists them again.
+        links = [:]
         ThumbnailCache.shared.removeAll()
     }
 

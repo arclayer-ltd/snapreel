@@ -74,6 +74,8 @@ final class AppSettings: ObservableObject {
     func setNotification(_ kind: NotificationKind, enabled: Bool) {
         notificationToggles[kind] = enabled
         defaults.set(enabled, forKey: kind.defaultsKey)
+        // Viewer and comment alerts are pushes: both off stops them reaching this iPhone.
+        if kind == .newViewer || kind == .newComment { PushService.shared.syncRegistration() }
     }
 
     /// Binding for a toggle row.

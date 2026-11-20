@@ -22,7 +22,7 @@ struct IntroSlide: Identifiable {
                    message: "Sort recordings into folders, add tags and pin notes to the exact moment. Search even finds the words you said."),
         IntroSlide(index: 2, clip: .introSend, kicker: "Send", symbol: "paperplane",
                    title: "Send it ", accent: "your way",
-                   message: "AirDrop it, message it, mail it or save it to Photos. It's a real video file, so it plays anywhere."),
+                   message: "Copy a link that plays in any browser and see who watched, or AirDrop, message or mail the video file itself."),
     ]
 }
 

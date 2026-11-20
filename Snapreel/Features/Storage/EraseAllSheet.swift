@@ -66,7 +66,7 @@ struct EraseAllSheet: View {
                     Text("Delete all your data?")
                         .font(.srDisplay)
                         .foregroundStyle(Color.srText)
-                    Text("Everything below is removed from this iPhone. It can't be undone, and Snapreel keeps no copy anywhere else.")
+                    Text("Everything below is removed from this iPhone. It can't be undone, and Snapreel keeps no copy anywhere else, apart from recordings you've shared as links.")
                         .font(.srSubheadline)
                         .foregroundStyle(Color.srTextSecondary)
                 }
@@ -138,7 +138,7 @@ struct EraseAllSheet: View {
                 Text("What stays")
                     .font(.srSubheadlineStrong)
                     .foregroundStyle(Color.srText)
-                Text("Your settings: which alerts you get, recording defaults and playback speed. Videos you already saved to Photos or sent to someone stay where they are.")
+                Text("Your settings: which alerts you get, recording defaults and playback speed. Videos you already saved to Photos or sent to someone stay where they are. Share links keep working; stop sharing them, or delete your account, to remove them from snapreel.video.")
                     .font(.srFootnote)
                     .foregroundStyle(Color.srTextSecondary)
                     .fixedSize(horizontal: false, vertical: true)

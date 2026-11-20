@@ -30,6 +30,7 @@ enum LibraryVideoSheet: Identifiable, Equatable {
 /// What the actions sheet asks the host to do.
 enum LibraryVideoAction {
     case share
+    case copyLink
     case saveToPhotos
     case watchLater
     case rename
@@ -52,6 +53,7 @@ final class LibraryActionsModel: ObservableObject {
     private enum FollowUp {
         case sheet(LibraryVideoSheet)
         case share(Video)
+        case copyLink(UUID)
         case photos(Video)
         case delete(UUID)
         case storage
@@ -82,6 +84,16 @@ final class LibraryActionsModel: ObservableObject {
             shareTarget = video
         } else {
             followUp = .share(video)
+            sheet = nil
+        }
+    }
+
+    /// Copy link (Snapreel Pro's share links), once the actions sheet has gone.
+    func copyLink(_ id: UUID) {
+        if sheet == nil {
+            ShareLinks.shared.copyLink(id)
+        } else {
+            followUp = .copyLink(id)
             sheet = nil
         }
     }
@@ -133,6 +145,7 @@ final class LibraryActionsModel: ObservableObject {
         switch next {
         case .sheet(let nextSheet): sheet = nextSheet
         case .share(let video): shareTarget = video
+        case .copyLink(let id): ShareLinks.shared.copyLink(id)
         case .photos(let video): photosTarget = video
         case .delete(let id): performDelete(id, library: library, router: router)
         case .storage: showsStorage = true
@@ -261,6 +274,8 @@ struct LibraryVideoActionsHost: ViewModifier {
         switch action {
         case .share:
             model.share(video)
+        case .copyLink:
+            model.copyLink(video.id)
         case .saveToPhotos:
             model.saveToPhotos(video)
         case .watchLater:
@@ -356,6 +371,10 @@ struct LibraryActionsSheet: View {
         return HStack(spacing: Space.s) {
             ActionTile(title: "Share", systemImage: "square.and.arrow.up", enabled: ready) {
                 onAction(.share)
+            }
+            ActionTile(title: "Copy link",
+                       systemImage: "link", isOn: library.link(for: video.id) != nil, enabled: ready) {
+                onAction(.copyLink)
             }
             ActionTile(title: "Save to Photos", systemImage: "square.and.arrow.down", enabled: ready) {
                 onAction(.saveToPhotos)
@@ -497,6 +516,11 @@ struct LibraryVideoMenu: View {
                 actions.share(video)
             } label: {
                 Label("Share", systemImage: "square.and.arrow.up")
+            }
+            Button {
+                actions.copyLink(video.id)
+            } label: {
+                Label("Copy link", systemImage: "link")
             }
             Button {
                 actions.toggleWatchLater(video.id, library: library, router: router)

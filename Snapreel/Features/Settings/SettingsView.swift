@@ -15,6 +15,10 @@ enum SettingsPage: Hashable {
     case legal
     case legalDocument(LegalDocument)
     case acknowledgements
+    // Snapreel Pro
+    case account
+    case sharedLinks
+    case linkSettings(UUID)
 }
 
 extension View {
@@ -42,16 +46,22 @@ struct SettingsDestination: View {
         case .legal: LegalMenuView()
         case .legalDocument(let document): LegalDocumentView(document: document)
         case .acknowledgements: AcknowledgementsView()
+        case .account: AccountView()
+        case .sharedLinks: SharedLinksView()
+        case .linkSettings(let id): LinkSettingsView(videoID: id)
         }
     }
 }
 
-/// Settings root, presented as a sheet from the gear on every tab: preferences, help and
-/// support, legal, and the app's version.
+/// Settings root, presented as a sheet from the gear on every tab: your account and Snapreel
+/// Pro, preferences, help and support, legal, and the app's version.
 struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var settings: AppSettings
     @EnvironmentObject private var library: Library
+    @ObservedObject private var auth = AuthService.shared
+    @ObservedObject private var links = ShareLinks.shared
+    @ObservedObject private var uploader = Uploader.shared
     @State private var path: [SettingsPage]
 
     init(initialPath: [SettingsPage] = []) {
@@ -62,6 +72,7 @@ struct SettingsView: View {
         NavigationStack(path: $path) {
             ScrollView {
                 VStack(alignment: .leading, spacing: Space.xl) {
+                    account
                     preferences
                     support
                     about
@@ -86,6 +97,80 @@ struct SettingsView: View {
     }
 
     // MARK: Groups
+
+    /// Signed in: you, your plan and your links. Signed out: sign in, and what Pro is.
+    private var account: some View {
+        SettingsGroup(title: "Account") {
+            NavigationLink(value: SettingsPage.account) {
+                accountRow
+                    .padding(.horizontal, Space.m)
+                    .padding(.vertical, 3)
+            }
+            .buttonStyle(SettingsRowStyle())
+            SettingsDivider()
+            SettingsActionRow(systemImage: "sparkles", title: "Snapreel Pro",
+                              value: auth.isPro ? "Active" : "Try it free") {
+                ProPresenter.paywall(.settings)
+            }
+            if auth.isSignedIn {
+                SettingsDivider()
+                SettingsLinkRow(page: .sharedLinks, systemImage: "link", title: "Shared links",
+                                value: sharedLinksValue)
+            }
+        }
+    }
+
+    private var accountRow: some View {
+        HStack(spacing: Space.s) {
+            if auth.isSignedIn {
+                AccountAvatar(name: auth.displayName, size: 32)
+            } else {
+                IconTile(systemName: "person.crop.circle.fill")
+            }
+            VStack(alignment: .leading, spacing: 2) {
+                Text(auth.isSignedIn ? auth.displayName : "Sign in")
+                    .font(.srBody)
+                    .foregroundStyle(Color.srText)
+                    .lineLimit(1)
+                Text(auth.isSignedIn ? (auth.email ?? "Signed in") : "Share links and see who watched")
+                    .font(.srFootnote)
+                    .foregroundStyle(Color.srTextSecondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
+            }
+            Spacer(minLength: Space.xs)
+            if auth.isSignedIn {
+                if auth.isPro {
+                    ProBadge()
+                } else {
+                    Text("Free")
+                        .font(.srSubheadline)
+                        .foregroundStyle(Color.srTextTertiary)
+                }
+            }
+            Image(systemName: "chevron.right")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(Color.srTextTertiary)
+        }
+        .padding(.vertical, Space.xs)
+        .contentShape(Rectangle())
+    }
+
+    /// "Uploading 45%", "Upload stopped" or the number of links.
+    private var sharedLinksValue: String {
+        var stopped = false
+        var uploading: Double?
+        for id in uploader.jobs.keys {
+            switch links.state(for: id) {
+            case .failed: stopped = true
+            case .uploading(let value): uploading = uploading ?? value
+            default: break
+            }
+        }
+        if stopped { return "Upload stopped" }
+        if let uploading { return "Uploading \(Int((uploading * 100).rounded()))%" }
+        return library.links.isEmpty ? "None" : "\(library.links.count)"
+    }
 
     private var preferences: some View {
         SettingsGroup(title: "Preferences") {
@@ -213,11 +298,13 @@ struct SettingsLinkRow: View {
 struct SettingsActionRow: View {
     let systemImage: String
     let title: String
+    var value: String? = nil
     let action: @MainActor () -> Void
 
-    init(systemImage: String, title: String, action: @escaping @MainActor () -> Void) {
+    init(systemImage: String, title: String, value: String? = nil, action: @escaping @MainActor () -> Void) {
         self.systemImage = systemImage
         self.title = title
+        self.value = value
         self.action = action
     }
 
@@ -226,7 +313,7 @@ struct SettingsActionRow: View {
             Haptics.tap()
             action()
         } label: {
-            ListRow(systemImage: systemImage, title: title, showsChevron: false)
+            ListRow(systemImage: systemImage, title: title, value: value, showsChevron: false)
                 .padding(.horizontal, Space.m)
                 .padding(.vertical, 3)
         }
@@ -258,7 +345,7 @@ struct SettingsFooter: View {
             Text(AppInfo.versionLine)
                 .font(.srFootnote)
                 .foregroundStyle(Color.srTextTertiary)
-            Text("No account, nothing collected. Your recordings stay on this iPhone unless you send them.")
+            Text("Your recordings stay on this iPhone. Only the ones you share as links are uploaded, and only while you share them.")
                 .font(.srFootnote)
                 .foregroundStyle(Color.srTextSecondary)
                 .multilineTextAlignment(.center)
