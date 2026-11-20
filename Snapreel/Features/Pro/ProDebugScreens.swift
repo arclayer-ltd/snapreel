@@ -537,6 +537,8 @@ final class CloudStub {
     let pro: Bool
     /// What the checkout link's activity answers; a debug screen can swap in a variant.
     var checkoutActivity = CloudFixtures.checkoutActivity
+    /// Every link answers with the checkout's activity (the website's recorded flows, Debug/DebugFlows.swift).
+    var activityOnEveryLink = false
 
     init(pro: Bool) {
         self.pro = pro
@@ -556,7 +558,7 @@ final class CloudStub {
         case ("GET", "videos", 3) where parts[2] == "insights":
             return try encoder.encode(CloudFixtures.insights(for: parts[1], pro: pro))
         case ("GET", "videos", 3) where parts[2] == "activity":
-            let isCheckout = parts[1] == "srv-k7Qm2xRb9L"
+            let isCheckout = parts[1] == "srv-k7Qm2xRb9L" || activityOnEveryLink
             return try encoder.encode(isCheckout ? checkoutActivity : CloudActivity.empty)
         case ("POST", "purchases", _):
             return try encoder.encode(VerifyPurchaseResponse(plan: CloudFixtures.me(pro: true, links: 5).plan))

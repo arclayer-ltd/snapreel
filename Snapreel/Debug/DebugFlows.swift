@@ -81,6 +81,7 @@ private struct FlowComments: View {
             WatchDebugHost(videoID: id, prepare: { _ in }, initial: { _ in
                 ShareLinks.shared.debugStates[id] = .ready
                 Uploader.shared.debugPhases[id] = nil
+                APIClient.shared.stub?.activityOnEveryLink = true
                 var state = PlayerInitialState()
                 state.panel = .comments
                 state.scrollsToPanel = true
@@ -113,8 +114,17 @@ private struct FlowRecorder: View {
     }
 
     private func run() async {
-        await pause(0.5)
-        guard let model = DebugFlowHooks.recorder else { return }
+        // The recorder registers itself when its view first builds; wait for this mode's one.
+        var found: RecorderModel?
+        for _ in 0..<40 {
+            if let model = DebugFlowHooks.recorder, model.mode == mode {
+                found = model
+                break
+            }
+            await pause(0.1)
+        }
+        guard let model = found else { return }
+        await pause(0.4)
         switch mode {
         case .camera:
             await pause(1.0)
