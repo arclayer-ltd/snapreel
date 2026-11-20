@@ -1,8 +1,10 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+// globals.css must load before the marketing shell's marketing.css: Tailwind's first stylesheet fixes the
+// cascade-layer order (theme, base, components, utilities). Loaded after, the base reset beats the marketing padding.
+import "./globals.css";
 import { NotFoundContent } from "@/components/marketing/not-found-content";
 import { MarketingShell } from "@/components/marketing/shell";
-import "./globals.css";
 
 // Served for any address that matches no route (e.g. /nope). Next skips the root layout here, so this file
 // repeats its fonts, html attributes and theme colours (keep them in step with app/layout.tsx).
