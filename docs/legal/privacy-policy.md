@@ -11,7 +11,7 @@ Snapreel is made by Rezan Ferdous, an individual developer based in Bangladesh, 
 - Address: Enayetpur, Sirajganj 6751, Bangladesh
 - Email: [support@snapreel.video](mailto:support@snapreel.video)
 
-Under data protection laws such as the EU and UK General Data Protection Regulation (GDPR), we are the "controller" of the information described here. Write to the email address above about anything in this policy, in English.
+Under data protection laws such as the EU and UK General Data Protection Regulation (GDPR), we are the "controller" of the information described here. Write to the email address above about anything in this policy, in English or Bengali.
 
 ## In short
 
@@ -151,7 +151,7 @@ Information travels to and from snapreel.video over encrypted connections (HTTPS
 
 Depending on where you live, you also have the right to ask us for a copy of your information (including in a portable format), to correct it, to delete it, to restrict or object to how we use it, and to withdraw consent at any time. Write to [support@snapreel.video](mailto:support@snapreel.video); we'll answer within a month and won't charge you. We may need to check that the request comes from you.
 
-If you're unhappy with how we handle your information, write to the same address with "Privacy complaint" in the subject. We'll acknowledge it within 30 days and tell you what we did about it. You can also complain to a data protection authority at any time: in the EU, the authority in your country; in the UK, the Information Commissioner's Office (ico.org.uk); elsewhere, the authority where you live.
+If you're unhappy with how we handle your information, write to the same address with "Privacy complaint" in the subject. We'll acknowledge it within 30 days and tell you what we did about it. You can also complain to a data protection authority at any time: in the EU, the authority in your country; in the UK, the Information Commissioner's Office (ico.org.uk); in Bangladesh, the authority under the Personal Data Protection Act 2026; elsewhere, the authority where you live.
 
 ### If you live in the United States
 
@@ -159,7 +159,7 @@ We don't sell or share personal information for targeted advertising, and we don
 
 ## Children
 
-You must be at least 13 to create a Snapreel account, or older where the law where you live requires a higher age to use online services without a parent's consent (for example 14, 15 or 16 in some European countries). Snapreel isn't directed at children under 13, and we don't knowingly collect information from them. If you think a child has given us information, write to us and we'll delete it.
+You must be at least 13 to create a Snapreel account, or older where the law where you live requires a higher age to use online services without a parent's consent (for example 14, 15 or 16 in some European countries). If you're under 18, a parent or guardian must agree to you having an account, as the law in Bangladesh and some other countries requires. Snapreel isn't directed at children under 13, and we don't knowingly collect information from them. If you think a child has given us information, write to us and we'll delete it.
 
 ## Changes
 

@@ -64,7 +64,7 @@ If content breaks these terms or the law, we may remove it, stop its link from p
 
 If you think a video or comment on snapreel.video breaks these terms or the law, use "Report this video" on its watch page, or write to [support@snapreel.video](mailto:support@snapreel.video). Please include the link, what's wrong and why, and, for a copyright or other legal complaint, your name and email address, the work or right concerned, and a statement that you believe in good faith that your report is accurate. We review reports promptly, and we'll tell you what we decided if you gave us your email address.
 
-Under the EU Digital Services Act, support@snapreel.video is also our single point of contact for users and for EU and national authorities; please write in English.
+support@snapreel.video is also our point of contact for authorities and courts, and our single point of contact for users and authorities under the EU Digital Services Act; please write in English or Bengali.
 
 If we remove or restrict your content or account, we'll tell you what we did and why, unless the law stops us or it would put someone at risk. If you think we got it wrong, reply to that message or write to the same address, and we'll look at it again. A person, not an automated system, makes these decisions. You can also go to court.
 
