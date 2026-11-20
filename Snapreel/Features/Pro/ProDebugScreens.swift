@@ -163,7 +163,7 @@ extension DebugCatalog {
             DebugScreen("share.link.uploads.empty", "Shared links [none yet]") {
                 ProDebugHost(.free, links: false) { SettingsDebugHost(path: [.account, .sharedLinks]) }
             },
-            DebugScreen("share.link.library", "Library [shared badges]") {
+            DebugScreen("share.link.library", "Library [shared badges]", wait: 5) {
                 ProDebugHost(.pro) {
                     DebugShellHost(tab: .library, configure: { router, _ in
                         BrowseIntent.shared.libraryTab = .videos
@@ -171,7 +171,7 @@ extension DebugCatalog {
                     })
                 }
             },
-            DebugScreen("share.link.actions", "Library actions [Copy link]") {
+            DebugScreen("share.link.actions", "Library actions [Copy link]", wait: 5) {
                 ProDebugHost(.pro) {
                     DebugShellHost(tab: .library, configure: { router, _ in
                         BrowseIntent.shared.libraryTab = .videos
@@ -243,7 +243,7 @@ extension DebugCatalog {
     @MainActor
     private static func holdLibraryTab(_ router: AppRouter) {
         Task { @MainActor in
-            for _ in 0..<4 {
+            for _ in 0..<10 {
                 try? await Task.sleep(nanoseconds: 400_000_000)
                 if router.tab != .library { router.tab = .library }
             }
