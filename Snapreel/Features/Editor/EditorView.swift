@@ -34,10 +34,14 @@ struct EditorView: View {
         ZStack {
             Color.srStage.ignoresSafeArea()
             VStack(spacing: 0) {
+                // The top bar and transport hide while typing text so their buttons don't show
+                // through the text entry's backdrop (it has its own Cancel and Done).
                 topBar
+                    .opacity(model.textEntry == nil ? 1 : 0)
                 EditorPreview(model: model)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 transport
+                    .opacity(model.textEntry == nil ? 1 : 0)
                 EditorTimeline(model: model)
                 EditorBottomBar(model: model)
             }
@@ -640,7 +644,10 @@ struct EditorColorDots: View {
                 } label: {
                     Circle()
                         .fill(option.color)
-                        .overlay(Circle().strokeBorder(onDark ? Color.white.opacity(0.4) : Color.srStageLine, lineWidth: 1))
+                        // A ring strong enough that the dot matching the panel (white in Light, black in
+                        // Dark) still reads as a dot.
+                        .overlay(Circle().strokeBorder(onDark ? Color.white.opacity(0.4) : Color.srStageTextTertiary.opacity(0.6),
+                                                       lineWidth: 1))
                         .frame(width: 28, height: 28)
                         .padding(3)
                         .overlay(Circle().strokeBorder(option == selected ? (onDark ? Color.white : Color.srStageText) : .clear,
