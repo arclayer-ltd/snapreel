@@ -138,14 +138,18 @@ export interface Viewer {
   device: "phone" | "tablet" | "desktop" | null;
   firstSeenAt: string;
   lastSeenAt: string;
+  /** How far they watched, 0 to 100. */
   percent: number;
 }
 
 export interface Insights {
   views: number;
   uniqueViewers: number;
+  /** Average share of the video watched per counted view, 0 to 100. */
   avgPercent: number | null;
+  /** Share of counted views that reached the end, 0 to 1. */
   completionRate: number | null;
+  /** 100 counts: how many counted views watched each 1% of the video. */
   dropoff: number[] | null;
   countries: { code: string; count: number }[] | null;
   viewers: Viewer[] | null;

@@ -145,7 +145,7 @@ Bodies are JSON with camelCase keys. Errors look like `{error: "<code>", message
 | `GET /api/videos/{id}` | | `VideoDetail` |
 | `PATCH /api/videos/{id}` | any of `{title, status, uploadedBytes, access, password, expiresAt, allowDownload, allowComments, allowReactions, cta, transcript}` | `VideoDetail` |
 | `DELETE /api/videos/{id}` | | 204. Stops sharing, deletes the files, keeps nothing |
-| `GET /api/videos/{id}/insights` | | `{views, uniqueViewers, avgPercent, completionRate, dropoff: [100 ints], countries: [{code, count}], viewers: [{name, anonymous, country, device, firstSeenAt, lastSeenAt, percent}]}`. Free gets `views` and `uniqueViewers`; the rest is `null` |
+| `GET /api/videos/{id}/insights` | | `{views, uniqueViewers, avgPercent, completionRate, dropoff: [100 ints], countries: [{code, count}], viewers: [{name, anonymous, country, device, firstSeenAt, lastSeenAt, percent}]}`. Free gets `views` and `uniqueViewers`; the rest is `null`. `avgPercent` and `percent` are 0 to 100, `completionRate` is 0 to 1, and `dropoff[i]` is how many counted views watched the i-th 1% of the video |
 | `GET /api/videos/{id}/activity` | | `{comments: [Comment], reactions: [Reaction]}` |
 | `DELETE /api/comments/{id}` | | 204 |
 | `POST /api/blocks` | `{commentId}` or `{reactionId}` | 204. Blocks that viewer from all your videos |
