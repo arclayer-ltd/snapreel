@@ -17,7 +17,7 @@ import { fileURLToPath } from "node:url";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const outDir = join(root, "art/web/review");
-const PAGES = ["/", "/pricing", "/help", "/help/first-recording", "/privacy", "/terms", "/support"];
+const PAGES = ["/", "/pricing", "/help", "/help/first-recording", "/privacy", "/terms", "/support", "/help/no-such-article"];
 const SIZES = [
   { width: 390, height: 844 },
   { width: 1440, height: 900 },
@@ -92,7 +92,7 @@ function connect(url) {
 
 async function shoot(cdp, url, { width, height }, scheme, file) {
   await cdp.send("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor: 1, mobile: width < 768 });
-  // Reduced motion freezes the sparkle and float animations, so every capture is the same frame.
+  // Reduced motion keeps transitions out of the captures, so every capture is the same frame.
   await cdp.send("Emulation.setEmulatedMedia", {
     features: [
       { name: "prefers-color-scheme", value: scheme },
@@ -108,7 +108,7 @@ async function shoot(cdp, url, { width, height }, scheme, file) {
     expression: `(() => {
       const de = document.documentElement;
       const wide = [...document.querySelectorAll("body *")]
-        .filter((e) => { const r = e.getBoundingClientRect(); return r.width > 0 && r.right > de.clientWidth + 1 && !e.closest(".mk-field"); })
+        .filter((e) => { const r = e.getBoundingClientRect(); return r.width > 0 && r.right > de.clientWidth + 1 && !e.closest(".mk-scene"); })
         .slice(0, 5).map((e) => e.tagName.toLowerCase() + "." + String(e.className.baseVal ?? e.className).split(" ").slice(0, 3).join("."));
       const empty = [];
       return { scrollWidth: de.scrollWidth, clientWidth: de.clientWidth, height: de.scrollHeight, wide, empty };
@@ -128,8 +128,10 @@ async function shoot(cdp, url, { width, height }, scheme, file) {
         Promise.all(visible.map((i) => i.complete ? 0 : new Promise((r) => { i.onload = i.onerror = r; }))),
         new Promise((r) => setTimeout(r, 15000)),
       ]);
+      // Lazy, async-decoded images can be "complete" but not yet painted; decode them first.
+      await Promise.all(visible.map((i) => (i.decode ? i.decode().catch(() => {}) : 0)));
       await document.fonts.ready;
-      await new Promise((r) => setTimeout(r, 500));
+      await new Promise((r) => setTimeout(r, 800));
     })()`,
   });
   const after = await cdp.send("Runtime.evaluate", { returnByValue: true, expression: `[...document.images].filter((i) => i.getClientRects().length && !i.naturalWidth).map((i) => i.alt.slice(0, 30))` });

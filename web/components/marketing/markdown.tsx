@@ -157,8 +157,9 @@ export function Blocks({ blocks, shiftHeadings = 0 }: { blocks: Block[]; shiftHe
  * owner, not for visitors, so it's replaced by a plain "draft" flag the page shows politely.
  */
 export function prepareLegal(md: string) {
-  let blocks = parseBlocks(md);
-  let draft = false;
+  // HTML comments are notes for the owner (the "<!-- DRAFT … -->" markers), never page text.
+  let draft = /<!--[\s\S]*?\bDRAFT\b[\s\S]*?-->/.test(md);
+  let blocks = parseBlocks(md.replace(/<!--[\s\S]*?-->/g, ""));
   blocks = blocks.filter((b) => {
     if (b.kind === "quote" && /\bDRAFT\b/.test(b.text)) {
       draft = true;

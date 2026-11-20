@@ -1,5 +1,32 @@
 # Higgsfield credits for the website art
 
+## Round 2: the illustrated-world redesign (2026-11-20)
+
+Budget: at most 80 credits. Balance before the first generation: 2,986.34 (stop at 2,906.34).
+
+Model for every image: `gpt_image_2_6` (GPT Image 2.6). References: `art/characters/lineup.png` and the five crops in
+`art/web/refs-crops/` (uploads and `media_confirm` cost nothing). Dusk versions use the Light version as their
+first reference so the composition stays put. Raw downloads are in `art/web/gen2/raw/`.
+
+| # | Scene | Quality | Job ID | Credits | Kept |
+|---|---|---|---|---|---|
+| 1 | Hero, style test | medium 2k 3:2 | 1eabfda5-6d03-4063-879b-95eaf2beea31 | 1.00 | as the layout reference for #2 |
+| 2 | Hero, Light (park plaza) | high 4k 3:2 | 1199d6ab-cb08-4d80-80c2-63c5979cff11 | 4.25 | yes |
+| 3 | Hero, Dusk | high 4k 3:2 | f944dcb7-35e3-4a91-b4d7-27fe62e20519 | 4.25 | yes |
+| 4 | Features, Light (meadow path, dog) | high 4k 16:9 | 6e9a63fa-204e-41d6-9835-12ea38084c91 | 4.25 | yes |
+| 5 | Pricing, Light (rooftop terrace) | high 4k 16:9 | e4ef37e0-cf68-4a15-ba51-2918416a2ad2 | 4.25 | yes |
+| 6 | Footer, Light (hilltop picnic, all five) | high 4k 21:9 | 2faaa0b2-056d-4bb0-9fa8-a4349d76ea73 | 4.25 | yes |
+| 7 | Inner pages, Light (skyline banner) | high 4k 21:9 | aee14ba2-c59b-4f1e-8787-95d39c9728a1 | 4.25 | yes |
+| 8 | Features, Dusk | high 4k 16:9 | 03e628b3-588c-4d76-a929-1356f00886bf | 4.25 | yes |
+| 9 | Pricing, Dusk | high 4k 16:9 | a582a6ad-9f81-478a-88a5-53c52f11403d | 4.25 | yes |
+| 10 | Footer, Dusk | high 4k 21:9 | 4f26b35f-14aa-4f03-a6ba-339d3fe239ad | 4.25 | yes |
+| 11 | Inner pages, Dusk | high 4k 21:9 | ec3da122-1113-45fc-9d2b-c1a8c915dee1 | 4.25 | yes |
+
+**Total: 43.50 credits of the 80 allowed** (balance after: 2,942.84). No retries: every scene was kept first time.
+The spot illustrations on the guide cards and the 404 page are crops of these scenes, so they cost nothing.
+
+## Round 1: the red-field site (2026-11-20)
+
 Budget: at most 60 credits. Balance before the first generation: 3,002.84.
 
 Model for every image: `gpt_image_2_6` (GPT Image 2.6), quality `high`, resolution `2k`, transparent background,

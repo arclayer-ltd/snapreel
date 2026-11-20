@@ -1,94 +1,4 @@
-import type { CSSProperties } from "react";
-
-/** The reference's white marks, redrawn as small SVGs: four-point sparkles, hand-drawn motion
- *  strokes and loose loops. All are decorative (aria-hidden) and positioned by the caller. */
-
-type Pos = {
-  top?: string;
-  left?: string;
-  right?: string;
-  bottom?: string;
-};
-
-export function Sparkle({
-  size = 28,
-  twinkle = true,
-  delay = 0,
-  className = "",
-  style,
-  ...pos
-}: Pos & { size?: number; twinkle?: boolean; delay?: number; className?: string; style?: CSSProperties }) {
-  return (
-    <svg
-      aria-hidden="true"
-      viewBox="0 0 24 24"
-      width={size}
-      height={size}
-      className={`mk-sparkle ${twinkle ? "mk-sparkle--twinkle" : ""} ${className}`}
-      style={{ ...pos, ...({ "--mk-delay": `${delay}s` } as CSSProperties), ...style }}
-    >
-      <path
-        fill="currentColor"
-        d="M12 0c.7 6.4 4.9 10.9 12 12-7.1 1.1-11.3 5.6-12 12-.7-6.4-4.9-10.9-12-12C7.1 10.9 11.3 6.4 12 0Z"
-      />
-    </svg>
-  );
-}
-
-/** Two or three short strokes that say "this is moving", as next to the reference's heads. */
-export function MotionStrokes({
-  size = 56,
-  rotate = 0,
-  count = 3,
-  className = "",
-  ...pos
-}: Pos & { size?: number; rotate?: number; count?: 2 | 3; className?: string }) {
-  return (
-    <svg
-      aria-hidden="true"
-      viewBox="0 0 56 56"
-      width={size}
-      height={size}
-      className={`mk-strokes ${className}`}
-      style={{ ...pos, transform: `rotate(${rotate}deg)` }}
-      fill="none"
-      stroke="currentColor"
-      strokeLinecap="round"
-    >
-      <path d="M8 30c1.6-6.8 3.9-12.6 7.2-17.4" strokeWidth="3.2" />
-      <path d="M22 26.5c3.9-7.6 8.6-13.4 14.6-17.5" strokeWidth="2.6" />
-      {count === 3 ? <path d="M33 33.5c5.4-3.4 10.6-5.3 15.8-5.9" strokeWidth="2.2" /> : null}
-    </svg>
-  );
-}
-
-/** A loose hand-drawn loop, like the ones wrapped around arms and phones in the reference. */
-export function Loop({
-  width = 160,
-  rotate = -8,
-  className = "",
-  opacity = 0.9,
-  ...pos
-}: Pos & { width?: number; rotate?: number; className?: string; opacity?: number }) {
-  return (
-    <svg
-      aria-hidden="true"
-      viewBox="0 0 160 64"
-      width={width}
-      height={(width * 64) / 160}
-      className={`mk-loop ${className}`}
-      style={{ ...pos, transform: `rotate(${rotate}deg)`, opacity }}
-      fill="none"
-      stroke="currentColor"
-      strokeLinecap="round"
-    >
-      <path
-        d="M24 40c-14-6-14-20 10-27C64 4 118 6 140 18c18 10 10 26-22 33-34 7-76 5-96-4-9-4-9-10-1-14"
-        strokeWidth="2.6"
-      />
-    </svg>
-  );
-}
+/** Small inline marks and icons for the marketing pages. All decorative (aria-hidden). */
 
 /** The record-button mark from the app icon. */
 export function LogoMark({ size = 28, className = "" }: { size?: number; className?: string }) {
@@ -112,6 +22,36 @@ export function Check({ size = 18, className = "" }: { size?: number; className?
   return (
     <svg aria-hidden="true" viewBox="0 0 24 24" width={size} height={size} className={className} fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
       <path d="m5 12.5 4.5 4.5L19 7.5" />
+    </svg>
+  );
+}
+
+const paths = {
+  link: "M10 14a4.5 4.5 0 0 0 6.4 0l3-3a4.5 4.5 0 0 0-6.4-6.4l-1 1M14 10a4.5 4.5 0 0 0-6.4 0l-3 3a4.5 4.5 0 0 0 6.4 6.4l1-1",
+  browser: "M3.5 6.5A2.5 2.5 0 0 1 6 4h12a2.5 2.5 0 0 1 2.5 2.5v11A2.5 2.5 0 0 1 18 20H6a2.5 2.5 0 0 1-2.5-2.5v-11ZM3.5 9h17M7 6.6h.01M9.6 6.6h.01M10.5 12.5v4l3.5-2-3.5-2Z",
+  chat: "M20 12a7.5 7.5 0 0 1-10.9 6.7L4.5 20l1.3-4.2A7.5 7.5 0 1 1 20 12ZM9 11h.01M12.5 11h.01M16 11h.01",
+  chart: "M4 20V10M10 20V4M16 20v-7M21 20H3",
+  lock: "M7 11V8a5 5 0 0 1 10 0v3M5.5 11h13a1.5 1.5 0 0 1 1.5 1.5v6a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 18.5v-6A1.5 1.5 0 0 1 5.5 11ZM12 15v2",
+  folder: "M3.5 7.5A2.5 2.5 0 0 1 6 5h3.6l2 2.2H18a2.5 2.5 0 0 1 2.5 2.5v7.8A2.5 2.5 0 0 1 18 20H6a2.5 2.5 0 0 1-2.5-2.5v-10Z",
+  text: "M5 6h14M5 10.5h14M5 15h9M5 19.5h6",
+  photo: "M4 7.5A2.5 2.5 0 0 1 6.5 5h11A2.5 2.5 0 0 1 20 7.5v9a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 4 16.5v-9ZM4.5 16l4.5-4.5 3.5 3.5 2.5-2.5L20 17M15.5 9.5h.01",
+  person: "M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM4.5 20a7.5 7.5 0 0 1 15 0",
+  stop: "M5 7h14M10 11v6M14 11v6M6.5 7l.8 11.2A2 2 0 0 0 9.3 20h5.4a2 2 0 0 0 2-1.8L17.5 7M9.5 7V5.5A1.5 1.5 0 0 1 11 4h2a1.5 1.5 0 0 1 1.5 1.5V7",
+  screen: "M7.5 3h9A1.5 1.5 0 0 1 18 4.5v15a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 6 19.5v-15A1.5 1.5 0 0 1 7.5 3ZM10.5 5.5h3",
+  camera: "M3.5 8.5A2.5 2.5 0 0 1 6 6h1.7l1.5-2h5.6l1.5 2H18a2.5 2.5 0 0 1 2.5 2.5v8A2.5 2.5 0 0 1 18 19H6a2.5 2.5 0 0 1-2.5-2.5v-8ZM12 16a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z",
+  mic: "M12 15a3.5 3.5 0 0 0 3.5-3.5v-5a3.5 3.5 0 0 0-7 0v5A3.5 3.5 0 0 0 12 15ZM5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v3",
+  search: "M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14ZM20 20l-3.5-3.5",
+  mail: "M4 6.5A1.5 1.5 0 0 1 5.5 5h13A1.5 1.5 0 0 1 20 6.5v11a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 17.5v-11ZM4.5 6.5 12 12l7.5-5.5",
+  flag: "M5 21V4M5 4.5h11l-2 4 2 4H5",
+  sparkle: "M12 3c.6 4.6 3.4 7.4 8 8-4.6.6-7.4 3.4-8 8-.6-4.6-3.4-7.4-8-8 4.6-.6 7.4-3.4 8-8Z",
+} as const;
+
+export type IconName = keyof typeof paths;
+
+export function Icon({ name, size = 20, className = "" }: { name: IconName; size?: number; className?: string }) {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24" width={size} height={size} className={className} fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+      <path d={paths[name]} />
     </svg>
   );
 }

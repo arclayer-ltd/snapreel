@@ -1,47 +1,42 @@
 <!doctype html>
-<!-- Source for web/app/(marketing)/opengraph-image.jpg. Render it with:
+<!-- Source for web/app/(marketing)/opengraph-image.jpg and twitter-image.jpg. Render it with:
      node scripts/web-review.mjs --shot "file:///<repo>/art/web/og.html" og.png 1200 630
-     then save og.png as web/app/(marketing)/opengraph-image.jpg (JPEG, quality 86). -->
+     then save og.png as both JPEGs (quality 86). Uses the composed hero scene and phone from
+     web/public/marketing/art/, so run scripts/web-compose.py first. -->
 <html lang="en-GB">
 <head>
 <meta charset="utf-8">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;600;700&display=block" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@500;700&display=block" rel="stylesheet">
 <style>
   * { box-sizing: border-box; margin: 0; }
   html, body { width: 1200px; height: 630px; overflow: hidden; }
   body {
-    position: relative; isolation: isolate; color: #fff;
+    position: relative; isolation: isolate; color: #13141b;
     font-family: Outfit, "Segoe UI", sans-serif;
-    background-color: #d32434;
-    background-image:
-      radial-gradient(42% 70% at 80% 58%, rgba(254,98,98,.95) 0%, rgba(240,72,80,.6) 38%, transparent 72%),
-      radial-gradient(130% 110% at 40% 40%, transparent 42%, rgba(143,20,36,.7) 78%, #5e0b16 100%),
-      linear-gradient(180deg, #d42a39 0%, #d32434 55%, #b81c2c 100%);
+    background: #4f8fe6;
   }
-  body::before { content:""; position:absolute; inset:0; z-index:-1;
-    background-image: linear-gradient(rgba(255,255,255,.07) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.07) 1px, transparent 1px);
-    background-size: 44px 44px; -webkit-mask-image: radial-gradient(75% 70% at 55% 45%, #000, transparent); }
-  body::after { content:""; position:absolute; inset:-10%; z-index:-1; mix-blend-mode:screen;
-    background: linear-gradient(112deg, transparent 22%, rgba(255,236,230,.11) 30%, transparent 40%), linear-gradient(112deg, transparent 52%, rgba(255,236,230,.07) 58%, transparent 66%); }
-  .brand { position:absolute; left:72px; top:62px; display:flex; align-items:center; gap:12px; font-weight:600; font-size:34px; letter-spacing:-.03em; }
-  h1 { position:absolute; left:72px; top:150px; width:620px; font-weight:300; font-size:76px; line-height:1.02; letter-spacing:-.03em; }
-  h1 b { font-weight:700; color:#ffe9b8; }
-  .url { position:absolute; left:72px; bottom:58px; font-size:24px; font-weight:600; padding:10px 20px; border-radius:999px; background:rgba(94,11,22,.55); box-shadow: inset 0 0 0 1px rgba(255,255,255,.2); }
-  .art { position:absolute; right:-10px; bottom:-40px; width:610px; }
-  .sp { position:absolute; width:34px; filter: drop-shadow(0 0 6px rgba(255,255,255,.6)); }
+  .scene { position: absolute; left: 0; top: 120px; width: 1200px; height: auto; z-index: -2;
+    -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 90px); }
+  .glow { position: absolute; left: 50%; top: -120px; width: 1100px; height: 520px; transform: translateX(-50%); z-index: -1;
+    background: radial-gradient(closest-side, rgba(255,255,255,.42), rgba(255,255,255,0)); }
+  .brand { position: absolute; left: 50%; top: 40px; transform: translateX(-50%); display: flex; align-items: center; gap: 10px;
+    padding: 10px 22px 10px 14px; border-radius: 999px; background: #fff; font-weight: 700; font-size: 26px; letter-spacing: -.03em;
+    box-shadow: 0 10px 30px -10px rgba(30,50,90,.35); }
+  h1 { position: absolute; left: 0; right: 0; top: 118px; text-align: center; font-weight: 700; font-size: 62px; line-height: 1.04; letter-spacing: -.03em; }
+  .phone { position: absolute; left: 50%; top: 286px; width: 236px; transform: translateX(-50%); }
+  .pill { position: absolute; right: 40px; bottom: 36px; padding: 10px 20px; border-radius: 999px; background: #d32434; color: #fff; font-weight: 700; font-size: 22px; }
 </style>
 </head>
 <body>
+  <img class="scene" src="../../web/public/marketing/art/scene-hero-wide-light-1920.webp" alt="">
+  <div class="glow"></div>
   <div class="brand">
-    <svg viewBox="0 0 32 32" width="40" height="40"><circle cx="16" cy="16" r="13" fill="none" stroke="#fff" stroke-width="3.4"/><circle cx="16" cy="16" r="6.4" fill="#fff"/></svg>
+    <svg viewBox="0 0 32 32" width="32" height="32"><circle cx="16" cy="16" r="13" fill="none" stroke="#f04850" stroke-width="3.4"/><circle cx="16" cy="16" r="6.4" fill="#f04850"/></svg>
     Snapreel
   </div>
-  <h1>Record it on your iPhone. <b>They watch it anywhere.</b></h1>
-  <div class="url">snapreel.video</div>
-  <img class="art" src="../../web/public/marketing/art/hero-light-2x.webp" alt="">
-  <svg class="sp" style="right:120px; top:48px" viewBox="0 0 24 24"><path fill="#fff" d="M12 0c.7 6.4 4.9 10.9 12 12-7.1 1.1-11.3 5.6-12 12-.7-6.4-4.9-10.9-12-12C7.1 10.9 11.3 6.4 12 0Z"/></svg>
-  <svg class="sp" style="right:60px; top:170px; width:18px" viewBox="0 0 24 24"><path fill="#fff" d="M12 0c.7 6.4 4.9 10.9 12 12-7.1 1.1-11.3 5.6-12 12-.7-6.4-4.9-10.9-12-12C7.1 10.9 11.3 6.4 12 0Z"/></svg>
-  <svg class="sp" style="left:640px; top:96px; width:22px" viewBox="0 0 24 24"><path fill="#fff" d="M12 0c.7 6.4 4.9 10.9 12 12-7.1 1.1-11.3 5.6-12 12-.7-6.4-4.9-10.9-12-12C7.1 10.9 11.3 6.4 12 0Z"/></svg>
+  <h1>Record it on your iPhone.<br>They watch it anywhere.</h1>
+  <img class="phone" src="../../web/public/marketing/art/phone-hero-light-2x.webp" alt="">
+  <div class="pill">snapreel.video</div>
 </body>
 </html>

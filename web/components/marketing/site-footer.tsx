@@ -1,13 +1,15 @@
 import Link from "next/link";
-import { Art } from "./art";
-import { LogoMark, MotionStrokes, Sparkle } from "./marks";
+import { LEGAL_ENTITY } from "@/lib/legal-entity";
+import { AppStoreBadge } from "./app-store-badge";
+import { SceneStage, sceneVars } from "./art";
+import { ArrowRight, LogoMark } from "./marks";
 
 const columns = [
   {
     title: "Snapreel",
     links: [
       { href: "/#record", label: "Ways to record" },
-      { href: "/#links", label: "Share links" },
+      { href: "/#features", label: "Share links" },
       { href: "/#pro", label: "Snapreel Pro" },
       { href: "/pricing", label: "Pricing" },
     ],
@@ -30,57 +32,71 @@ const columns = [
   },
 ];
 
+/** Every page ends on the hilltop: the download call to action over the sky, then the links. */
 export function SiteFooter() {
   return (
-    <footer className="mt-16 pb-10 sm:mt-24">
-      <div className="mx-auto max-w-[1280px] px-[var(--mk-gutter)]">
-        <div className="mk-field mk-field--deep px-6 pt-10 sm:px-12 sm:pt-14" style={{ ["--pool-y" as string]: "85%", ["--pool-x" as string]: "50%" }}>
-          <Sparkle size={22} top="16px" right="18px" delay={0.4} />
-          <Sparkle size={30} top="18%" left="7%" delay={1.6} className="hidden md:block" />
-          <Sparkle size={16} top="34%" right="8%" delay={2.2} className="hidden md:block" />
-          <MotionStrokes size={52} top="12%" left="20%" rotate={-30} className="hidden lg:block" />
-          <div className="relative z-10 mx-auto flex max-w-2xl flex-col items-center text-center">
-            <p className="mk-headline text-[2rem] sm:text-[2.75rem]">
-              Show it, <b>don&rsquo;t type it.</b>
-            </p>
-          </div>
-          <div className="relative mx-auto mt-6 max-w-[1000px] sm:mt-2">
-            <Art slot="group" sizes="(min-width: 1080px) 1000px, 92vw" />
-          </div>
-        </div>
-
-        <div className="mt-12 grid grid-cols-2 gap-x-6 gap-y-10 sm:grid-cols-[minmax(0,1.4fr)_repeat(3,minmax(0,1fr))]">
-          <div className="col-span-2 sm:col-span-1">
-            <Link href="/" className="inline-flex items-center gap-2 rounded-lg" aria-label="Snapreel home">
-              <LogoMark size={26} />
-              <span className="mk-display text-xl font-semibold tracking-[-0.03em]">Snapreel</span>
+    <footer className="mt-20 sm:mt-28">
+      <section
+        id="download"
+        aria-labelledby="download-title"
+        className="mk-scene mk-scene--flow scroll-mt-24"
+        style={sceneVars("scene-footer", { "--tuck": "40px", "--tuck-d": "120px" })}
+      >
+        <div className="mk-scene-content mx-auto max-w-2xl px-[var(--mk-gutter)] pt-16 text-center sm:pt-24">
+          <p className="mk-label">Get Snapreel</p>
+          <h2 id="download-title" className="mk-title mt-4 text-[2.5rem] sm:text-[3.5rem]">
+            Start recording. It&rsquo;s free.
+          </h2>
+          <p className="mx-auto mt-4 max-w-lg text-lg leading-relaxed text-[var(--mk-sky-ink-2)]">
+            Snapreel is in TestFlight now and coming soon to the App Store. Recording, your library and everything on your
+            iPhone stay free, forever.
+          </p>
+          <div className="mt-7 flex flex-wrap items-center justify-center gap-3">
+            <AppStoreBadge />
+            <Link href="/pricing" className="mk-button mk-button--white">
+              Compare Free and Pro
+              <ArrowRight size={18} />
             </Link>
-            <p className="mt-3 max-w-xs text-sm leading-relaxed text-text-2">
-              A screen, camera and voice recorder for iPhone, made by Arclayer Ltd.
-            </p>
-            <a href="mailto:support@snapreel.video" className="mt-3 inline-block text-sm font-medium text-red-text underline underline-offset-4">
-              support@snapreel.video
-            </a>
           </div>
-          {columns.map((col) => (
-            <nav key={col.title} aria-label={col.title}>
-              <h2 className="text-sm font-semibold text-text">{col.title}</h2>
-              <ul className="mt-3 space-y-1">
-                {col.links.map((l) => (
-                  <li key={l.href}>
-                    <Link href={l.href} className="inline-flex min-h-9 items-center text-sm text-text-2 transition-colors hover:text-text">
-                      {l.label}
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            </nav>
-          ))}
         </div>
-        <p className="mt-10 border-t border-line pt-6 text-xs leading-relaxed text-text-2">
-          © 2026 Arclayer Ltd. Apple, the Apple logo, iPhone and App Store are trademarks of Apple Inc. Snapreel isn&rsquo;t
-          affiliated with Apple.
-        </p>
+        <SceneStage slot="scene-footer" sizes="100vw" />
+      </section>
+
+      <div className="relative z-10 mx-auto -mt-10 max-w-[var(--mk-max)] px-[var(--mk-gutter)] pb-8 sm:-mt-16">
+        <div className="mk-panel px-6 py-10 sm:px-10 sm:py-12">
+          <div className="grid grid-cols-2 gap-x-6 gap-y-10 sm:grid-cols-[minmax(0,1.5fr)_repeat(3,minmax(0,1fr))]">
+            <div className="col-span-2 sm:col-span-1">
+              <Link href="/" className="inline-flex items-center gap-2 rounded-full" aria-label="Snapreel home">
+                <LogoMark size={28} />
+                <span className="mk-display text-xl font-bold tracking-[-0.03em] text-white">Snapreel</span>
+              </Link>
+              <p className="mt-3 max-w-xs text-sm leading-relaxed text-white/75">
+                A screen, camera and voice recorder for iPhone, made by {LEGAL_ENTITY.name}.
+              </p>
+              <a href={`mailto:${LEGAL_ENTITY.email}`} className="mt-3 inline-block text-sm font-semibold text-white underline underline-offset-4">
+                {LEGAL_ENTITY.email}
+              </a>
+            </div>
+            {columns.map((col) => (
+              <nav key={col.title} aria-label={col.title}>
+                <h2 className="text-sm font-semibold text-white">{col.title}</h2>
+                <ul className="mt-3 space-y-1">
+                  {col.links.map((l) => (
+                    <li key={l.href}>
+                      <Link href={l.href} className="inline-flex min-h-9 items-center text-sm text-white/75 transition-colors hover:text-white">
+                        {l.label}
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </nav>
+            ))}
+          </div>
+          <p className="mt-10 border-t border-white/10 pt-6 text-xs leading-relaxed text-white/70">
+            © 2026 {LEGAL_ENTITY.name}. Apple, the Apple logo, iPhone and App Store are trademarks of Apple Inc. Snapreel
+            isn&rsquo;t affiliated with Apple.
+          </p>
+        </div>
       </div>
     </footer>
   );

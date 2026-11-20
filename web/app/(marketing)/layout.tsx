@@ -4,8 +4,8 @@ import { SiteFooter } from "@/components/marketing/site-footer";
 import { SiteHeader } from "@/components/marketing/site-header";
 import "@/components/marketing/marketing.css";
 
-// One display face for headlines: a geometric sans close to the reference's Poppins. Body text
-// stays in Geist from the root layout.
+// One display face for headlines: a geometric sans, bold, as in the reference. Body text stays in
+// Geist from the root layout.
 const outfit = Outfit({ subsets: ["latin"], variable: "--font-display", display: "swap" });
 
 export const metadata: Metadata = {
@@ -31,7 +31,7 @@ export default function MarketingLayout({ children }: { children: React.ReactNod
     <div className={`mk ${outfit.variable} flex min-h-full flex-1 flex-col`}>
       <a
         href="#main"
-        className="sr-only z-50 rounded-full bg-sr-ink px-4 py-2 text-white focus:not-sr-only focus:fixed focus:left-4 focus:top-3"
+        className="sr-only z-50 rounded-full bg-sr-ink px-4 py-2 text-white focus:not-sr-only focus:fixed focus:left-4 focus:top-20"
       >
         Skip to content
       </a>
