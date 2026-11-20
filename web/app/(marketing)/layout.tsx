@@ -1,12 +1,5 @@
 import type { Metadata } from "next";
-import { Outfit } from "next/font/google";
-import { SiteFooter } from "@/components/marketing/site-footer";
-import { SiteHeader } from "@/components/marketing/site-header";
-import "@/components/marketing/marketing.css";
-
-// One display face for headlines: a geometric sans, bold, as in the reference. Body text stays in
-// Geist from the root layout.
-const outfit = Outfit({ subsets: ["latin"], variable: "--font-display", display: "swap" });
+import { MarketingShell } from "@/components/marketing/shell";
 
 export const metadata: Metadata = {
   title: {
@@ -27,19 +20,5 @@ export const metadata: Metadata = {
 };
 
 export default function MarketingLayout({ children }: { children: React.ReactNode }) {
-  return (
-    <div className={`mk ${outfit.variable} flex min-h-full flex-1 flex-col`}>
-      <a
-        href="#main"
-        className="sr-only z-50 rounded-full bg-sr-ink px-4 py-2 text-white focus:not-sr-only focus:fixed focus:left-4 focus:top-20"
-      >
-        Skip to content
-      </a>
-      <SiteHeader />
-      <main id="main" className="flex-1">
-        {children}
-      </main>
-      <SiteFooter />
-    </div>
-  );
+  return <MarketingShell>{children}</MarketingShell>;
 }
