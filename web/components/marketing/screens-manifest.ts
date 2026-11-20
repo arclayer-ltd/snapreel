@@ -4,25 +4,25 @@ export const SCREEN_WIDTHS = [400, 800] as const;
 export const SCREEN_SIZE = { width: 1125, height: 2436 } as const;
 
 export const screens = {
-  "player-ready": {
-    alt: "Snapreel on iPhone: a camera recording with viewers' reactions on its timeline, and the Link copied sheet saying anyone with the link can watch in a browser",
-    bg: { light: "#cccccc", dark: "#0a0a0e" },
+  "flow-share": {
+    alt: "Snapreel on iPhone: a camera recording plays, then Copy link uploads it and the sheet says anyone with the link can watch in a browser",
+    bg: { light: "#cacaca", dark: "#0a090e" },
   },
-  "player-comments": {
-    alt: "A shared recording in Snapreel with emoji reactions and viewers' comments at the moment they mean",
-    bg: { light: "#ffffff", dark: "#13141b" },
+  "flow-comments": {
+    alt: "A shared recording playing in Snapreel, with viewers' comments and reactions at the moment they mean",
+    bg: { light: "#fdfdfd", dark: "#111219" },
   },
-  "rec-screen": {
-    alt: "Snapreel's recorder set to Screen, with the red record button",
-    bg: { light: "#ffffff", dark: "#13141b" },
+  "flow-camera": {
+    alt: "Snapreel counting down, then recording with the front camera",
+    bg: { light: "#fdfdfd", dark: "#111219" },
   },
-  "rec-camera": {
-    alt: "Snapreel recording with the front camera, 1 minute 23 in",
-    bg: { light: "#ffffff", dark: "#13151b" },
+  "flow-voice": {
+    alt: "Snapreel recording a voice memo, with its live waveform",
+    bg: { light: "#fdfdfd", dark: "#111219" },
   },
-  "rec-voice": {
-    alt: "A voice recording in Snapreel, with its waveform",
-    bg: { light: "#ffffff", dark: "#13141b" },
+  "flow-screen": {
+    alt: "Snapreel's three steps before a screen recording",
+    bg: { light: "#fdfdfd", dark: "#111219" },
   },
   "library": {
     alt: "The Snapreel library: recordings with titles, folders and tags",

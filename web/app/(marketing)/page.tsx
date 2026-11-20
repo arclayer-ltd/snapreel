@@ -30,21 +30,24 @@ const facts = [
 
 const ways = [
   {
-    screen: "rec-screen" as const,
+    screen: "flow-screen" as const,
+    flow: "screen" as const,
     icon: "screen" as IconName,
     tone: "mk-tile--blue",
     title: "Screen",
     text: "Show anything on your iPhone, with your voice over it. Snapreel keeps recording while you use other apps.",
   },
   {
-    screen: "rec-camera" as const,
+    screen: "flow-camera" as const,
+    flow: "camera" as const,
     icon: "camera" as IconName,
     tone: "mk-tile--peach",
     title: "Camera",
     text: "Talk to the front or back camera, with your notes on screen so you never lose your place.",
   },
   {
-    screen: "rec-voice" as const,
+    screen: "flow-voice" as const,
+    flow: "voice" as const,
     icon: "mic" as IconName,
     tone: "mk-tile--mint",
     title: "Voice",
@@ -196,7 +199,7 @@ export default function Home() {
           </div>
         </div>
         <SceneStage slot="scene-hero" priority sizes="(min-width: 1024px) max(100vw, 1480px), 100vw">
-          <IPhone screen="player-ready" priority sizes="(min-width: 1024px) max(312px, 20vw), 52vw" />
+          <IPhone screen="flow-share" flow="share" priority sizes="(min-width: 1024px) max(312px, 20vw), 52vw" />
         </SceneStage>
       </section>
 
@@ -240,6 +243,7 @@ export default function Home() {
                 </div>
                 <PeekPhone
                   screen={w.screen}
+                  flow={w.flow}
                   crop={0.06}
                   sizes="(min-width: 768px) 250px, 66vw"
                   className="mx-auto mt-auto w-[68%] max-w-[250px] pt-8"
@@ -278,7 +282,7 @@ export default function Home() {
         </div>
         <div className="relative">
           <SceneStage slot="scene-features" sizes="100vw">
-            <IPhone screen="player-comments" ground sizes="(min-width: 1024px) 320px, 54vw" />
+            <IPhone screen="flow-comments" flow="comments" ground sizes="(min-width: 1024px) 320px, 54vw" />
           </SceneStage>
           {/* Wide screens: the cards sit around the phone (320 px wide at most, centred), overlapping its
               edges. --pe is the phone's half width. */}

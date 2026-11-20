@@ -19,20 +19,33 @@ Red is the only accent.
 
 ## The iPhone
 
-Since the owner's review of 20 Nov 2026 ("make it a real iPhone, upright, prominent"), every phone on the site
-is one component, `web/components/marketing/iphone.tsx`: an iPhone 16 Pro drawn in CSS (`.mk-iphone` in
-`marketing.css`), front on and upright, with a titanium band (natural in Light, black in Dark), the black
-bezel, Dynamic Island, the side keys and a soft, layered shadow, all sized in `cqw` so it scales to any width.
-`<PeekPhone>` is the same phone rising out of the bottom of a tile.
+Every phone on the site is one component, `web/components/marketing/iphone.tsx`: a rendered iPhone 16 Pro
+frame in Natural Titanium (`device/iphone-16-pro-render.png`, Higgsfield GPT Image 2.6, cut into
+`web/public/marketing/iphone-frame-{600,1200}.webp` by `scripts/web-device-frame.py`), upright and front on,
+laid over the app's screen, with a soft, layered shadow in the body's shape. `<PeekPhone>` is the same phone
+rising out of the bottom of a tile.
 
-An app screenshot only ever appears inside that iPhone, and a Light page only shows Light screenshots, a Dark
-page Dark ones. `scripts/web-screens.py` exports them (AVIF and WebP, 400 and 800 px) to
+An app screen only ever appears inside that iPhone, and a Light page only shows the app in Light, a Dark page
+in Dark. `scripts/web-screens.py` exports the stills (AVIF and WebP, 400 and 800 px) to
 `web/public/marketing/screens/` with `screens-manifest.ts`, and makes the logo and favicons from the app icon.
-The two player screens are composites: the fixture's grey diagram video is replaced by the camera recording
-from `rec.camera.recording`, with the player's own controls, reactions and timeline lifted off the screenshot
-and laid back on top.
 
-The old 3D phone renders (`kind: "iphone"` in `scripts/web-compose.py`) are no longer used.
+## Recorded flows
+
+Where a phone has a `flow`, it plays a recording of the real app over its still: the hero (a camera
+recording plays, Copy link, the link uploads, Ready to watch), the Copy link scene (a shared recording with
+viewers' comments) and the three recorder tiles (screen steps, camera countdown and timer, voice waveform).
+
+1. `Snapreel/Debug/DebugFlows.swift` scripts each flow (`flow.*` debug screens): the app's own views, driven
+   through the same state changes taps and a live recording make. The desk camera fixture plays a real
+   talking clip (`Snapreel/Debug/fixture-camera-desk.mp4`, Debug builds only).
+2. `gh workflow run ios.yml --ref <branch> -f screenshots=false -f flows=flow.` records them on the simulator,
+   Light and Dark (`RECORD=1` in `scripts/ci-screenshots.sh`), into the `snapreel-ci` artifact.
+3. `python scripts/web-flows.py <downloaded artifact>` trims each from when its screen appeared, makes it
+   600 px H.264 with a crossfade back to its first frame (a seamless loop), and writes a still per mode to
+   `art/web/screens/`; then `python scripts/web-screens.py` exports the stills.
+
+On the page (`flow-video.tsx`) a flow plays muted and inline only while it is on screen, fades in over its
+still, and never plays with reduced motion.
 
 ## Scenes
 

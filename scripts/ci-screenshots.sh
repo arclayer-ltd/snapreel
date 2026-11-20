@@ -163,16 +163,14 @@ while IFS="$TAB" read -r ID WAIT TITLE FLAG || [ -n "${ID:-}" ]; do
   BEFORE=$(crash_count)
   rm -f "$CONTAINER/Documents/debug-ready.txt" "$CONTAINER/Documents/debug-trace.txt"
   if [ "$RECORD" = "1" ]; then
-    # Recording starts before the launch, so nothing at the start of the flow is missed; <id>.offset is
-    # when the screen appeared, in seconds into the video (where the website's clip starts).
+    # Recording starts before the launch, so nothing at the start of the flow is missed (the website's
+    # clip starts at the first frame after the launch splash; scripts/web-flows.py finds it).
     xcrun simctl io "$DEVICE" recordVideo --codec=h264 --force "$OUT/$ID.mp4" > "$OUT/../record-$ID.log" 2>&1 &
     RECORDER=$!
-    # The video's first frame is when simctl says "Recording started".
     for _ in $(seq 1 100); do
       grep -q "Recording started" "$OUT/../record-$ID.log" 2>/dev/null && break
       sleep 0.1
     done
-    REC_START=$(python3 -c 'import time; print(time.time())')
     sleep 0.5
   fi
   xcrun simctl launch "$DEVICE" "$BUNDLE" -screen "$ID" > /dev/null 2>&1
@@ -184,7 +182,6 @@ while IFS="$TAB" read -r ID WAIT TITLE FLAG || [ -n "${ID:-}" ]; do
     wait_ready "$ID" || echo "${ID}${TAB}${TITLE}${TAB}not ready after two launches" >> "$OUT/../not-ready.txt"
   fi
   if [ "$RECORD" = "1" ]; then
-    python3 -c "import time; print(round(time.time() - $REC_START, 2))" > "$OUT/$ID.offset"
     # The flow runs for its wait time; a second more holds its last state.
     sleep "$(python3 -c "print(float('$WAIT') + 1)")"
     kill -INT "$RECORDER" 2>/dev/null || true

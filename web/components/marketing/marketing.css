@@ -385,6 +385,16 @@
     object-position: top;
     user-select: none;
   }
+  /* A recorded flow over the still screen: it fades in once it plays, so the still never flickers. */
+  .mk-iphone-screen .mk-flow {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    transition: opacity 0.35s ease;
+  }
+  .mk-iphone-screen .mk-flow[data-playing] {
+    opacity: 1;
+  }
   /* A faint reflection across the glass. */
   .mk-iphone-glass {
     position: absolute;

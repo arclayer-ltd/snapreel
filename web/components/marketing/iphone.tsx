@@ -2,6 +2,7 @@
    marketing.css) over a real Snapreel screen. Light pages show the app's Light screenshot and Dark pages the Dark one, swapped
    with prefers-color-scheme. Screens come from scripts/web-screens.py. */
 import type { CSSProperties } from "react";
+import { FlowVideo } from "./flow-video";
 import { SCREEN_SIZE, SCREEN_WIDTHS, screens, type ScreenSlug } from "./screens-manifest";
 
 function srcSet(slug: ScreenSlug, mode: "light" | "dark", ext: "avif" | "webp") {
@@ -31,17 +32,21 @@ export function PeekPhone({
  * - `sizes`: the phone's rendered width, as in <img sizes>, so small phones fetch the small screen.
  * - `priority`: load the screen eagerly and first (the hero's phone).
  * - `ground`: a soft contact shadow under the phone, for phones that stand in an illustrated scene.
+ * - `flow`: a recorded app flow (scripts/web-flows.py) that plays over the still `screen` while the phone
+ *   is on screen; `screen` should be that flow's own still.
  */
 export function IPhone({
   screen,
   sizes,
   priority = false,
   ground = false,
+  flow,
   alt,
   className = "",
   style,
 }: {
   screen: ScreenSlug;
+  flow?: "share" | "comments" | "camera" | "voice" | "screen";
   sizes: string;
   priority?: boolean;
   ground?: boolean;
@@ -72,6 +77,9 @@ export function IPhone({
             draggable={false}
           />
         </picture>
+        {flow ? (
+          <FlowVideo light={`/marketing/flows/${flow}-light.mp4`} dark={`/marketing/flows/${flow}-dark.mp4`} priority={priority} />
+        ) : null}
         <span className="mk-iphone-glass" aria-hidden="true" />
       </div>
       {/* eslint-disable-next-line @next/next/no-img-element -- a pre-sized frame overlay; next/image adds nothing */}
