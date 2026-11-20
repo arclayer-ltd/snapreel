@@ -76,7 +76,7 @@ struct LegalMenuView: View {
             }
             VStack(alignment: .leading, spacing: Space.xs) {
                 glanceLine("person.crop.circle", "No account needed, except to share links")
-                glanceLine("chart.bar.xaxis", "No analytics, advertising or tracking")
+                glanceLine("chart.bar.xaxis", "No advertising, tracking or app analytics")
                 glanceLine("iphone", "Recordings stay on this iPhone until you send them or share a link")
             }
         }

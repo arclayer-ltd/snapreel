@@ -2,7 +2,8 @@
 
 Done on 20 November 2026 for the Pro plan (`docs/pro/API.md`). Nothing was submitted to App Review or
 beta review, no certificate was created or revoked, and no agreement or program was accepted.
-Secrets appear here only as file paths or secret names.
+Secrets appear here only as file paths or secret names. The legal and App Store compliance record, with
+sources and the owner's open decisions, is [COMPLIANCE.md](COMPLIANCE.md).
 
 ## IDs
 
@@ -10,7 +11,10 @@ Secrets appear here only as file paths or secret names.
 
 | What | Value |
 |---|---|
-| Team | `N3DBKUVJS5` (Individual) |
+| Team | `N3DBKUVJS5`, enrolled as an **Individual** (not a company) |
+| Seller (legal entity) | **Rezan Ferdous**, Enayetpur, Sirajganj 6751, Bangladesh. Apple stores the street line as "ENAYETPUR, ENAYETPUR, ENAYETPUR" and the bank account holder as "MD. Rezan Ferdous". The App Store shows this name as the seller |
+| Agreements (read 2026-11-20) | Apple Developer Program License Agreement issued 29 Oct 2026, accepted 31 Oct 2026. Paid Apps Agreement active 19 Oct 2026 – 21 Sep 2027; Free Apps active 31 Oct 2026 – 21 Sep 2027. Bank account in Bangladesh (USD) active. U.S. Form W-8BEN and the certificate of foreign status active since 20 Oct 2026. Membership renews 22 Sep 2027 |
+| DSA (EU) status | **"Not a trader"**, set 16 Oct 2026 (before Pro existed). An owner decision; see COMPLIANCE.md |
 | App Store Connect app | `6836019517`, "Snapreel: Screen Recorder", version 1.0 in Prepare for Submission |
 | App ID | `co.arclayer.snapreel` (portal id `MN626WF252`) |
 | Distribution certificate (reused) | `R5PJR5R5BS`, iOS Distribution, expires 2027-09-22 |
@@ -97,7 +101,10 @@ Both are READY_TO_SUBMIT and are submitted together with the first app version t
 | Privacy Policy URL | `https://snapreel.video/privacy` |
 | Support URL (version 1.0) | `https://snapreel.video/support` |
 | Marketing URL (version 1.0) | `https://snapreel.video` |
-| Licence agreement | Apple's standard EULA. No custom EULA is set |
+| Licence agreement | Apple's standard EULA. No custom EULA is set. The terms of use at snapreel.video/terms add to it for the service, and the App Store description links both |
+| Copyright (version 1.0) | `2026 Rezan Ferdous`, set 2026-11-20 |
+| Description (version 1.0, en-US) | Set 2026-11-20 (1,984 characters): features, Free and Pro, the subscription terms, and links to the Terms of Use, Apple's Standard EULA, the Privacy Policy and support. Keywords, subtitle and promotional text are still empty |
+| App Review Information | **Not saved yet**: the API refuses it without a contact phone, which is the owner's to enter. The notes to paste are below |
 | Age rating | **4+**. All content questions answered None or No. User-generated content: **Yes** (viewers' comments and reactions). Messaging and chat: No (no private messages between users). Unrestricted web access: **No** (links open in Safari; no in-app browser). Advertising, gambling, loot boxes, parental controls, age assurance, social media, shared location, dating, health topics: No. Brazil shows "Self-rated L" |
 | App Privacy | **Published** 2026-11-20. See below |
 
@@ -116,6 +123,10 @@ App Privacy, all **linked to the user's identity**, used **only for App Function
 No tracking, no third-party advertising, no data brokers. If anything new is collected later, update this list and republish before the release that ships it. Two candidates:
 - **Crash Data**, if a crash SDK is added;
 - **Product Interaction**, if the app sends its own analytics.
+
+Both subscriptions also show `multiSeatStatus: ENABLED` and the markets App Store, **Apple Business** and **Apple
+School** (Apple's defaults). The backend gives Pro to one Snapreel account through `appAccountToken`; check before
+submission whether seats bought by an organisation could reach it, and turn multi-seat and those markets off if not.
 
 ### Small Business Program
 
@@ -142,48 +153,41 @@ If the backend makes this secret itself from `SIWA_*` (for example in a schedule
 
 Last secret made: _not yet; the backend session makes the first one._
 
-## Draft review notes for the first Pro submission
+## Review notes for the first Pro submission
 
-Paste into App Review Information → Notes, and update anything that changed:
+Paste into App Store Connect → the version → App Review Information → Notes (4,000 characters at most; this is
+about 2,000), with contact first name Rezan, last name Ferdous, email support@snapreel.video and the owner's phone
+number in +880 format. Sign-in required: **off** (no demo account; reviewers use Sign in with Apple). Written
+2026-11-20; update anything that changed before submitting.
 
-> Snapreel records the screen, camera or voice and keeps everything on the phone for free. Snapreel Pro (auto-renewable subscription, monthly or yearly with a 1-week free trial) adds hosted share links: a link anyone can watch in a browser, with viewer insights, passwords, expiry and branding.
+> Snapreel records the screen, camera or voice and keeps everything on the iPhone, free and without an account. Snapreel Pro (auto-renewable subscription, monthly, or yearly with a 1-week free trial) adds more to hosted share links: links anyone can watch in a browser, with viewer insights, passwords, expiry and branding.
 >
-> **Sign in:** no demo account is needed. Tap Copy link on any recording (or Settings → Account → Sign in) and choose Sign in with Apple. You can also enter any email address and type the 6-digit code that arrives.
+> SIGN IN: no demo account is needed. Use Sign in with Apple: tap Copy link on any recording, or go to Settings > Account > Sign in. You can also type any email address and enter the 6-digit code that arrives.
 >
-> **Make a link:**
-> 1. Record anything: tap the record button and choose Camera, or use Voice.
-> 2. In the recording's player, tap Copy link. The link is created at once and the video uploads in the background.
-> 3. Open the copied link (https://snapreel.video/v/…) in Safari on any device; it plays without an account.
-> 4. Comment on it from the browser, and the comment appears in the app's Comments tab.
+> MAKE A LINK:
+> 1. Record something: tap the record button and choose Camera or Voice.
+> 2. Open the recording and tap Copy link. The link is made at once and the video uploads in the background.
+> 3. Open the copied link (https://snapreel.video/v/...) in Safari on any device. It plays without an account.
+> 4. Leave a comment from the browser; it appears in the app on that recording's Comments tab.
 >
-> **Pro:** Settings → Snapreel Pro shows the paywall with both plans, the trial, Restore Purchases, and links to the Terms of Use (Apple's standard EULA) and the Privacy Policy. Free accounts keep 25 links of up to 5 minutes; the paywall also opens on the 26th link, on a recording over 5 minutes, or when setting a password.
+> SNAPREEL PRO: Settings > Snapreel Pro opens the paywall with both plans, the trial and what it renews into, Restore Purchases, and links to the Terms of Use (EULA) and the Privacy Policy. It also opens on the 26th link, on a recording over 5 minutes, and when setting a password. Free accounts keep 25 links of up to 5 minutes.
 >
-> **Account deletion:** Settings → Account → Delete account deletes the account, every shared video and comment, and revokes the Sign in with Apple token.
+> ACCOUNT DELETION: Settings > Account > Delete account deletes the account, every shared video and comment, and revokes the Sign in with Apple token. The web dashboard (snapreel.video/app) has the same option.
 >
-> **User-generated content:** viewers can comment and react. The owner can delete any comment and block its author from all their videos. Every watch page has "Report this video", which reaches support@snapreel.video, and the Terms forbid abusive content.
+> USER-GENERATED CONTENT (1.2): viewers can comment and react on a link. The link's owner can delete any comment and block its author from all their videos (comment menu > Delete or block). Every watch page has "Report this video", which reaches the developer at support@snapreel.video; the Terms of Use forbid objectionable content, and reported content is reviewed and removed.
 >
-> Snapreel sells nothing outside the App Store. The website's pricing page only points to the app.
+> Snapreel sells nothing outside the App Store; the website's pricing page only points to the app. The developer is an individual (Rezan Ferdous, Bangladesh). Support: support@snapreel.video.
 
 ## Compliance checklist
 
-Status on 20 November 2026. ✅ is done on Apple's side; ⏳ waits on another session or on submission.
-
-| Guideline | What's needed | Status |
-|---|---|---|
-| 3.1.1 In-app purchase | Pro sold only through StoreKit; no web checkout and no in-app link to one | ✅ products exist with prices. ⏳ the app paywall (app session) and the website must not sell or link to a purchase (website session) |
-| 3.1.2 Subscriptions | Paywall shows each plan's price and period, the trial and what it renews into, how to cancel, Restore, and links to Terms of Use and the Privacy Policy. The **App Store description must also link both**: the standard EULA `https://www.apple.com/legal/internet-services/itunes/dev/stdeula/` and `https://snapreel.video/privacy`. The version 1.0 description is still empty | ✅ privacy URL, standard EULA, a clear 1-week trial on yearly only. ⏳ paywall copy (app); the description with both links at submission |
-| 3.1.3(b) Multiplatform | Pro bought in the app also works on the web dashboard. Allowed because Pro is also sold in-app; the dashboard only links to "Manage in the App Store" | ✅ by design. ⏳ check the dashboard has no purchase path (web session) |
-| 4.8 Login services | Sign in with Apple offered next to email codes; no other third-party login | ✅ capability, key, Services ID, email relay. ⏳ the button in the app and on /login, and Supabase's provider config |
-| 5.1.1(v) Account deletion | In-app deletion that also revokes Sign in with Apple tokens | ✅ key and `SIWA_*` env for `/auth/revoke`. ⏳ `/api/account/delete` (backend) and the Settings screen (app) |
-| 1.2 User-generated content | Filter, report, block, contact info, takedown terms | ✅ age rating answers UGC = Yes. ⏳ report, block and filter (backend, app, web); Terms (website) |
-| 5.1.2 Data use and sharing | No tracking, no ads, App Privacy matches the policy | ✅ App Privacy published with no tracking. ⏳ the privacy policy page must list the same data and processors (Supabase, Vercel, Resend, Apple) |
-| 2.1 App completeness | Reviewers can sign in and try Pro; the backend is live; the subscriptions are submitted with the build | ✅ draft notes above; no demo account needed. ⏳ live backend, attaching the subscriptions to the version |
-| Age rating | Re-answered for UGC and web access | ✅ 4+, UGC Yes, unrestricted web access No |
-| Export compliance | HTTPS only | ✅ `ITSAppUsesNonExemptEncryption` = NO in `Snapreel-Info.plist` |
+Moved to [COMPLIANCE.md](COMPLIANCE.md) on 20 November 2026, with each requirement's source, date and status, and
+the owner's open decisions.
 
 ## Still open
 
-- **`/.well-known/apple-app-site-association`** on snapreel.video, with `applinks` `/v/*` and `webcredentials` for `N3DBKUVJS5.co.arclayer.snapreel` (backend session).
+- ~~`/.well-known/apple-app-site-association`~~: live on snapreel.video with `applinks` `/v/*` and `webcredentials` for `N3DBKUVJS5.co.arclayer.snapreel` (checked 2026-11-20).
+- **App Review Information**: paste the notes above and add the contact phone (owner).
+- **DSA trader status** and the other owner decisions in [COMPLIANCE.md](COMPLIANCE.md).
 - **Supabase Apple provider**: the client IDs and the first client secret (backend session).
 - **Optional:** the Sign in with Apple server-to-server notification endpoint on the App ID, for "email forwarding turned off" and "account deleted" events from Apple. The contract has no endpoint for it yet.
 - **Small Business Program**: the owner's decision; see above.
