@@ -261,6 +261,22 @@
       background: rgb(255 255 255 / 0.08);
     }
   }
+  /* Narrow phones: at 375 (iPhone mini, SE) the three links need tighter padding to fit the pill, and
+     below 360 the logo mark stands alone (the link keeps its "Snapreel home" label). */
+  @media (max-width: 399px) {
+    .mk-nav {
+      gap: 0.25rem;
+      padding-left: 0.9rem;
+    }
+    .mk-nav-link {
+      padding: 0 0.5rem;
+    }
+  }
+  @media (max-width: 359px) {
+    .mk-nav-wordmark {
+      display: none;
+    }
+  }
 
   /* ---------------------------------------------------------------- Scenes
 

@@ -16,7 +16,7 @@ export function SiteHeader() {
         <div className="mk-nav">
           <Link href="/" className="flex shrink-0 items-center gap-2 rounded-full pr-1" aria-label="Snapreel home">
             <LogoMark size={28} />
-            <span className="mk-display text-[1.25rem] font-bold tracking-[-0.03em]">Snapreel</span>
+            <span className="mk-nav-wordmark mk-display text-[1.25rem] font-bold tracking-[-0.03em]">Snapreel</span>
           </Link>
           <nav aria-label="Main" className="flex items-center gap-0.5 sm:gap-1">
             {nav.map((item) => (
