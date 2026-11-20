@@ -77,7 +77,10 @@ export default function SupportPage() {
             <figcaption className="max-w-[18rem] text-center text-[0.9375rem] leading-relaxed text-text-2">
               Your Account page in the app: manage Snapreel Pro, sign out or delete your account.
             </figcaption>
-            <PeekPhone screen="account" crop={0.16} sizes="(min-width: 1024px) 290px, 62vw" className="mt-7 w-[62%] max-w-[290px] lg:mt-auto lg:w-full" />
+            {/* Wide screens: the phone hangs from under the caption and the tile, as tall as the cards beside it, cuts it off. */}
+            <div className="mt-7 w-[62%] max-w-[290px] lg:relative lg:min-h-0 lg:w-full lg:flex-1">
+              <PeekPhone screen="account" crop={0.16} sizes="(min-width: 1024px) 290px, 62vw" className="lg:absolute lg:inset-x-0 lg:top-0" />
+            </div>
           </figure>
 
           <Card id="delete" icon="stop" title="Delete your account">
