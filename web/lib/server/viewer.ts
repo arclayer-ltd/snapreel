@@ -34,17 +34,6 @@ export function isBot(userAgent: string | null): boolean {
   return !userAgent || BOTS.test(userAgent);
 }
 
-// A light word filter for viewer comments and names (App Review 1.2). Masks, doesn't reject.
-const BAD = [
-  "fuck", "fucking", "shit", "cunt", "bitch", "bastard", "asshole", "dick", "pussy", "whore", "slut",
-  "nigger", "nigga", "faggot", "fag", "retard", "kike", "spic", "chink", "twat", "wanker",
-];
-const BAD_RE = new RegExp(`\\b(${BAD.join("|")})\\b`, "gi");
-
-export function cleanText(s: string): string {
-  return s.replace(BAD_RE, (w) => w[0] + "*".repeat(w.length - 1));
-}
-
 export function oneLine(s: unknown, max: number): string {
   return typeof s === "string" ? s.replace(/\s+/g, " ").trim().slice(0, max) : "";
 }

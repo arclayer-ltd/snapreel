@@ -63,6 +63,7 @@ export function toComment(c: CommentRow, ownerId: string): Comment {
     atS: c.at_s === null ? null : Number(c.at_s),
     parentId: c.parent_id,
     createdAt: c.created_at,
+    held: c.held,
   };
 }
 

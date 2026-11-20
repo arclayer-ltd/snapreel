@@ -46,6 +46,9 @@ extension DebugCatalog {
             DebugScreen("account.signin", "Sign in [Copy link, first time]") {
                 ProDebugHost(.signedOut) { SignInSheet(reason: .link, onDone: { _ in }) }
             },
+            DebugScreen("account.signin.age", "Sign in [13 to 17: waiting for a parent's approval]") {
+                ProDebugHost(.signedOut) { SignInSheet(reason: .link, age: .askedParent, onDone: { _ in }) }
+            },
             DebugScreen("account.signin.typed", "Sign in [email typed]") {
                 ProDebugHost(.signedOut) { SignInSheet(reason: .link, email: "sam@example.com", onDone: { _ in }) }
             },
@@ -193,6 +196,17 @@ extension DebugCatalog {
                         $0.panel = .comments
                         $0.scrollsToPanel = true
                         $0.activity = CloudFixtures.checkoutActivity
+                    }
+                }
+            },
+            DebugScreen("share.link.comments.held", "Comments tab [a comment held by the word filter]") {
+                ProDebugHost(.pro) {
+                    player(ids.checkout) {
+                        APIClient.shared.stub?.checkoutActivity = CloudFixtures.heldActivity
+                        $0.position = 4
+                        $0.panel = .comments
+                        $0.scrollsToPanel = true
+                        $0.activity = CloudFixtures.heldActivity
                     }
                 }
             },
@@ -484,6 +498,16 @@ enum CloudFixtures {
         })
     }
 
+    /// The checkout comments plus one the word filter held.
+    static var heldActivity: CloudActivity {
+        var activity = checkoutActivity
+        activity.comments.insert(CloudComment(id: "c0", authorName: "anon4821", isOwner: false,
+                                              body: "This checkout is garbage, whoever built it is a clown.",
+                                              atS: 30, parentId: nil, createdAt: now.addingTimeInterval(-6 * 60),
+                                              held: true), at: 0)
+        return activity
+    }
+
     // MARK: Notifications feed
 
     static func addFeed(to library: Library) {
@@ -511,6 +535,8 @@ enum CloudFixtures {
 @MainActor
 final class CloudStub {
     let pro: Bool
+    /// What the checkout link's activity answers; a debug screen can swap in a variant.
+    var checkoutActivity = CloudFixtures.checkoutActivity
 
     init(pro: Bool) {
         self.pro = pro
@@ -531,9 +557,13 @@ final class CloudStub {
             return try encoder.encode(CloudFixtures.insights(for: parts[1], pro: pro))
         case ("GET", "videos", 3) where parts[2] == "activity":
             let isCheckout = parts[1] == "srv-k7Qm2xRb9L"
-            return try encoder.encode(isCheckout ? CloudFixtures.checkoutActivity : CloudActivity.empty)
+            return try encoder.encode(isCheckout ? checkoutActivity : CloudActivity.empty)
         case ("POST", "purchases", _):
             return try encoder.encode(VerifyPurchaseResponse(plan: CloudFixtures.me(pro: true, links: 5).plan))
+        case ("POST", "comments", 3) where parts[2] == "approve":
+            guard var comment = checkoutActivity.comments.first(where: { $0.id == parts[1] }) else { throw CloudError.notFound }
+            comment.held = false
+            return try encoder.encode(comment)
         case ("DELETE", _, _), ("POST", "blocks", _), ("POST", "devices", _), ("POST", "account", _):
             return Data()
         default:

@@ -121,6 +121,11 @@ final class APIClient {
         try await sendEmpty("DELETE", "comments/\(id)")
     }
 
+    /// Publishes a comment the word filter held, so viewers can see it.
+    func approveComment(_ id: String) async throws -> CloudComment {
+        try await send("POST", "comments/\(id)/approve")
+    }
+
     /// Blocks the viewer who wrote `commentID` (or sent `reactionID`) from all your videos.
     func block(commentID: String? = nil, reactionID: String? = nil) async throws {
         try await sendEmpty("POST", "blocks", body: BlockRequest(commentId: commentID, reactionId: reactionID))

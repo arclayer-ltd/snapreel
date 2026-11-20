@@ -137,6 +137,7 @@ enum CloudServices {
     static func start() {
         Uploader.shared.setUp()
         PurchaseService.shared.startListening()
+        AgeGate.startListening()
         guard AuthService.shared.isSignedIn else { return }
         PushService.shared.registerIfPossible()
         Task {

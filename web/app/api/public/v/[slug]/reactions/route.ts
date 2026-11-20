@@ -5,10 +5,11 @@ import { assertNotBlocked, publicContext, withCookie } from "@/lib/server/public
 import { rateLimit } from "@/lib/server/ratelimit";
 import { toReaction } from "@/lib/server/shape";
 import { db } from "@/lib/server/supabase";
-import { cleanText, isEmoji, oneLine } from "@/lib/server/viewer";
+import { needsReview } from "@/lib/server/moderation";
+import { isEmoji, oneLine } from "@/lib/server/viewer";
 
 // POST /api/public/v/{slug}/reactions {emoji, atS, name?} -> 201 Reaction. Alerts are batched (one per video per
-// 10 minutes).
+// 10 minutes). A typed name that matches the comment word filter is dropped; the reaction stays, anonymous.
 export async function POST(req: Request, ctx: RouteContext<"/api/public/v/[slug]/reactions">) {
   return run(async () => {
     const { slug } = await ctx.params;
@@ -19,7 +20,8 @@ export async function POST(req: Request, ctx: RouteContext<"/api/public/v/[slug]
     if (!isEmoji(body.emoji)) throw badRequest("emoji must be a single emoji.");
     if (!is.num(body.atS) || body.atS < 0) throw badRequest("atS must be seconds.");
     if (!isOwner) await assertNotBlocked(video.owner_id, sessionId, viewer?.id ?? null);
-    const name = oneLine(body.name, 60);
+    const typed = oneLine(body.name, 60);
+    const name = typed && !needsReview(typed) ? typed : null;
 
     const { data: row, error } = await db()
       .from("reactions")
@@ -27,7 +29,7 @@ export async function POST(req: Request, ctx: RouteContext<"/api/public/v/[slug]
         video_id: video.id,
         session_id: sessionId,
         author_user_id: viewer?.id ?? null,
-        author_name: name ? cleanText(name) : null,
+        author_name: name,
         emoji: body.emoji,
         at_s: Math.min(body.atS, Number(video.duration_s) || body.atS),
       })

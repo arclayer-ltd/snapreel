@@ -48,6 +48,7 @@ export type Database = {
           body: string
           created_at: string
           deleted_at: string | null
+          held: boolean
           id: string
           parent_id: string | null
           session_id: string
@@ -60,6 +61,7 @@ export type Database = {
           body: string
           created_at?: string
           deleted_at?: string | null
+          held?: boolean
           id?: string
           parent_id?: string | null
           session_id: string
@@ -72,6 +74,7 @@ export type Database = {
           body?: string
           created_at?: string
           deleted_at?: string | null
+          held?: boolean
           id?: string
           parent_id?: string | null
           session_id?: string

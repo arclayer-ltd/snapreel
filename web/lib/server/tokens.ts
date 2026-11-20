@@ -118,6 +118,17 @@ export function viewerCookieHeader(cookie: string): string {
   return setCookieHeader(VIEWER_COOKIE, cookie, { maxAge: VIEWER_MAX_AGE });
 }
 
+// "Don't count my views" cookie `sr_nocount=1` (a year), set from the watch page: the view beacon records nothing
+// for this browser. It holds no ID and isn't HttpOnly, so the page can show the switch's state. `sr_vs` stays, for
+// blocks and rate limits.
+export const NO_COUNT_COOKIE = "sr_nocount";
+
+export function noCountCookieHeader(optOut: boolean): string {
+  return setCookieHeader(NO_COUNT_COOKIE, optOut ? "1" : "", { maxAge: optOut ? VIEWER_MAX_AGE : 0, httpOnly: false });
+}
+
+export const viewsOptedOut = (req: Request) => readCookie(req, NO_COUNT_COOKIE) === "1";
+
 export function readCookie(req: Request, name: string): string | null {
   const header = req.headers.get("cookie");
   if (!header) return null;

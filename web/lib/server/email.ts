@@ -150,6 +150,26 @@ export function commentEmail(opts: {
   };
 }
 
+// A comment the word filter held: no name or text in the email, only where to approve or delete it.
+export function heldCommentEmail(opts: {
+  title: string;
+  dashboardUrl: string;
+  unsubscribeUrl: string;
+}): Pick<Email, "subject" | "html" | "text"> {
+  const title = opts.title || "your video";
+  return {
+    subject: `A comment on “${title}” is waiting for you`,
+    html: layout({
+      preheader: "Viewers can't see it until you approve it.",
+      heading: `A comment on “${title}” is waiting for you`,
+      bodyHtml: `<p style="margin:0 0 16px">It contains words on Snapreel's filter list, so viewers can't see it. Read it in your dashboard, then approve it or delete it.</p>`,
+      button: { label: "Review the comment", url: `${opts.dashboardUrl}#activity` },
+      footerHtml: alertFooter(opts.unsubscribeUrl),
+    }),
+    text: `A comment on “${title}” is waiting for you. It contains words on Snapreel's filter list, so viewers can't see it until you approve it.\n\nReview it: ${opts.dashboardUrl}#activity\n\nTurn off email alerts: ${opts.unsubscribeUrl}`,
+  };
+}
+
 export function reactionEmail(opts: {
   count: number;
   emojis: string;

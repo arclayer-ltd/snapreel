@@ -2,10 +2,11 @@
 
 // View beacons (docs/pro/API.md). A view starts once it has 5 s watched, 75% of the length watched, or
 // playback reaches the last second. Then progress every 10 s of playback, "end" when it finishes, and a
-// sendBeacon when the page goes away. `watched` lists the 1% buckets seen so far (0 to 99).
+// sendBeacon when the page goes away. `watched` lists the 1% buckets seen so far (0 to 99). Nothing is sent while
+// "Don't count my views" is on (cookie sr_nocount; the server ignores beacons from such a browser too).
 import { useEffect } from "react";
 import type { ViewEvent } from "@/lib/contract";
-import { publicApi, sendViewBeacon } from "@/lib/client/api";
+import { publicApi, sendViewBeacon, viewsOptedOut } from "@/lib/client/api";
 import type { PlaybackStore } from "../playback";
 
 export function useViewBeacons(slug: string, store: PlaybackStore, enabled: boolean) {
@@ -26,6 +27,7 @@ export function useViewBeacons(slug: string, store: PlaybackStore, enabled: bool
     });
 
     const send = (event: ViewEvent["event"]) => {
+      if (viewsOptedOut()) return;
       void publicApi.view(slug, payload(event)).catch(() => {});
     };
 
@@ -63,7 +65,7 @@ export function useViewBeacons(slug: string, store: PlaybackStore, enabled: bool
     });
 
     const flush = () => {
-      if (!started) return;
+      if (!started || viewsOptedOut()) return;
       const now = Date.now();
       if (now - lastBeaconAt < 1000) return;
       lastBeaconAt = now;

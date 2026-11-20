@@ -253,18 +253,15 @@ export async function getInsights(userId: string, id: string): Promise<Insights 
 }
 
 // Comments (oldest first, deleted ones left out) and reactions on a video. No access check here: the dashboard
-// calls it after getOwnerVideo, the watch page after getPublicVideo.
-export async function getActivity(videoId: string): Promise<Activity> {
+// calls it after getOwnerVideo, the watch page after getPublicVideo. Comments held by the word filter are only in
+// the owner's activity (`audience: "owner"`); the public default leaves them out.
+export async function getActivity(videoId: string, audience: "public" | "owner" = "public"): Promise<Activity> {
   if (!is.uuid(videoId)) return { comments: [], reactions: [] };
+  let commentQuery = db().from("comments").select("*").eq("video_id", videoId).is("deleted_at", null);
+  if (audience !== "owner") commentQuery = commentQuery.eq("held", false);
   const [video, comments, reactions] = await Promise.all([
     db().from("videos").select("owner_id").eq("id", videoId).maybeSingle(),
-    db()
-      .from("comments")
-      .select("*")
-      .eq("video_id", videoId)
-      .is("deleted_at", null)
-      .order("created_at", { ascending: true })
-      .limit(1000),
+    commentQuery.order("created_at", { ascending: true }).limit(1000),
     db().from("reactions").select("*").eq("video_id", videoId).order("created_at", { ascending: true }).limit(2000),
   ]);
   if (comments.error) throw comments.error;
