@@ -649,24 +649,33 @@
 
   /* The home hero. Phones: the headline on the sky, then the park with the iPhone standing in it.
      Wide screens: the park covers the whole first screen with no fade over the trees, the headline
-     on one line in the sky, and the iPhone standing in the middle of the path, its top in view. A
-     soft, wide wash of sky colour sits behind the words only. */
+     in the sky, and the iPhone standing in the middle of the path, its top in view. A soft, wide
+     wash of sky colour sits behind the words only.
+
+     The headline is two lines at every width, one sentence each. The two sentences set within 1% of
+     each other in Outfit (about 10.5 em each at this tracking), so the lines balance on their own; on
+     phones the size follows the width so the longer one just fits. Semibold, tight tracking with a
+     little room back between the words, and a close line height, so the two lines read as one block. */
   .mk-hero-title {
-    font-size: 2.625rem;
+    font-size: min(3.75rem, calc((100cqw - 2 * var(--mk-gutter)) / 10.9));
+    font-weight: 600;
+    letter-spacing: -0.028em;
+    word-spacing: 0.02em;
+    line-height: 1.04;
   }
-  @media (min-width: 640px) {
-    .mk-hero-title {
-      font-size: 3.5rem;
-    }
+  .mk-hero-line {
+    display: block;
+    white-space: nowrap;
   }
   @media (min-width: 1024px) {
-    /* At least 1040 px, so the headline, the buttons and the phone's top fit one above the other; on very
-       wide screens the whole picture, so nothing in it is cropped behind the words. */
+    /* At least 1120 px, so the two-line headline, the buttons and the phone's top fit one above the
+       other; on very wide screens the whole picture, so nothing in it is cropped behind the words. */
     .mk-hero {
-      --h: max(1040px, calc(100cqw / var(--ar)));
+      --h: max(1120px, calc(100cqw / var(--ar)));
     }
     .mk-hero-title {
-      font-size: clamp(2.75rem, 3.7vw, 4.25rem);
+      font-size: clamp(3.25rem, 4.6cqw, 5rem);
+      line-height: 1.02;
     }
     .mk-hero-copy::before {
       content: "";
@@ -678,12 +687,6 @@
       pointer-events: none;
     }
   }
-  @media (min-width: 1180px) {
-    .mk-hero-title {
-      white-space: nowrap;
-    }
-  }
-
   /* ---------------------------------------------------------------- Share links: the phone and its cards
 
      Wide screens: the iPhone stands in the middle of the meadow and the four cards sit around it,

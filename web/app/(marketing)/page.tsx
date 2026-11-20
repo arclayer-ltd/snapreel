@@ -173,7 +173,7 @@ export default function Home() {
           "--fx": 0.49,
           "--px": 0.49,
           "--pb": 0.03,
-          "--pw": 0.2,
+          "--pw": 0.19,
           "--pw-max": "560px",
           "--tuck": "84px",
           "--pw-m": "52%",
@@ -183,7 +183,8 @@ export default function Home() {
         <div className="mk-scene-content mx-auto max-w-[1240px] px-[var(--mk-gutter)] pt-28 text-center sm:pt-32 lg:pt-[118px]">
           <div className="mk-hero-copy relative mx-auto max-w-[920px] lg:max-w-none">
             <h1 id="hero-title" className="mk-title mk-hero-title">
-              Record it on your iPhone. They watch it anywhere.
+              <span className="mk-hero-line">Record it on your iPhone.</span>{" "}
+              <span className="mk-hero-line">They watch it anywhere.</span>
             </h1>
             <p className="mx-auto mt-5 max-w-2xl text-lg leading-relaxed text-[var(--mk-sky-ink-2)] sm:text-xl">
               Snapreel records your screen, camera or voice. Stop, tap Copy link, and anyone can watch in their
