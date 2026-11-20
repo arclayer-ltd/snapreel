@@ -359,7 +359,7 @@ struct EditorExportSheet: View {
         let bytes = model.estimatedBytes(quality)
         let room = model.hasRoom(for: quality)
         VStack(spacing: Space.m) {
-            SheetHeader(title: "Save as a new recording", leadingTitle: "Cancel",
+            SheetHeader(title: "Save a copy", leadingTitle: "Cancel",
                         leadingAction: { model.sheet = nil }, onStage: true)
             if model.hasPicture {
                 VStack(spacing: Space.xs) {

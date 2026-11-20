@@ -428,7 +428,9 @@ struct EditorCropOverlay: View {
             .allowsHitTesting(false)
             // Box, thirds and corners.
             ZStack {
-                Rectangle().strokeBorder(Color.white, lineWidth: 2)
+                Rectangle()
+                    .strokeBorder(Color.white, lineWidth: 2)
+                    .shadow(color: .black.opacity(0.55), radius: 1.5)
                 Path { path in
                     for i in 1...2 {
                         let x = frame.width * CGFloat(i) / 3
@@ -439,7 +441,8 @@ struct EditorCropOverlay: View {
                         path.addLine(to: CGPoint(x: frame.width, y: y))
                     }
                 }
-                .stroke(Color.white.opacity(0.45), lineWidth: 0.75)
+                .stroke(Color.white.opacity(0.6), lineWidth: 0.75)
+                .shadow(color: .black.opacity(0.45), radius: 1)
             }
             .frame(width: frame.width, height: frame.height)
             .contentShape(Rectangle())
@@ -471,23 +474,24 @@ struct EditorCropOverlay: View {
         }
     }
 
+    /// An L at the corner: drawn for the top-left and turned for the others.
     private func cornerHandle(_ corner: Corner) -> some View {
-        let length: CGFloat = 18
-        return Path { path in
-            switch corner {
-            case .topLeft:
-                path.move(to: CGPoint(x: 0, y: length)); path.addLine(to: .zero); path.addLine(to: CGPoint(x: length, y: 0))
-            case .topRight:
-                path.move(to: CGPoint(x: -length, y: 0)); path.addLine(to: .zero); path.addLine(to: CGPoint(x: 0, y: length))
-            case .bottomLeft:
-                path.move(to: CGPoint(x: 0, y: -length)); path.addLine(to: .zero); path.addLine(to: CGPoint(x: length, y: 0))
-            case .bottomRight:
-                path.move(to: CGPoint(x: -length, y: 0)); path.addLine(to: .zero); path.addLine(to: CGPoint(x: 0, y: -length))
-            }
+        let degrees: Double
+        switch corner {
+        case .topLeft: degrees = 0
+        case .topRight: degrees = 90
+        case .bottomRight: degrees = 180
+        case .bottomLeft: degrees = 270
         }
-        .offsetBy(dx: 22, dy: 22)
-        .stroke(Color.white, style: StrokeStyle(lineWidth: 4, lineCap: .round, lineJoin: .round))
+        return ZStack(alignment: .topLeading) {
+            Capsule().fill(Color.white).frame(width: 20, height: 4)
+            Capsule().fill(Color.white).frame(width: 4, height: 20)
+        }
+        .frame(width: 20, height: 20, alignment: .topLeading)
+        .offset(x: 8, y: 8)
         .frame(width: 44, height: 44)
+        .rotationEffect(.degrees(degrees))
+        .shadow(color: .black.opacity(0.5), radius: 1.5)
         .contentShape(Rectangle())
     }
 

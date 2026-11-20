@@ -87,6 +87,8 @@ struct EditorPanelButton: View {
         } label: {
             Label(title, systemImage: systemImage)
                 .font(.srSubheadlineStrong)
+                .lineLimit(1)
+                .fixedSize()
                 .foregroundStyle(prominent ? Color.white : (isDestructive ? Color.srStageRed : Color.srStageText))
                 .padding(.horizontal, Space.m)
                 .frame(height: 40)
@@ -385,13 +387,9 @@ struct EditorCaptionsPanel: View {
             model.setCaptionStyle(style)
         } label: {
             VStack(spacing: 6) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 6, style: .continuous).fill(Color.srInkRaised)
-                    EditCaptionOverlayView(text: "Aa", style: style, frame: CGSize(width: 96, height: 54))
-                        .scaleEffect(1.6)
-                }
-                .frame(height: 44)
-                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                EditCaptionStyleSample(style: style)
+                    .frame(height: 44)
+                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
                 Text(style.label)
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(selected ? Color.srStageRed : Color.srStageText)
@@ -672,6 +670,7 @@ struct EditorSoundPanel: View {
                     Text(noiseDetail(audio))
                         .font(.srFootnote)
                         .foregroundStyle(Color.srStageTextTertiary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
             .tint(Color.srRed)
@@ -761,6 +760,42 @@ struct EditorThumbnailPanel: View {
         }
         .padding(.horizontal, Space.gutter)
         .padding(.vertical, Space.xs)
+    }
+}
+
+/// A caption style shown on a small dark picture.
+struct EditCaptionStyleSample: View {
+    let style: EditCaptionStyle
+
+    var body: some View {
+        ZStack(alignment: .bottom) {
+            LinearGradient(colors: [Color(hex: 0x3A3D4A), Color(hex: 0x1C1E27)], startPoint: .top, endPoint: .bottom)
+            sample
+                .padding(.bottom, style == .bar ? 0 : 6)
+        }
+    }
+
+    @ViewBuilder
+    private var sample: some View {
+        let text = Text("Hello there").font(.system(size: 11, weight: .semibold))
+        switch style {
+        case .classic:
+            text
+                .foregroundStyle(Color.white)
+                .shadow(color: .black.opacity(0.9), radius: 0, x: 0, y: 1)
+        case .box:
+            text
+                .foregroundStyle(Color.white)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 2)
+                .background(RoundedRectangle(cornerRadius: 3, style: .continuous).fill(Color.black.opacity(0.75)))
+        case .bar:
+            text
+                .foregroundStyle(Color(hex: 0x13141B))
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 4)
+                .background(Color.white.opacity(0.92))
+        }
     }
 }
 

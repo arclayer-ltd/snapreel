@@ -258,8 +258,9 @@ final class EditorModel: ObservableObject {
     }
 
     static func defaultPointsPerSecond(duration: Double) -> CGFloat {
-        // About two screens for the whole video, within a readable range.
-        CGFloat(min(80, max(6, 700 / max(duration, 1))))
+        // About two screens for a short video; a long one scrolls, at least 12 points a second
+        // so a few seconds of text or a shape still reads on its track.
+        CGFloat(min(80, max(12, 700 / max(duration, 1))))
     }
 
     private static func staticFilm(_ poster: UIImage, duration: Double) -> [EditFilmFrame] {

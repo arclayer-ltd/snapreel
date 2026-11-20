@@ -221,6 +221,8 @@ struct VideoCardBadges: View {
                 .padding(.horizontal, 6)
                 .padding(.vertical, 2)
                 .background(Capsule().fill(Color.srFill))
+                .fixedSize()
+                .layoutPriority(1)
                 .accessibilityLabel("Edited copy")
             }
             if video.needsTitle {

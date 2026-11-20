@@ -242,12 +242,12 @@ struct PlayerFactsCard: View {
             }
             VStack(spacing: 0) {
                 FactRow(title: "Type", value: kindValue)
+                if video.editedFrom != nil { originalRow }
                 FactRow(title: video.kind == .imported ? "Added" : "Recorded", value: Format.dateTime(video.createdAt))
                 FactRow(title: "Length", value: Format.clock(video.duration))
                 FactRow(title: "Resolution", value: Format.resolution(width: video.pixelWidth, height: video.pixelHeight))
                 FactRow(title: "File size", value: Format.bytes(video.fileSize))
                 FactRow(title: "Folder", value: folderName ?? "Not in a folder")
-                if video.editedFrom != nil { originalRow }
                 tagsRow
             }
             .padding(.horizontal, Space.m)

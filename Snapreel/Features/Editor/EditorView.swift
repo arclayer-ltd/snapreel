@@ -41,6 +41,8 @@ struct EditorView: View {
                 EditorTimeline(model: model)
                 EditorBottomBar(model: model)
             }
+            // The keyboard (text entry) covers the page instead of squeezing it.
+            .ignoresSafeArea(.keyboard)
             if model.textEntry != nil {
                 EditorTextEntry(model: model)
                     .transition(.opacity)
@@ -513,7 +515,7 @@ struct EditorTextEntry: View {
 
     var body: some View {
         ZStack {
-            Color.black.opacity(0.62).ignoresSafeArea()
+            Color.black.opacity(0.82).ignoresSafeArea()
                 .onTapGesture { model.commitTextEntry() }
             VStack(spacing: 0) {
                 HStack {
