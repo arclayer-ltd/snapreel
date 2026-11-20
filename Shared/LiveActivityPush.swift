@@ -1,7 +1,7 @@
 import Foundation
 
 /// Ends the screen recording's Lock Screen card from the broadcast extension, through
-/// Snapreel's push relay (`server/push`), which sends Apple's ActivityKit "end" push.
+/// Snapreel's push relay (`web/app/api/live-activity` on snapreel.video), which sends Apple's ActivityKit "end" push.
 ///
 /// Only the app can change its Live Activity, and it is usually suspended when a screen
 /// recording stops (the phone locks, or the red pill or Control Centre stops it), so the card

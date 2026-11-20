@@ -116,8 +116,13 @@ bash scripts/pro-smoke.sh            # all checks, including the sign-in email t
 ```
 
 Locally (`next start` with a throwaway APNs key) every validation response of the ported relay was byte-for-byte
-the same as the old one, and the APNs call went through end to end. Once production passes the checks above,
-delete `server/push/` (the old static site and functions) in a follow-up commit.
+the same as the old one, and the APNs call went through end to end. Production passed these checks on 2026-11-20
+(both IPs answered the same `BadDeviceToken` and `405` as before; `pro-smoke.sh` 91/91), and `server/push/` was
+deleted.
+
+`vercel env pull` can't read the production secrets (they're marked sensitive and come back as placeholders).
+Run the smoke test with the development values instead, which are the same: `vercel env pull .env.smoke
+--environment development`, then `ENV_FILE=.env.smoke bash scripts/pro-smoke.sh`, and delete the file.
 
 ## Cron
 

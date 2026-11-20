@@ -1,7 +1,0 @@
-{
-  "name": "snapreel-push",
-  "private": true,
-  "type": "module",
-  "description": "Ends Snapreel's Lock Screen Live Activity with an ActivityKit push when a screen recording stops while Snapreel is suspended.",
-  "engines": { "node": "22.x" }
-}
