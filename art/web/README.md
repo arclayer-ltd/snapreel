@@ -12,27 +12,27 @@ Red is the only accent.
 | `gen/` | Round 1's six cut-out characters for the old red-field site. Not used by the site any more; kept as source art. |
 | `credits.md` | Every generation, its job ID and credits (round 2: 43.50 of the 80 allowed). |
 | `refs-crops/` | The character crops from `art/characters/lineup.png` uploaded as references. |
-| `screens.json` | Slots, lighting presets and screenshot ids. Drives `scripts/web-compose.py`. |
-| `screens/` | Screens that aren't in a CI run: the Pro screens (`light/`, `dark/`) and the old watch-page stand-in. |
+| `screens.json` | The scene slots. Drives `scripts/web-compose.py`. |
+| `screens/` | The app screenshots the site's iPhones show, Light and Dark (`light/`, `dark/`), copied from CI runs (the Pro screens from run r31, the rest from build 40, run 44708462842). Drives `scripts/web-screens.py`. |
 | `og.html` | Source of `web/app/(marketing)/opengraph-image.jpg` and `twitter-image.jpg`. |
 | `review/` | Full-page review screenshots of every page at 390 and 1440 px, Light and Dark (`{page}-{width}-{scheme}.jpg`), and `compose/` previews of each phone and scene. |
 
-## The hard rule
+## The iPhone
 
-An app screenshot only ever appears inside an iPhone, lit to match where it stands. `scripts/web-compose.py`
-renders an iPhone 16 Pro in 3D (titanium frame with a machined edge gradient, side buttons, glass rim
-highlight, Dynamic Island, glass sheen) at the slot's pose and casts its shadow. Each slot names a lighting
-preset per mode:
+Since the owner's review of 20 Nov 2026 ("make it a real iPhone, upright, prominent"), every phone on the site
+is one component, `web/components/marketing/iphone.tsx`: an iPhone 16 Pro drawn in CSS (`.mk-iphone` in
+`marketing.css`), front on and upright, with a titanium band (natural in Light, black in Dark), the black
+bezel, Dynamic Island, the side keys and a soft, layered shadow, all sized in `cqw` so it scales to any width.
+`<PeekPhone>` is the same phone rising out of the bottom of a tile.
 
-| Preset | Where | Light |
-|---|---|---|
-| `day` | phones standing in the Light scenes | sun from the upper left, sky-blue fill on the frame, warm paving bounce, faint sky reflection in the glass, cool slate shadow |
-| `dusk` | phones in the Dusk scenes | warm lamp light from the right, indigo fill, orange ground bounce, deep navy shadow |
-| `golden` | the pricing rooftop, Light | warm late-afternoon light from the right, warm brown shadow |
-| `studio`, `studio-dark` | phones on the pastel tiles | neutral soft light; Dark uses a cooler frame and a black shadow |
+An app screenshot only ever appears inside that iPhone, and a Light page only shows Light screenshots, a Dark
+page Dark ones. `scripts/web-screens.py` exports them (AVIF and WebP, 400 and 800 px) to
+`web/public/marketing/screens/` with `screens-manifest.ts`, and makes the logo and favicons from the app icon.
+The two player screens are composites: the fixture's grey diagram video is replaced by the camera recording
+from `rec.camera.recording`, with the player's own controls, reactions and timeline lifted off the screenshot
+and laid back on top.
 
-A Light scene shows the app's Light screenshot and a Dusk scene the Dark one; the page swaps them with
-`<picture>` and `prefers-color-scheme`.
+The old 3D phone renders (`kind: "iphone"` in `scripts/web-compose.py`) are no longer used.
 
 ## Scenes
 
@@ -50,17 +50,19 @@ Spots (the guide-card and 404 illustrations) are just scene crops (`wide` box), 
 
 On the page (`web/components/marketing/art.tsx`, `.mk-scene` in `marketing.css`), a scene section draws
 its sky colour, puts the headline on it, and tucks the picture up under the text (`--tuck` on phones,
-`--tuck-d` on wide screens) so the characters start just below the buttons. The inner-page strip banner is
-the one "cover" scene: a set height, the picture anchored to the bottom.
+`--tuck-d` on wide screens) so the characters start just below the buttons. The home hero and the inner-page
+strip banner are "cover" scenes on wide screens: a set height, the picture anchored to the bottom with no
+fade, so the hero's headline sits in the picture's own sky. The hero's kite, which ran through the one-line
+headline, was painted out with `scripts/web-hero-erase-kite.py` (originals in git history).
 
 ## Running it
 
 Run from the repo root (Pillow with AVIF, numpy and OpenCV):
 
 ```
-python scripts/web-compose.py                       # every slot (about 15 minutes)
-python scripts/web-compose.py phone-hero --preview  # some slots, with previews in review/compose/
-python scripts/web-compose.py --light-dir <ci>/screenshots --dark-dir <ci>/dark/screenshots
+python scripts/web-compose.py                       # every scene (several minutes)
+python scripts/web-compose.py scene-hero --preview  # some slots, with previews in review/compose/
+python scripts/web-screens.py --preview             # the phone screens, the logo and the favicons
 ```
 
 Outputs go to `web/public/marketing/art/` and `web/components/marketing/art-manifest.ts`.

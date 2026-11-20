@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Art } from "@/components/marketing/art";
+import { PeekPhone } from "@/components/marketing/iphone";
 import { Icon, type IconName } from "@/components/marketing/marks";
 import { PageBanner } from "@/components/marketing/page-banner";
 import { Container } from "@/components/marketing/sections";
@@ -73,13 +73,11 @@ export default function SupportPage() {
             <p>We look at every report and remove videos that break the rules. The person who shared it isn&rsquo;t told who reported it.</p>
           </Card>
 
-          <figure className="mk-tile mk-tile--peach flex flex-col items-center gap-6 overflow-hidden px-6 pb-8 pt-8 md:col-span-2 lg:col-span-1 lg:row-span-2 lg:justify-center">
-            <div className="w-[62%] max-w-[250px] lg:w-[88%]">
-              <Art slot="support" sizes="(min-width: 1024px) 250px, 62vw" />
-            </div>
+          <figure className="mk-tile mk-tile--peach flex flex-col items-center overflow-hidden px-6 pt-8 md:col-span-2 lg:col-span-1 lg:row-span-2">
             <figcaption className="max-w-[18rem] text-center text-[0.9375rem] leading-relaxed text-text-2">
               Your Account page in the app: manage Snapreel Pro, sign out or delete your account.
             </figcaption>
+            <PeekPhone screen="account" crop={0.16} sizes="(min-width: 1024px) 260px, 62vw" className="mt-8 w-[62%] max-w-[260px] lg:mt-auto lg:w-[84%]" />
           </figure>
 
           <Card id="delete" icon="stop" title="Delete your account">

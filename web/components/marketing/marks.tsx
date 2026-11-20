@@ -1,12 +1,21 @@
 /** Small inline marks and icons for the marketing pages. All decorative (aria-hidden). */
 
-/** The record-button mark from the app icon. */
-export function LogoMark({ size = 28, className = "" }: { size?: number; className?: string }) {
+/** The app's own icon (Snapreel/Resources/Assets.xcassets/AppIcon), in its rounded-square shape, as the logo. */
+export function AppIcon({ size = 32, className = "" }: { size?: number; className?: string }) {
   return (
-    <svg aria-hidden="true" viewBox="0 0 32 32" width={size} height={size} className={className}>
-      <circle cx="16" cy="16" r="13" fill="none" stroke="var(--sr-red)" strokeWidth="3.4" />
-      <circle cx="16" cy="16" r="6.4" fill="var(--sr-red)" />
-    </svg>
+    // eslint-disable-next-line @next/next/no-img-element -- a 2 KB fixed-size logo; next/image adds nothing here
+    <img
+      src="/marketing/app-icon-64.webp"
+      srcSet="/marketing/app-icon-64.webp 64w, /marketing/app-icon-128.webp 128w, /marketing/app-icon-192.webp 192w"
+      sizes={`${size}px`}
+      width={size}
+      height={size}
+      alt=""
+      aria-hidden="true"
+      decoding="async"
+      draggable={false}
+      className={`mk-appicon ${className}`}
+    />
   );
 }
 

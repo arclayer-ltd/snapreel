@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Art, SceneStage, sceneVars } from "@/components/marketing/art";
+import { SceneStage, sceneVars } from "@/components/marketing/art";
+import { IPhone, PeekPhone } from "@/components/marketing/iphone";
 import { Check } from "@/components/marketing/marks";
 import {
   Container,
@@ -95,12 +96,12 @@ export default function PricingPage() {
         aria-labelledby="pricing-hero"
         className="mk-scene mk-scene--flow mk-scene--top"
         style={sceneVars("scene-pricing", {
-          "--tuck": "80px",
-          "--tuck-d": "calc(17.4vw - 20px)",
-          "--pw": "15%",
-          "--pb": "5%",
-          "--pw-m": "40%",
-          "--pb-m": "4%",
+          "--tuck": "40px",
+          "--tuck-d": "calc(9vw - 20px)",
+          "--pw": "min(19%, 300px)",
+          "--pb": "6%",
+          "--pw-m": "min(46%, 220px)",
+          "--pb-m": "5%",
         })}
       >
         <div className="mk-scene-content mx-auto max-w-[920px] px-[var(--mk-gutter)] pt-28 text-center sm:pt-32 lg:pt-36">
@@ -114,7 +115,7 @@ export default function PricingPage() {
           </p>
         </div>
         <SceneStage slot="scene-pricing" priority sizes="100vw">
-          <Art slot="phone-pricing" priority sizes="(min-width: 1024px) 15vw, 40vw" />
+          <IPhone screen="paywall" ground priority sizes="(min-width: 1024px) 300px, 46vw" />
         </SceneStage>
       </section>
 
@@ -202,13 +203,11 @@ export default function PricingPage() {
 
       <section aria-labelledby="in-app-title" className="mt-20 sm:mt-28">
         <Container>
-          <div className="mk-card grid grid-cols-1 items-center gap-8 overflow-hidden p-3 md:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]">
-            <div className="mk-tile mk-tile--rose flex justify-center overflow-hidden px-6 pt-10">
-              <div className="-mb-[18%] w-[62%] max-w-[250px]">
-                <Art slot="support" sizes="(min-width: 768px) 250px, 62vw" />
-              </div>
+          <div className="mk-card grid grid-cols-1 items-stretch gap-8 overflow-hidden p-3 md:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]">
+            <div className="mk-tile mk-tile--rose mk-tile--inset flex justify-center overflow-hidden px-6 pt-10 md:h-full">
+              <PeekPhone screen="account" crop={0.3} sizes="(min-width: 768px) 250px, 62vw" className="mt-auto w-[62%] max-w-[250px]" />
             </div>
-            <div className="px-4 pb-8 md:px-6 md:pb-0">
+            <div className="self-center px-4 pb-8 md:px-6 md:py-10">
               <p className="mk-label">In the app</p>
               <h2 id="in-app-title" className="mk-title mt-4 text-[2rem] sm:text-[2.5rem]">
                 Get Pro in the Snapreel app.

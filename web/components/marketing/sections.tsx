@@ -132,7 +132,7 @@ export function Faq({ items }: { items: FaqItem[] }) {
   return (
     <div className="space-y-3">
       {items.map((item) => (
-        <details key={item.q} className="mk-faq mk-card group !rounded-[22px]">
+        <details key={item.q} className="mk-faq mk-card mk-card--s group">
           <summary className="flex min-h-16 items-center justify-between gap-4 px-5 py-4 text-left text-[1.0625rem] font-semibold sm:px-7">
             <span>{item.q}</span>
             <span className="mk-faq-icon grid size-8 shrink-0 place-items-center rounded-full bg-red-soft text-red-text" aria-hidden="true">

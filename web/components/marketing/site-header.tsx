@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowRight, LogoMark } from "./marks";
+import { AppIcon, ArrowRight } from "./marks";
 
 const nav = [
   { href: "/#features", label: "Features", wide: true },
@@ -14,8 +14,8 @@ export function SiteHeader() {
     <header className="mk-header">
       <div className="px-[var(--mk-gutter)]">
         <div className="mk-nav">
-          <Link href="/" className="flex shrink-0 items-center gap-2 rounded-full pr-1" aria-label="Snapreel home">
-            <LogoMark size={28} />
+          <Link href="/" className="flex shrink-0 items-center gap-2.5 rounded-full pr-1" aria-label="Snapreel home">
+            <AppIcon size={34} />
             <span className="mk-nav-wordmark mk-display text-[1.25rem] font-bold tracking-[-0.03em]">Snapreel</span>
           </Link>
           <nav aria-label="Main" className="flex items-center gap-0.5 sm:gap-1">

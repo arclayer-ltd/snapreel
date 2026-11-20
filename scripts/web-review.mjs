@@ -7,7 +7,8 @@
 //
 // Drives headless Microsoft Edge (or Chrome) over the DevTools protocol, so the width is exact
 // (a plain --window-size is clamped to 500 px in headless mode) and prefers-color-scheme is
-// emulated. Writes art/web/review/{page}-{width}-{scheme}.jpg and prints any horizontal overflow.
+// emulated. Writes art/web/review/{page}-{width}-{scheme}.jpg (REVIEW_OUT=<dir> writes there instead), plus
+// {page}-{width}-{scheme}-fold.jpg, the first screen only, and prints any horizontal overflow.
 
 import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -16,8 +17,8 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const outDir = join(root, "art/web/review");
-const PAGES = ["/", "/pricing", "/help", "/help/first-recording", "/privacy", "/terms", "/support", "/help/no-such-article"];
+const outDir = process.env.REVIEW_OUT ? resolve(process.env.REVIEW_OUT) : join(root, "art/web/review");
+const PAGES = ["/", "/pricing", "/help", "/help/camera-recording", "/privacy", "/terms", "/support", "/help/no-such-article", "/no-such-page"];
 const SIZES = [
   { width: 390, height: 844 },
   { width: 1440, height: 900 },
@@ -115,6 +116,22 @@ async function shoot(cdp, url, { width, height }, scheme, file) {
     })()`,
   });
   const m = result.value;
+  // The first screen, as a visitor sees it on arrival.
+  await cdp.send("Runtime.evaluate", {
+    awaitPromise: true,
+    expression: `(async () => {
+      const inView = [...document.images].filter((i) => { const r = i.getBoundingClientRect(); return r.width && r.top < innerHeight && r.bottom > 0; });
+      await Promise.race([
+        Promise.all(inView.map((i) => i.complete ? 0 : new Promise((r) => { i.onload = i.onerror = r; }))),
+        new Promise((r) => setTimeout(r, 15000)),
+      ]);
+      await Promise.all(inView.map((i) => (i.decode ? i.decode().catch(() => {}) : 0)));
+      await document.fonts.ready;
+      await new Promise((r) => setTimeout(r, 400));
+    })()`,
+  });
+  const fold = await cdp.send("Page.captureScreenshot", { format: "jpeg", quality: 85, clip: { x: 0, y: 0, width, height, scale: 1 } });
+  writeFileSync(file.replace(/\.jpg$/, "-fold.jpg"), Buffer.from(fold.data, "base64"));
   // Paint the whole page in one viewport (captureBeyondViewport skips some composited layers).
   // Every lazy image is then in view, so it loads on its own.
   await cdp.send("Emulation.setDeviceMetricsOverride", { width, height: m.height, deviceScaleFactor: 1, mobile: width < 768 });
@@ -144,7 +161,7 @@ async function shoot(cdp, url, { width, height }, scheme, file) {
   writeFileSync(file, Buffer.from(shot.data, "base64"));
   const overflow = m.scrollWidth > m.clientWidth ? `  OVERFLOW ${m.scrollWidth}px: ${m.wide.join(", ")}` : "";
   const empty = m.empty.length ? `  EMPTY IMAGES: ${m.empty.join(" | ")}` : "";
-  console.log(`${file.slice(root.length + 1)}  ${width}x${m.height}${overflow}${empty}`);
+  console.log(`${file.startsWith(root) ? file.slice(root.length + 1) : file}  ${width}x${m.height}${overflow}${empty}`);
 }
 
 async function single(url, file, width, height) {

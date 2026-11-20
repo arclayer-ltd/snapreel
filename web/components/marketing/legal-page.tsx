@@ -15,7 +15,7 @@ export function LegalPage({ doc, fallbackTitle }: { doc: "privacy" | "terms"; fa
           <h1 className="mk-title mt-4 text-[2.5rem] sm:text-[3.25rem]">{title || fallbackTitle}</h1>
           {updated ? <p className="mt-3 text-text-2">{updated}</p> : null}
           {draft ? (
-            <p className="mt-6 rounded-2xl bg-red-soft px-4 py-3 text-[0.95rem] text-text">
+            <p className="mk-squircle mt-6 rounded-[var(--mk-r-m)] bg-red-soft px-4 py-3 text-[0.95rem] text-text">
               This is a draft while Snapreel is in TestFlight. It may change before the App Store release, and the date
               above will change with it.
             </p>
