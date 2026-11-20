@@ -160,7 +160,7 @@ struct LinkSettingsView: View {
     private var expiryFootnote: String {
         guard let draft else { return "" }
         if let date = draft.expiry.date(from: Date()) {
-            return "The link stops working on \(Format.dateTime(date)). The video is then deleted from snapreel.video."
+            return "The link stops working on \(Format.dateTime(date)). The video is deleted from snapreel.video 30 days later."
         }
         return "The link keeps working until you stop sharing it."
     }

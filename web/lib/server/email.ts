@@ -1,4 +1,5 @@
 import "server-only";
+import { LEGAL_ADDRESS, LEGAL_ENTITY } from "../legal-entity";
 import { EMAIL_FROM, SITE_URL, SUPPORT_EMAIL, env } from "./env";
 
 // Email goes out through Resend's HTTP API from Snapreel <hello@snapreel.video> (domain snapreel.video, verified
@@ -73,7 +74,7 @@ function layout(opts: {
 </td></tr>
 <tr><td style="padding:16px 32px 0"><h1 style="margin:0 0 12px;font-size:24px;line-height:1.25;color:#13141B">${escapeHtml(opts.heading)}</h1></td></tr>
 <tr><td style="padding:0 32px"><table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td style="font-size:16px;line-height:1.5;color:#3D404C">${opts.bodyHtml}</td></tr>${button}</table></td></tr>
-<tr><td style="padding:8px 32px 32px;font-size:13px;line-height:1.5;color:#6B6F7D;border-top:1px solid #ECEDF1">${opts.footerHtml ?? ""}<p style="margin:12px 0 0">Snapreel · Arclayer Ltd · <a href="${SITE_URL}" style="color:#6B6F7D">snapreel.video</a></p></td></tr>
+<tr><td style="padding:8px 32px 32px;font-size:13px;line-height:1.5;color:#6B6F7D;border-top:1px solid #ECEDF1">${opts.footerHtml ?? ""}<p style="margin:12px 0 0">Snapreel · ${escapeHtml(LEGAL_ENTITY.name)}, ${escapeHtml(LEGAL_ADDRESS)} · <a href="${SITE_URL}" style="color:#6B6F7D">snapreel.video</a></p></td></tr>
 </table></td></tr></table></body></html>`;
 }
 

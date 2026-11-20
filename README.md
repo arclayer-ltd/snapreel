@@ -12,4 +12,5 @@ people as files. Everything stays on the device: no account, no server, no netwo
 
 See `docs/PLAN.md` for the plan, architecture and screen list.
 
-© Arclayer Ltd. All rights reserved.
+© 2026 Rezan Ferdous. All rights reserved. (The `arclayer` names in the GitHub organisation and bundle IDs are
+identifiers only.)
