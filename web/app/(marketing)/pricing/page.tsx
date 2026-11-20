@@ -96,7 +96,7 @@ export default function PricingPage() {
         aria-labelledby="pricing-hero"
         className="mk-scene mk-scene--flow mk-scene--top"
         style={sceneVars("scene-pricing", {
-          "--tuck": "40px",
+          "--tuck": "6px",
           "--tuck-d": "calc(9vw - 20px)",
           "--pw": "min(19%, 300px)",
           "--pb": "6%",

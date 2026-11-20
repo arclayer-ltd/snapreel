@@ -171,7 +171,7 @@ export default function Home() {
           "--px": 0.49,
           "--pb": 0.03,
           "--pw": 0.2,
-          "--pw-max": "340px",
+          "--pw-max": "560px",
           "--tuck": "84px",
           "--pw-m": "52%",
           "--pb-m": "2.5%",
@@ -196,7 +196,7 @@ export default function Home() {
           </div>
         </div>
         <SceneStage slot="scene-hero" priority sizes="(min-width: 1024px) max(100vw, 1480px), 100vw">
-          <IPhone screen="player-ready" priority sizes="(min-width: 1024px) 340px, 52vw" />
+          <IPhone screen="player-ready" priority sizes="(min-width: 1024px) max(312px, 20vw), 52vw" />
         </SceneStage>
       </section>
 

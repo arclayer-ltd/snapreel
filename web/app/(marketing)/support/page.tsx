@@ -49,7 +49,7 @@ export default function SupportPage() {
       </PageBanner>
 
       <Container className="relative z-10 mt-8">
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,0.8fr)]">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,0.92fr)]">
           <Card id="contact" icon="mail" title="Email support">
             <p>
               Write to <a href={`mailto:${EMAIL}`}>{EMAIL}</a>. It helps to tell us:
@@ -73,11 +73,11 @@ export default function SupportPage() {
             <p>We look at every report and remove videos that break the rules. The person who shared it isn&rsquo;t told who reported it.</p>
           </Card>
 
-          <figure className="mk-tile mk-tile--peach flex flex-col items-center overflow-hidden px-6 pt-8 md:col-span-2 lg:col-span-1 lg:row-span-2">
+          <figure className="mk-tile mk-tile--peach flex flex-col items-center overflow-hidden px-6 pt-7 md:col-span-2 lg:col-span-1 lg:row-span-2 lg:px-7">
             <figcaption className="max-w-[18rem] text-center text-[0.9375rem] leading-relaxed text-text-2">
               Your Account page in the app: manage Snapreel Pro, sign out or delete your account.
             </figcaption>
-            <PeekPhone screen="account" crop={0.16} sizes="(min-width: 1024px) 260px, 62vw" className="mt-8 w-[62%] max-w-[260px] lg:mt-auto lg:w-[84%]" />
+            <PeekPhone screen="account" crop={0.16} sizes="(min-width: 1024px) 290px, 62vw" className="mt-7 w-[62%] max-w-[290px] lg:mt-auto lg:w-full" />
           </figure>
 
           <Card id="delete" icon="stop" title="Delete your account">

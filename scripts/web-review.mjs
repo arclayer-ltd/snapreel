@@ -173,7 +173,19 @@ async function single(url, file, width, height) {
     const loaded = cdp.waitFor("Page.loadEventFired");
     await cdp.send("Page.navigate", { url });
     await loaded;
-    await cdp.send("Runtime.evaluate", { awaitPromise: true, expression: "document.fonts.ready.then(() => new Promise((r) => setTimeout(r, 600)))" });
+    await cdp.send("Runtime.evaluate", {
+      awaitPromise: true,
+      expression: `(async () => {
+        const inView = [...document.images].filter((i) => { const r = i.getBoundingClientRect(); return r.width && r.top < innerHeight && r.bottom > 0; });
+        await Promise.race([
+          Promise.all(inView.map((i) => i.complete ? 0 : new Promise((r) => { i.onload = i.onerror = r; }))),
+          new Promise((r) => setTimeout(r, 15000)),
+        ]);
+        await Promise.all(inView.map((i) => (i.decode ? i.decode().catch(() => {}) : 0)));
+        await document.fonts.ready;
+        await new Promise((r) => setTimeout(r, 600));
+      })()`,
+    });
     const shot = await cdp.send("Page.captureScreenshot", { format: "png", clip: { x: 0, y: 0, width, height, scale: 1 } });
     writeFileSync(resolve(root, file), Buffer.from(shot.data, "base64"));
     console.log(`${file}  ${width}x${height}`);

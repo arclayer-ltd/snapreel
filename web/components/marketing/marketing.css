@@ -733,8 +733,10 @@
     }
   }
   @media (min-width: 1024px) {
+    /* At least 1040 px, so the headline, the buttons and the phone's top fit one above the other; on very
+       wide screens the whole picture, so nothing in it is cropped behind the words. */
     .mk-hero {
-      --h: clamp(980px, 72cqw, 1240px);
+      --h: max(1040px, calc(100cqw / var(--ar)));
     }
     .mk-hero-title {
       font-size: clamp(2.75rem, 3.7vw, 4.25rem);
