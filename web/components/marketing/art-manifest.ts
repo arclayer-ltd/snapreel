@@ -13,24 +13,24 @@ export const art = {
     "width2x": 1040
   },
   "comments": {
-    "alt": "Snapreel's notifications feed",
+    "alt": "Viewers' comments and reactions on a shared Snapreel recording",
     "width": 340,
     "height": 616,
+    "width2x": 588,
     "light": {
       "avif1x": "/marketing/art/comments-light-1x.avif",
       "webp1x": "/marketing/art/comments-light-1x.webp",
       "avif2x": "/marketing/art/comments-light-2x.avif",
       "webp2x": "/marketing/art/comments-light-2x.webp"
     },
-    "lightSource": "notif.feed (light)",
+    "lightSource": "share.link.comments (light)",
     "dark": {
       "avif1x": "/marketing/art/comments-dark-1x.avif",
       "webp1x": "/marketing/art/comments-dark-1x.webp",
       "avif2x": "/marketing/art/comments-dark-2x.avif",
       "webp2x": "/marketing/art/comments-dark-2x.webp"
     },
-    "darkSource": "notif.feed (dark)",
-    "width2x": 588
+    "darkSource": "share.link.comments (dark)"
   },
   "files": {
     "alt": "The Snapreel library with recordings on the iPhone",
@@ -85,44 +85,44 @@ export const art = {
     "width2x": 589
   },
   "hero": {
-    "alt": "A smiling woman in a red hoodie holds out an iPhone playing a Snapreel recording and gives a thumbs-up",
+    "alt": "A smiling woman in a red hoodie holds out an iPhone showing a copied Snapreel link and gives a thumbs-up",
     "width": 760,
     "height": 760,
+    "width2x": 1520,
     "light": {
       "avif1x": "/marketing/art/hero-light-1x.avif",
       "webp1x": "/marketing/art/hero-light-1x.webp",
       "avif2x": "/marketing/art/hero-light-2x.avif",
       "webp2x": "/marketing/art/hero-light-2x.webp"
     },
-    "lightSource": "video.player (light)",
+    "lightSource": "share.link.ready (light)",
     "dark": {
       "avif1x": "/marketing/art/hero-dark-1x.avif",
       "webp1x": "/marketing/art/hero-dark-1x.webp",
       "avif2x": "/marketing/art/hero-dark-2x.avif",
       "webp2x": "/marketing/art/hero-dark-2x.webp"
     },
-    "darkSource": "video.player (dark)",
-    "width2x": 1520
+    "darkSource": "share.link.ready (dark)"
   },
   "insights": {
-    "alt": "A recording's details in Snapreel: played 3 times, 82% watched",
+    "alt": "A shared recording's stats in Snapreel: views, how far people watched and who watched",
     "width": 340,
     "height": 615,
+    "width2x": 589,
     "light": {
       "avif1x": "/marketing/art/insights-light-1x.avif",
       "webp1x": "/marketing/art/insights-light-1x.webp",
       "avif2x": "/marketing/art/insights-light-2x.avif",
       "webp2x": "/marketing/art/insights-light-2x.webp"
     },
-    "lightSource": "video.details (light)",
+    "lightSource": "insights.pro (light)",
     "dark": {
       "avif1x": "/marketing/art/insights-dark-1x.avif",
       "webp1x": "/marketing/art/insights-dark-1x.webp",
       "avif2x": "/marketing/art/insights-dark-2x.avif",
       "webp2x": "/marketing/art/insights-dark-2x.webp"
     },
-    "darkSource": "video.details (dark)",
-    "width2x": 589
+    "darkSource": "insights.pro (dark)"
   },
   "jump": {
     "alt": "A young woman in a varsity jacket jumps and holds out her open hand",
@@ -137,24 +137,24 @@ export const art = {
     "width2x": 1040
   },
   "pro": {
-    "alt": "Snapreel's home screen",
+    "alt": "Snapreel Pro: $39.99 a year with a week free, or $5.99 a month",
     "width": 340,
     "height": 608,
+    "width2x": 598,
     "light": {
       "avif1x": "/marketing/art/pro-light-1x.avif",
       "webp1x": "/marketing/art/pro-light-1x.webp",
       "avif2x": "/marketing/art/pro-light-2x.avif",
       "webp2x": "/marketing/art/pro-light-2x.webp"
     },
-    "lightSource": "home.filled (light)",
+    "lightSource": "pro.paywall (light)",
     "dark": {
       "avif1x": "/marketing/art/pro-dark-1x.avif",
       "webp1x": "/marketing/art/pro-dark-1x.webp",
       "avif2x": "/marketing/art/pro-dark-2x.avif",
       "webp2x": "/marketing/art/pro-dark-2x.webp"
     },
-    "darkSource": "home.filled (dark)",
-    "width2x": 598
+    "darkSource": "pro.paywall (dark)"
   },
   "record-camera": {
     "alt": "Snapreel recording with the front camera",
@@ -217,44 +217,44 @@ export const art = {
     "width2x": 594
   },
   "run-link": {
-    "alt": "A young man in red headphones sprints with his iPhone showing a finished Snapreel recording",
+    "alt": "A young man in red headphones sprints with his iPhone showing a shared recording's 128 views",
     "width": 520,
     "height": 650,
+    "width2x": 1040,
     "light": {
       "avif1x": "/marketing/art/run-link-light-1x.avif",
       "webp1x": "/marketing/art/run-link-light-1x.webp",
       "avif2x": "/marketing/art/run-link-light-2x.avif",
       "webp2x": "/marketing/art/run-link-light-2x.webp"
     },
-    "lightSource": "rec.review (light)",
+    "lightSource": "share.link.player (light)",
     "dark": {
       "avif1x": "/marketing/art/run-link-dark-1x.avif",
       "webp1x": "/marketing/art/run-link-dark-1x.webp",
       "avif2x": "/marketing/art/run-link-dark-2x.avif",
       "webp2x": "/marketing/art/run-link-dark-2x.webp"
     },
-    "darkSource": "rec.review (dark)",
-    "width2x": 1040
+    "darkSource": "share.link.player (dark)"
   },
   "support": {
-    "alt": "Snapreel's settings with Help centre and Contact support",
+    "alt": "Snapreel's Account page with Snapreel Pro and Manage subscription",
     "width": 300,
     "height": 543,
+    "width2x": 589,
     "light": {
       "avif1x": "/marketing/art/support-light-1x.avif",
       "webp1x": "/marketing/art/support-light-1x.webp",
       "avif2x": "/marketing/art/support-light-2x.avif",
       "webp2x": "/marketing/art/support-light-2x.webp"
     },
-    "lightSource": "settings.root (light)",
+    "lightSource": "account.page.pro (light)",
     "dark": {
       "avif1x": "/marketing/art/support-dark-1x.avif",
       "webp1x": "/marketing/art/support-dark-1x.webp",
       "avif2x": "/marketing/art/support-dark-2x.avif",
       "webp2x": "/marketing/art/support-dark-2x.webp"
     },
-    "darkSource": "settings.root (dark)",
-    "width2x": 589
+    "darkSource": "account.page.pro (dark)"
   },
   "watch-laptop": {
     "alt": "A young man in a bucket hat points at a laptop showing a Snapreel video in the browser",

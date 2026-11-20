@@ -11,21 +11,19 @@
       "kind": "art",
       "art": "art/web/gen/hero-v1.webp",
       "device": "iphone",
-      "screen": "video.player",
-      "swapTo": "share.link.ready",
+      "screen": "share.link.ready",
       "width": 760,
       "bounceSide": "right",
-      "alt": "A smiling woman in a red hoodie holds out an iPhone playing a Snapreel recording and gives a thumbs-up"
+      "alt": "A smiling woman in a red hoodie holds out an iPhone showing a copied Snapreel link and gives a thumbs-up"
     },
     "run-link": {
       "kind": "art",
       "art": "art/web/gen/run-v1.webp",
       "device": "iphone",
-      "screen": "rec.review",
-      "swapTo": "share.link.ready",
+      "screen": "share.link.player",
       "width": 520,
       "bounceSide": "left",
-      "alt": "A young man in red headphones sprints with his iPhone showing a finished Snapreel recording"
+      "alt": "A young man in red headphones sprints with his iPhone showing a shared recording's 128 views"
     },
     "watch-laptop": {
       "kind": "art",
@@ -79,19 +77,17 @@
     },
     "insights": {
       "kind": "iphone",
-      "screen": "video.details",
-      "swapTo": "insights.overview",
+      "screen": "insights.pro",
       "pose": { "yaw": -14, "pitch": 7, "roll": -4 },
       "width": 340,
-      "alt": "A recording's details in Snapreel: played 3 times, 82% watched"
+      "alt": "A shared recording's stats in Snapreel: views, how far people watched and who watched"
     },
     "comments": {
       "kind": "iphone",
-      "screen": "notif.feed",
-      "swapTo": "comments.thread",
+      "screen": "share.link.comments",
       "pose": { "yaw": 14, "pitch": 7, "roll": 4 },
       "width": 340,
-      "alt": "Snapreel's notifications feed"
+      "alt": "Viewers' comments and reactions on a shared Snapreel recording"
     },
     "files": {
       "kind": "iphone",
@@ -102,11 +98,10 @@
     },
     "pro": {
       "kind": "iphone",
-      "screen": "home.filled",
-      "swapTo": "pro.paywall",
+      "screen": "pro.paywall",
       "pose": { "yaw": -16, "pitch": 7, "roll": -5 },
       "width": 340,
-      "alt": "Snapreel's home screen"
+      "alt": "Snapreel Pro: $39.99 a year with a week free, or $5.99 a month"
     },
     "help": {
       "kind": "iphone",
@@ -117,11 +112,10 @@
     },
     "support": {
       "kind": "iphone",
-      "screen": "settings.root",
-      "swapTo": "account.root",
+      "screen": "account.page.pro",
       "pose": { "yaw": 14, "pitch": 6, "roll": 4 },
       "width": 300,
-      "alt": "Snapreel's settings with Help centre and Contact support"
+      "alt": "Snapreel's Account page with Snapreel Pro and Manage subscription"
     }
   }
 }

@@ -80,17 +80,14 @@ That's why `SIWA_CLIENT_IDS` lists both.
 | Price | USD 39.99, with Apple's equalised price in all 175 storefronts (for example GBP 39.99, EUR 44.99 in Germany, JPY 6,000, INR 3,999, BRL 249.90) | USD 5.99, equalised in all 175 (GBP 5.99, EUR 6.99, JPY 1,000, INR 599, BRL 39.90) |
 | Introductory offer | 1-week free trial, one period, in all 175 territories, no end date | none |
 | Review note | set (what Pro unlocks, where the paywall is, sign-in) | set |
-| State | MISSING_METADATA: waiting for the review screenshot | MISSING_METADATA |
+| Review screenshot | `pro.paywall` from CI run 35 (1125×2436), uploaded 2026-11-20 | the same |
+| State | READY_TO_SUBMIT | READY_TO_SUBMIT |
 
 Product IDs can never be reused, even after deletion.
 
-**Review screenshot**: still missing. No CI run on the iPhone-app branch had produced `pro.*` screenshots when this was written. Once one has:
-1. Download the run's screenshots with `gh run download`.
-2. For each subscription, `POST v1/subscriptionAppStoreReviewScreenshots` with `{fileName, fileSize}` and the subscription relationship.
-3. PUT each `uploadOperations` part.
-4. `PATCH` with `{uploaded: true, sourceFileChecksum: <md5>}`.
+**Review screenshot**: uploaded 2026-11-20 from CI run 35's `pro.paywall.png` (reserve with `POST v1/subscriptionAppStoreReviewScreenshots`, PUT the parts, then `PATCH` `{uploaded: true, sourceFileChecksum}`). To replace it, delete the old one first.
 
-The subscriptions move to READY_TO_SUBMIT and are submitted together with the first app version that sells Pro.
+Both are READY_TO_SUBMIT and are submitted together with the first app version that sells Pro.
 
 ### App Store Connect app settings
 
@@ -180,14 +177,12 @@ Status on 20 November 2026. ✅ is done on Apple's side; ⏳ waits on another se
 | 5.1.1(v) Account deletion | In-app deletion that also revokes Sign in with Apple tokens | ✅ key and `SIWA_*` env for `/auth/revoke`. ⏳ `/api/account/delete` (backend) and the Settings screen (app) |
 | 1.2 User-generated content | Filter, report, block, contact info, takedown terms | ✅ age rating answers UGC = Yes. ⏳ report, block and filter (backend, app, web); Terms (website) |
 | 5.1.2 Data use and sharing | No tracking, no ads, App Privacy matches the policy | ✅ App Privacy published with no tracking. ⏳ the privacy policy page must list the same data and processors (Supabase, Vercel, Resend, Apple) |
-| 2.1 App completeness | Reviewers can sign in and try Pro; the backend is live; the subscriptions are submitted with the build | ✅ draft notes above; no demo account needed. ⏳ live backend, the review screenshot, attaching the subscriptions to the version |
+| 2.1 App completeness | Reviewers can sign in and try Pro; the backend is live; the subscriptions are submitted with the build | ✅ draft notes above; no demo account needed. ⏳ live backend, attaching the subscriptions to the version |
 | Age rating | Re-answered for UGC and web access | ✅ 4+, UGC Yes, unrestricted web access No |
 | Export compliance | HTTPS only | ✅ `ITSAppUsesNonExemptEncryption` = NO in `Snapreel-Info.plist` |
 
 ## Still open
 
-- **Subscription review screenshot**: waits for a CI run on the iPhone-app branch with the `pro.*` paywall screenshot, then the upload described above.
-- **Entitlements in `Snapreel.entitlements`** (app session). The new profile already allows them, so a build without them still signs. A build with them needs this profile, which is now in CI.
 - **`/.well-known/apple-app-site-association`** on snapreel.video, with `applinks` `/v/*` and `webcredentials` for `N3DBKUVJS5.co.arclayer.snapreel` (backend session).
 - **Supabase Apple provider**: the client IDs and the first client secret (backend session).
 - **Optional:** the Sign in with Apple server-to-server notification endpoint on the App ID, for "email forwarding turned off" and "account deleted" events from Apple. The contract has no endpoint for it yet.
