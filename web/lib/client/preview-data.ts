@@ -81,7 +81,7 @@ function comment(
   minutesAgo: number,
   extra: Partial<Comment> = {},
 ): Comment {
-  return { id, authorName, isOwner: false, body, atS, parentId: null, createdAt: iso(now, minutesAgo), ...extra };
+  return { id, authorName, isOwner: false, body, atS, parentId: null, createdAt: iso(now, minutesAgo), held: false, ...extra };
 }
 
 function reactions(now: number, prefix: string, list: [string, number, string | null, number][]): Reaction[] {
@@ -145,6 +145,7 @@ export function previewVideos(now: number): PreviewVideo[] {
     comment(now, "c4", "Alex", "Watched it twice. Plays nicely on the train too.", null, 52),
     comment(now, "c5", "Mina Okafor", "Small thing: can the email say “today” instead of “tonight”?", 19, 21),
     comment(now, "c6", "Priya Shah", "Agree with Mina.", null, 14, { parentId: "c5" }),
+    comment(now, "c7", "Anon", "This is rubbish, you clown.", 8, 6, { held: true }),
   ];
 
   const list: PreviewVideo[] = [

@@ -4,6 +4,7 @@
 #   bash scripts/pro-smoke.sh                       # https://snapreel.video
 #   RESOLVE_IP=76.76.21.21 bash scripts/pro-smoke.sh  # pin one Vercel IP (the owner's carrier blocks some)
 #   BASE=http://localhost:3000 bash scripts/pro-smoke.sh
+#   BASE=https://<preview>.vercel.app BYPASS_HEADER_FILE=<file> bash scripts/pro-smoke.sh   # a protected preview
 #
 # Needs curl, ffmpeg, node and web/.env.local from `vercel env pull` (NEXT_PUBLIC_SUPABASE_URL,
 # NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY, SUPABASE_SECRET_KEY). Secrets are read into header files in a private temp
@@ -20,6 +21,9 @@ TMP="$(mktemp -d)"
 chmod 700 "$TMP"
 RESOLVE=()
 [ -n "${RESOLVE_IP:-}" ] && RESOLVE=(--resolve "snapreel.video:443:$RESOLVE_IP")
+# A protected Vercel preview: BYPASS_HEADER_FILE holds "x-vercel-protection-bypass: <secret>". It's sent only to $BASE.
+BYPASS=()
+[ -n "${BYPASS_HEADER_FILE:-}" ] && BYPASS=(-H "@$BYPASS_HEADER_FILE")
 
 envget() { grep -E "^$1=" "$ENV_FILE" | head -1 | cut -d= -f2- | sed -e 's/^"//' -e 's/"$//'; }
 SB="$(envget NEXT_PUBLIC_SUPABASE_URL)"
@@ -45,6 +49,7 @@ api() {
   shift 2
   [ $# -gt 0 ] && shift
   local args=(-sS -o "$TMP/out" -w '%{http_code}' -X "$method" "${RESOLVE[@]}" -H "user-agent: ${CALL_UA:-$UA}")
+  [[ "$url" == "$BASE"* ]] && args+=("${BYPASS[@]}")
   [ -n "$data" ] && args+=(-H 'content-type: application/json' --data-binary "$data")
   CODE=$(curl "${args[@]}" "$@" "$url" 2>"$TMP/curl.err") || CODE="curl:$(head -c 120 "$TMP/curl.err")"
   OUT=$(cat "$TMP/out" 2>/dev/null || true)
@@ -54,6 +59,8 @@ admin() { CALL_UA="snapreel-pro-smoke/1.0" api "$1" "$SB$2" "${3-}" -H @"$TMP/ad
 as_a() { api "$1" "$BASE$2" "${3-}" -H "authorization: Bearer $TOKEN_A"; }
 as_b() { api "$1" "$BASE$2" "${3-}" -H "authorization: Bearer $TOKEN_B"; }
 viewer() { api "$1" "$BASE$2" "${3-}" -b "$TMP/viewer.jar" -c "$TMP/viewer.jar"; }
+# A second browser, for "Don't count my views".
+viewer2() { api "$1" "$BASE$2" "${3-}" -b "$TMP/viewer2.jar" -c "$TMP/viewer2.jar"; }
 # j 'expr': evaluates a JS expression over the last response as `v`.
 j() { "$NODE" -e 'let v;try{v=JSON.parse(require("fs").readFileSync(0,"utf8"))}catch{v=null};const r=(()=>'"$1"')();process.stdout.write(r===undefined||r===null?"":String(r))' <<<"$OUT"; }
 expect() {
@@ -264,11 +271,37 @@ viewer POST "/api/public/v/$SLUG/view" "{\"event\":\"end\",\"positionS\":2,\"vie
 expect 200 "view beacon: end"
 check "$(j 'v.viewId')" "$VIEW_ID" "same view row"
 
+# --- "Don't count my views" (cookie sr_nocount): a second browser opts out, then watches it all
+viewer2 POST /api/public/view-opt-out '{"optOut":true}'
+expect 200 "view opt-out"
+check "$(j 'v.optOut')" "true" "opt-out answer"
+grep -q $'sr_nocount\t1' "$TMP/viewer2.jar" && ok "opt-out sets sr_nocount=1" || bad "no sr_nocount cookie"
+api POST "$BASE/api/public/view-opt-out" '{"optOut":true}' -H "origin: https://evil.example"
+expect 403 "opt-out refuses another site's origin"
+viewer2 POST "/api/public/v/$SLUG/view" "{\"event\":\"start\",\"positionS\":0,\"watched\":[$(seq -s, 0 99)]}"
+expect 200 "opted-out view beacon is accepted"
+check "$(j 'v.viewId')" "" "opted-out view gets no viewId"
+viewer2 POST "/api/public/v/$SLUG/view" "{\"event\":\"end\",\"positionS\":2,\"watched\":[$(seq -s, 0 99)]}"
+check "$(j 'v.viewId')" "" "opted-out end beacon records nothing"
+grep -q $'\tsr_vs\t' "$TMP/viewer2.jar" && ok "opted-out browser keeps its sr_vs ID" || bad "opted-out browser has no sr_vs"
+admin GET "/rest/v1/views?video_id=eq.$VID&select=session_id"
+check "$(j 'v.length')" "1" "only the counted viewer has a view row"
+viewer2 POST /api/public/view-opt-out '{"optOut":false}'
+check "$(j 'v.optOut')" "false" "opt back in"
+grep -q $'sr_nocount\t1' "$TMP/viewer2.jar" && bad "sr_nocount still set after opting back in" || ok "opting back in clears sr_nocount"
+
 viewer POST "/api/public/v/$SLUG/comments" '{"name":"Smoke Viewer","body":"Nice one","atS":1,"website":""}'
 expect 201 "comment"
 COMMENT_ID=$(j 'v.id')
 viewer POST "/api/public/v/$SLUG/comments" '{"name":"Bot","body":"spam","atS":1,"website":"http://spam.example"}'
 expect 201 "honeypot comment looks accepted"
+# Comment word filter (App Review 1.2): held for the owner, never shown to viewers.
+viewer POST "/api/public/v/$SLUG/comments" '{"name":"Smoke Troll","body":"Smoke test: this is s h i t","atS":1,"website":""}'
+expect 201 "comment matching the word filter"
+check "$(j 'v.held')" "true" "it's held"
+HELD_ID=$(j 'v.id')
+viewer POST "/api/public/v/$SLUG/comments" "{\"name\":\"Smoke Viewer\",\"body\":\"Reply\",\"atS\":null,\"parentId\":\"$HELD_ID\",\"website\":\"\"}"
+expect 400 "can't reply to a held comment"
 # JSON escape for 👍: Windows mangles non-ASCII command-line arguments.
 viewer POST "/api/public/v/$SLUG/reactions" '{"emoji":"\ud83d\udc4d","atS":1}'
 expect 201 "reaction"
@@ -278,7 +311,8 @@ viewer POST "/api/public/v/$SLUG/report" '{"reason":"other","details":"Automated
 expect 204 "report"
 viewer GET "/api/public/v/$SLUG/activity"
 expect 200 "public activity"
-check "$(j 'v.comments.length + "/" + v.reactions.length')" "1/1" "one comment (honeypot not stored), one reaction"
+check "$(j 'v.comments.length + "/" + v.reactions.length')" "1/1" "one comment (honeypot not stored, held one hidden), one reaction"
+check "$(j 'v.comments.some((c) => c.id === "'"$HELD_ID"'" || c.held)')" "false" "public activity leaves the held comment out"
 
 # --- Owner views
 as_a GET "/api/videos/$VID/insights"
@@ -286,9 +320,10 @@ expect 200 "insights (Free)"
 check "$(j 'v.views + "/" + v.uniqueViewers + "/" + v.dropoff')" "1/1/null" "Free insights: counts only"
 as_a GET /api/videos
 expect 200 "GET /api/videos"
-check "$(j 'v.length + "/" + v[0].views + "/" + v[0].commentCount')" "1/1/1" "list shows the view and comment"
+check "$(j 'v.length + "/" + v[0].views + "/" + v[0].commentCount')" "1/1/2" "list shows the view and both comments (one held)"
 as_a GET "/api/videos/$VID/activity"
 check "$(j 'v.comments[0] && v.comments[0].authorName')" "Smoke Viewer" "owner activity has the comment"
+check "$(j '(v.comments.find((c) => c.id === "'"$HELD_ID"'") || {}).held')" "true" "owner activity has the held comment, marked held"
 
 # --- Isolation: user B can't see or touch A's video
 as_b GET "/api/videos/$VID"
@@ -299,6 +334,17 @@ as_b DELETE "/api/videos/$VID"
 expect 404 "B can't delete A's video"
 as_b DELETE "/api/comments/$COMMENT_ID"
 expect 404 "B can't delete A's comments"
+as_b POST "/api/comments/$HELD_ID/approve"
+expect 404 "B can't approve A's held comment"
+
+# --- The owner approves the held comment, then deletes it
+as_a POST "/api/comments/$HELD_ID/approve"
+expect 200 "owner approves the held comment"
+check "$(j 'v.id + "/" + v.held')" "$HELD_ID/false" "approved comment is no longer held"
+viewer GET "/api/public/v/$SLUG/activity"
+check "$(j 'v.comments.some((c) => c.id === "'"$HELD_ID"'")')" "true" "approved comment is public"
+as_a DELETE "/api/comments/$HELD_ID"
+expect 204 "owner deletes the approved comment"
 
 # --- Pro features: refused on Free, then granted (as App Store verification would) and used
 as_a PATCH "/api/videos/$VID" '{"access":"password","password":"open sesame"}'

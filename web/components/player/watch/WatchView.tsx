@@ -19,6 +19,7 @@ import { StateScreen } from "./StateScreen";
 import { TranscriptList } from "./TranscriptList";
 import { UploadingStage } from "./UploadingStage";
 import { useViewBeacons } from "./useViewBeacons";
+import { ViewCountSwitch } from "./ViewCountSwitch";
 import { WatchFooter, WatchHeader } from "./WatchChrome";
 
 type Tab = "comments" | "transcript";
@@ -209,6 +210,7 @@ export function WatchView({ slug, initial }: { slug: string; initial: PublicVide
                     comments={comments}
                     loading={loadingActivity}
                     allowComments={video.allowComments && ready}
+                    ownerName={video.ownerName}
                     closedMessage={
                       video.allowComments && !ready
                         ? "You can comment once the video has finished uploading."
@@ -234,6 +236,7 @@ export function WatchView({ slug, initial }: { slug: string; initial: PublicVide
             <FlagIcon size={14} />
             Report this video
           </button>
+          <ViewCountSwitch />
         </WatchFooter>
         <ReportDialog slug={slug} open={reportOpen} onClose={() => setReportOpen(false)} />
       </div>

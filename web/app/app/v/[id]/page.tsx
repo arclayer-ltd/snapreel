@@ -31,7 +31,7 @@ async function Detail({ params }: { params: Promise<{ id: string }> }) {
   if (!video) return <Missing />;
   const [insights, activity, me, media] = await Promise.all([
     getInsights(user.id, id),
-    getActivity(id),
+    getActivity(id, "owner"),
     getMe(user.id),
     // The owner's own copy for the preview player: owners skip the password, and their views don't count.
     getPublicVideo(video.slug, { unlockCookie: null, viewerUserId: user.id }),

@@ -165,6 +165,12 @@ export interface Comment {
   atS: number | null;
   parentId: string | null;
   createdAt: string;
+  /**
+   * The word filter held it (App Review 1.2): only the video's owner sees it, until they approve it
+   * (POST /api/comments/{id}/approve) or delete it. Public activity never includes held comments; the answer to the
+   * viewer who posted one says `held: true`. The owner's own comments are never held.
+   */
+  held: boolean;
 }
 
 export interface Reaction {
@@ -203,6 +209,11 @@ export interface PublicVideo {
   cta: CallToAction | null;
   showBadge: boolean;
   createdAt: string;
+}
+
+/** POST /api/public/view-opt-out: the watch page's "Don't count my views" switch (cookie sr_nocount). */
+export interface ViewOptOut {
+  optOut: boolean;
 }
 
 export interface ViewEvent {

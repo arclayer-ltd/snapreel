@@ -70,6 +70,7 @@ Pipe secrets in on stdin (`… | vercel env add NAME --environment production --
 | 20261119233239 advisor_fixes | `rls_auto_enable()` locked down, explicit server-only policies |
 | 20261119233521 device_token_check | fixes a regex Postgres can't run (`{32,400}`) |
 | 20261120001418 prune_rate_limits | cleanup helper for the cron |
+| 20261120081525 held_comments | `comments.held` for the comment word filter (App Review 1.2); no new grants |
 
 To add one: write the file, apply it (Supabase MCP `apply_migration`, or `supabase db push` from a linked
 checkout), rename the file to the recorded version (`list_migrations`), then:
@@ -78,7 +79,7 @@ checkout), rename the file to the recorded version (`list_migrations`), then:
    is traffic.
 2. Regenerate `web/lib/server/database.types.ts` (MCP `generate_typescript_types`; keep the header comment and the
    short `Tables`/`Enums` helpers at the bottom).
-3. Run `supabase/tests/rls_checks.sql` (SQL editor or MCP `execute_sql`). It seeds two users, runs 72 checks as
+3. Run `supabase/tests/rls_checks.sql` (SQL editor or MCP `execute_sql`). It seeds two users, runs 74 checks as
    `anon`, user A, user B and `service_role`, and always ends by raising an exception, so nothing is kept. The
    message starts with `RLS CHECKS: n passed, m failed`.
 
@@ -188,7 +189,14 @@ copy it, `vercel env add SUPABASE_AUTH_HOOK_SECRET … --force` in all three env
 bash scripts/pro-smoke.sh                           # against https://snapreel.video
 RESOLVE_IP=76.76.21.21 bash scripts/pro-smoke.sh    # pin one Vercel IP
 BASE=http://localhost:3000 bash scripts/pro-smoke.sh   # a local `next start`; skips the two production-only checks
+BASE=https://<preview>.vercel.app BYPASS_HEADER_FILE=<file> ENV_FILE=.env.smoke bash scripts/pro-smoke.sh   # a preview
 ```
+
+A preview deployment is behind Deployment Protection. `BYPASS_HEADER_FILE` is a private file holding one line,
+`x-vercel-protection-bypass: <secret>`, with the project's "Protection Bypass for Automation" secret (Vercel →
+snapreel-push → Settings → Deployment Protection, the same one `vercel curl` uses). The script sends it only to
+`$BASE`, never prints it; delete the file afterwards. On 20 November 2026 the preview of branch
+`claude/silly-swirles-fb25d2` passed 110 checks, 0 failed (the two production-only checks skipped).
 
 It needs curl, ffmpeg, node and `web/.env.local`. It runs about 90 checks:
 - it makes two throwaway users at Resend's test inbox (`delivered+smoke-…@resend.dev`) and signs them in with
@@ -196,12 +204,27 @@ It needs curl, ffmpeg, node and `web/.env.local`. It runs about 90 checks:
 - it makes a link, uploads an ~8 MB video plus poster and preview with TUS in 6 MB chunks, and marks it ready;
 - it covers the public watch flow, password, expiry, view beacons, comments, the honeypot, reactions, a report,
   Free and Pro insights, isolation between the users, the Pro gates, block and delete, devices, forged JWS, cron
-  auth, stopping the link and deleting both accounts.
+  auth, stopping the link and deleting both accounts;
+- it checks the comment word filter (a matching comment is held, hidden from the public activity, shown to the owner,
+  can't be replied to or approved by another user, then approved and deleted) and "Don't count my views" (a second
+  browser opts out, watches it all, and leaves no view row, keeping its `sr_vs`).
 
 It deletes what it made, even when a step fails, and it removes leftovers of runs killed more than 15 minutes
 before. One real email goes out: the test report to support@snapreel.video ("Automated smoke test … Please
 ignore."). Last result: 89 passed, 0 failed, against the live Supabase project through a local `next start`
 (20 November 2026).
+
+## Comment word filter
+
+`web/lib/server/moderation.ts` holds a short list of slurs and strong abuse (App Review guideline 1.2). A viewer's
+comment whose name or text matches is stored with `comments.held = true`: public activity leaves it out, the poster
+is told it waits for the owner, and the owner's alert says only that a comment is waiting. The owner approves
+(`POST /api/comments/{id}/approve`) or deletes it in the dashboard or the app. To change the list, edit `STEMS` there
+and redeploy; keep it short, since every match costs the owner a review. Before this filter, matching words were
+masked with asterisks; comments stored that way stay as they are.
+
+To see what's waiting across all owners: `select c.id, v.slug, c.author_name, c.body, c.created_at from comments c
+join videos v on v.id = c.video_id where c.held and c.deleted_at is null order by c.created_at desc;`.
 
 ## Takedowns
 

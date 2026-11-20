@@ -131,6 +131,9 @@ struct PlayerScreen: View {
         .task(id: currentLink?.serverID) { await loadActivity() }
         .confirmationDialog(moderating.map { "Comment by \($0.authorName)" } ?? "Comment",
                             isPresented: moderationShown, titleVisibility: .visible, presenting: moderating) { comment in
+            if comment.isHeld {
+                Button("Approve comment") { approve(comment) }
+            }
             Button("Delete comment", role: .destructive) { moderate(comment, block: false) }
             Button("Delete and block \(comment.authorName)", role: .destructive) { moderate(comment, block: true) }
             Button("Cancel", role: .cancel) {}
@@ -334,6 +337,7 @@ struct PlayerScreen: View {
                           commentsAllowed: currentLink?.detail?.allowComments ?? true,
                           onSeek: { seekAndPlay($0) },
                           onModerate: { moderating = $0 },
+                          onApprove: { approve($0) },
                           onRetry: { Task { await loadActivity() } },
                           onSettings: { ProPresenter.linkSettings(video.id) })
         case .transcript:
@@ -732,6 +736,27 @@ struct PlayerScreen: View {
                 Haptics.success()
                 toast = ToastMessage(text: block ? "Deleted and blocked \(comment.authorName)" : "Comment deleted",
                                      systemImage: block ? "hand.raised.fill" : "trash.fill")
+            } catch {
+                Haptics.error()
+                toast = ToastMessage(text: (error as? CloudError)?.message ?? "That didn't work. Try again.",
+                                     systemImage: "exclamationmark.circle.fill")
+            }
+        }
+    }
+
+    /// Publishes a comment the word filter held, so viewers see it on the watch page.
+    private func approve(_ comment: CloudComment) {
+        moderating = nil
+        Task { @MainActor in
+            do {
+                let approved = try await APIClient.shared.approveComment(comment.id)
+                withAnimation(Motion.standard) {
+                    if let index = activity?.comments.firstIndex(where: { $0.id == comment.id }) {
+                        activity?.comments[index] = approved
+                    }
+                }
+                Haptics.success()
+                toast = ToastMessage(text: "Comment approved", systemImage: "checkmark.circle.fill")
             } catch {
                 Haptics.error()
                 toast = ToastMessage(text: (error as? CloudError)?.message ?? "That didn't work. Try again.",

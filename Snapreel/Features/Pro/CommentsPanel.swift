@@ -3,20 +3,26 @@ import SwiftUI
 /// The player's Comments tab for a shared recording: what viewers wrote on the watch page,
 /// newest first, each pinned to its moment (tap to jump there), plus a count of their
 /// reactions. You can delete any comment, and block its author from all your videos
-/// (App Review guideline 1.2). Hosted in the player's UIKit scroller, so everything comes in
-/// as values and callbacks.
+/// (App Review guideline 1.2). Comments the server's word filter held come first, marked Held:
+/// viewers can't see them until you approve them. Hosted in the player's UIKit scroller, so
+/// everything comes in as values and callbacks.
 struct CommentsPanel: View {
     let activity: CloudActivity?
     let failed: Bool
     let commentsAllowed: Bool
     let onSeek: @MainActor (Double) -> Void
     let onModerate: @MainActor (CloudComment) -> Void
+    let onApprove: @MainActor (CloudComment) -> Void
     let onRetry: @MainActor () -> Void
     let onSettings: @MainActor () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: Space.m) {
             if let activity {
+                let held = activity.comments.filter(\.isHeld).count
+                if held > 0 {
+                    heldNote(held)
+                }
                 if !activity.reactions.isEmpty {
                     reactionSummary(activity.reactions)
                 }
@@ -31,9 +37,10 @@ struct CommentsPanel: View {
                         .padding(.vertical, Space.l)
                 } else {
                     ForEach(threads(activity.comments), id: \.0.id) { thread in
-                        CommentRow(comment: thread.0, onSeek: onSeek, onModerate: onModerate)
+                        CommentRow(comment: thread.0, onSeek: onSeek, onModerate: onModerate, onApprove: onApprove)
                         ForEach(thread.1) { reply in
-                            CommentRow(comment: reply, isReply: true, onSeek: onSeek, onModerate: onModerate)
+                            CommentRow(comment: reply, isReply: true, onSeek: onSeek, onModerate: onModerate,
+                                       onApprove: onApprove)
                         }
                     }
                 }
@@ -60,9 +67,11 @@ struct CommentsPanel: View {
         }
     }
 
-    /// Top-level comments newest first, each with its replies oldest first.
+    /// Top-level comments, held ones first, then newest first; each with its replies oldest first.
     private func threads(_ comments: [CloudComment]) -> [(CloudComment, [CloudComment])] {
-        let roots = comments.filter { $0.parentId == nil }.sorted { $0.createdAt > $1.createdAt }
+        let roots = comments.filter { $0.parentId == nil }.sorted {
+            $0.isHeld != $1.isHeld ? $0.isHeld : $0.createdAt > $1.createdAt
+        }
         return roots.map { root in
             (root, comments.filter { $0.parentId == root.id }.sorted { $0.createdAt < $1.createdAt })
         }
@@ -95,6 +104,28 @@ struct CommentsPanel: View {
         .accessibilityElement(children: .combine)
     }
 
+    private func heldNote(_ count: Int) -> some View {
+        HStack(alignment: .top, spacing: Space.s) {
+            Image(systemName: "eye.slash")
+                .foregroundStyle(Color.srStageTextSecondary)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(count == 1 ? "1 comment is waiting for you" : "\(count) comments are waiting for you")
+                    .font(.srSubheadlineStrong)
+                    .foregroundStyle(Color.srStageText)
+                Text(count == 1
+                     ? "It contains words on Snapreel's filter list, so viewers can't see it until you approve it."
+                     : "They contain words on Snapreel's filter list, so viewers can't see them until you approve them.")
+                    .font(.srFootnote)
+                    .foregroundStyle(Color.srStageTextSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(Space.s)
+        .background(RoundedRectangle(cornerRadius: Radius.m, style: .continuous).fill(Color.srStageRaised))
+        .accessibilityElement(children: .combine)
+    }
+
     private var offNote: some View {
         HStack(spacing: Space.s) {
             Image(systemName: "text.bubble")
@@ -117,6 +148,7 @@ private struct CommentRow: View {
     var isReply = false
     let onSeek: @MainActor (Double) -> Void
     let onModerate: @MainActor (CloudComment) -> Void
+    let onApprove: @MainActor (CloudComment) -> Void
 
     var body: some View {
         HStack(alignment: .top, spacing: Space.s) {
@@ -137,6 +169,19 @@ private struct CommentRow: View {
                         .font(.srFootnote)
                         .foregroundStyle(Color.srStageTextTertiary)
                         .lineLimit(1)
+                    if comment.isHeld {
+                        Text("Held")
+                            .font(.srCaption.weight(.semibold))
+                            .foregroundStyle(Color.srStageTextSecondary)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 1)
+                            .overlay(Capsule().strokeBorder(Color.srStageTextTertiary, lineWidth: 1))
+                    }
+                }
+                if comment.isHeld {
+                    Text("Only you can see this until you approve it.")
+                        .font(.srFootnote)
+                        .foregroundStyle(Color.srStageTextSecondary)
                 }
                 Text(comment.body)
                     .font(.srCallout)
@@ -156,6 +201,16 @@ private struct CommentRow: View {
                     }
                     .buttonStyle(PressScaleStyle())
                     .accessibilityLabel("Play from \(Format.stamp(at))")
+                }
+                if comment.isHeld {
+                    Button {
+                        Haptics.tap()
+                        onApprove(comment)
+                    } label: {
+                        Label("Approve", systemImage: "checkmark")
+                    }
+                    .buttonStyle(.srSecondaryCompact)
+                    .accessibilityLabel("Approve comment by \(comment.authorName)")
                 }
             }
             Spacer(minLength: 0)

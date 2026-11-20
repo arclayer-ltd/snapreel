@@ -93,6 +93,7 @@ Only the server writes it.
 `comments`
 - `id`; `video_id`; `session_id`; `author_user_id` null; `author_name`
 - `body` (1 to 1,000 characters); `at_s` numeric null; `parent_id` null
+- `held` bool, default false: the word filter held it (see "Comment word filter" below)
 - `created_at`, `deleted_at`
 
 `reactions`
@@ -116,6 +117,7 @@ A blocked viewer can't comment or react on any of that owner's videos.
 **Row-level security** is on for every table.
 - Owners may select, update and delete their own `videos`, and the `comments`, `reactions` and `views` on their videos.
 - `anon` gets nothing. Public pages read through the server with the secret key.
+- Owners can't change `comments.held` themselves (their only column grant on `comments` is `deleted_at`); approving goes through the API.
 - Storage bucket `videos` is private. Authenticated users may insert and update only under `videos/{auth.uid()}/…`.
 
 ## Storage layout
@@ -151,8 +153,9 @@ Bodies are JSON with camelCase keys. Errors look like `{error: "<code>", message
 | `PATCH /api/videos/{id}` | any of `{title, status, uploadedBytes, access, password, expiresAt, allowDownload, allowComments, allowReactions, cta, transcript}` | `VideoDetail`. `{status: "ready"}` before all three files are up: 409 `{error: "upload_incomplete", missing: ["video.mp4", …]}`. Password (4–128 characters), a non-null `expiresAt`, `allowDownload: true` and a non-null `cta` are Pro (402 `pro_feature`); `null`/`false` always works |
 | `DELETE /api/videos/{id}` | | 204. Stops sharing, deletes the files, keeps nothing |
 | `GET /api/videos/{id}/insights` | | `{views, uniqueViewers, avgPercent, completionRate, dropoff: [100 ints], countries: [{code, count}], viewers: [{name, anonymous, country, device, firstSeenAt, lastSeenAt, percent}]}`. Free gets `views` and `uniqueViewers`; the rest is `null`. `avgPercent`, `completionRate` and `viewers[].percent` are 0–100; `dropoff[i]` is how many counted views watched the i-th 1% of the video |
-| `GET /api/videos/{id}/activity` | | `{comments: [Comment], reactions: [Reaction]}` |
+| `GET /api/videos/{id}/activity` | | `{comments: [Comment], reactions: [Reaction]}`, including comments the word filter held (`held: true`) |
 | `DELETE /api/comments/{id}` | | 204 |
+| `POST /api/comments/{id}/approve` | | `Comment` with `held: false`. Publishes a comment the word filter held. 404 unless it's on one of your videos |
 | `POST /api/blocks` | `{commentId}` or `{reactionId}` | 204. Blocks that viewer from all your videos |
 | `POST /api/devices` | `{token, environment: "production"\|"sandbox", appVersion}` | 204 |
 | `DELETE /api/devices/{token}` | | 204 |
@@ -160,9 +163,9 @@ Bodies are JSON with camelCase keys. Errors look like `{error: "<code>", message
 | `POST /api/account/delete` | `{appleAuthorizationCode?, appleClientId?}` | 204. Deletes everything, including the auth user. Sign in with Apple is revoked when the app sends a fresh `appleAuthorizationCode` (from an `ASAuthorizationAppleIDCredential`; `appleClientId` defaults to the bundle ID) |
 
 Shapes:
-- `VideoSummary`: `{id, slug, url, localId, title, kind, durationS, status, posterUrl, createdAt, views, uniqueViewers, lastViewedAt, commentCount, access, expiresAt}` (`access` and `expiresAt` let the dashboard list mark password and expired links)
+- `VideoSummary`: `{id, slug, url, localId, title, kind, durationS, status, posterUrl, createdAt, views, uniqueViewers, lastViewedAt, commentCount, access, expiresAt}` (`access` and `expiresAt` let the dashboard list mark password and expired links; `commentCount` counts held comments too)
 - `VideoDetail`: VideoSummary plus `{hasPassword, allowDownload, allowComments, allowReactions, cta, width, height, sizeBytes}`
-- `Comment`: `{id, authorName, isOwner, body, atS, parentId, createdAt}`
+- `Comment`: `{id, authorName, isOwner, body, atS, parentId, createdAt, held}`. `held` is true only in the owner's activity and in the answer to the viewer who posted it; public activity never contains held comments. Older servers leave it out, which means false
 - `Reaction`: `{id, emoji, atS, authorName, createdAt}`
 
 ### Public endpoints (no account; cookie `sr_vs` = signed random session ID)
@@ -171,9 +174,10 @@ Shapes:
 |---|---|---|
 | `GET /api/public/v/{slug}` | | `{title, kind, ownerName, brand: {color, logoUrl} \| null, durationS, width, height, status, uploadProgress, posterUrl, videoUrl, previewUrl, captionsUrl, transcript, allowDownload, allowComments, allowReactions, cta, showBadge, createdAt}`, or 401 `{error: "password"}`, or 410 `{error: "expired" \| "removed"}` |
 | `POST /api/public/v/{slug}/unlock` | `{password}` | 204 and sets the `sr_unlock_{slug}` cookie (12 h) |
-| `POST /api/public/v/{slug}/view` | `{event: "start"\|"progress"\|"end", positionS, watched: [bucketIndex], viewId?, referrer?}` | `{viewId}`. Sent with `sendBeacon` on pagehide. `watched` holds the 0–99 indexes of the 1% slices played since the last beacon; send back the `viewId` from the first answer, and `document.referrer` as `referrer`. `viewId` is `null` for the owner and for link-preview bots (not recorded) |
+| `POST /api/public/v/{slug}/view` | `{event: "start"\|"progress"\|"end", positionS, watched: [bucketIndex], viewId?, referrer?}` | `{viewId}`. Sent with `sendBeacon` on pagehide. `watched` holds the 0–99 indexes of the 1% slices played since the last beacon; send back the `viewId` from the first answer, and `document.referrer` as `referrer`. `viewId` is `null` for the owner, for link-preview bots and for a browser with `sr_nocount=1` (none of them recorded) |
+| `POST /api/public/view-opt-out` | `{optOut: boolean}` | `{optOut}`. The watch page's "Don't count my views" switch. Sets the cookie `sr_nocount=1` for a year (`optOut: true`) or clears it; same-origin only. Nothing is stored on the server, and `sr_vs` stays for blocks and rate limits |
 | `GET /api/public/v/{slug}/activity` | | `{comments, reactions}` |
-| `POST /api/public/v/{slug}/comments` | `{name, body, atS, parentId?, website}`. `website` is a honeypot and must be empty | `Comment` |
+| `POST /api/public/v/{slug}/comments` | `{name, body, atS, parentId?, website}`. `website` is a honeypot and must be empty | `Comment`. `held: true` when the word filter held it: it isn't shown to other viewers until the owner approves it. `parentId` must be a published (not held) comment |
 | `POST /api/public/v/{slug}/reactions` | `{emoji, atS, name?}` | `Reaction` |
 | `POST /api/public/v/{slug}/report` | `{reason, details, email?}` | 204 |
 | `GET /api/public/v/{slug}/captions.vtt` | | `text/vtt` |
@@ -182,6 +186,12 @@ Shapes:
 Also public, added by the backend:
 - `GET /api/public/v/{slug}/poster.jpg` and `/preview.mp4`: 302 to a fresh signed URL. Stable addresses for `og:image`, `og:video`, oEmbed thumbnails and emails. Only for links anyone can open (404 for password, expired or removed links, so their previews stay generic).
 - `GET /api/email/unsubscribe?u=…&s=…` (and one-click `POST`): turns email alerts off. Every alert email links to it and carries `List-Unsubscribe`.
+
+**Comment word filter** (App Review 1.2). A viewer's comment whose name or text matches a short list of slurs and
+strong abuse (`web/lib/server/moderation.ts`, server-side only; it also catches spaced-out, stretched and look-alike
+spellings) is stored with `held = true`. Held comments are left out of public activity and never named in alerts;
+the owner sees them marked "Held" in the dashboard and the app and approves or deletes them. The owner's own comments
+are never held. A reaction whose typed name matches keeps the reaction and drops the name.
 
 Public error codes: 401 `password`, 401 `wrong_password` (unlock), 403 `comments_off` / `reactions_off`, 403 `blocked`, 410 `expired` / `removed`, 404 `not_found`, 429 `rate_limited`, 400 `bad_request`. The `website` honeypot gets a normal-looking 201 and nothing is stored.
 
@@ -209,7 +219,7 @@ Server-only routes: `POST /api/auth/send-email` (Supabase Send Email hook, Stand
 
 When pushes are sent:
 - **view:** the first counted view by each new session;
-- **comment:** every comment;
+- **comment:** every comment. A held comment's alert says "A comment on “title” is waiting for you" without its name or text (push and email);
 - **reaction:** batched, at most one per video every 10 minutes.
 
 Each one also gets an email from Resend if the user hasn't turned email off. That setting lives in `profiles.email_alerts`, a boolean defaulting to true, which the backend adds.

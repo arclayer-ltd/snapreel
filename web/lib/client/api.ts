@@ -19,6 +19,7 @@ import type {
   VideoDetail,
   VideoSummary,
   ViewEvent,
+  ViewOptOut,
 } from "@/lib/contract";
 import { PREVIEW } from "@/lib/client/preview-data";
 import { accessToken } from "@/lib/client/supabase";
@@ -91,7 +92,14 @@ export const publicApi = {
   react: (slug: string, body: NewReaction) => request<Reaction>("POST", pub(slug, "/reactions"), { body }),
   report: (slug: string, body: NewReport) => request<void>("POST", pub(slug, "/report"), { body }),
   view: (slug: string, body: ViewEvent) => request<{ viewId: string }>("POST", pub(slug, "/view"), { body }),
+  /** "Don't count my views": sets or clears the sr_nocount cookie for every Snapreel link in this browser. */
+  setViewOptOut: (optOut: boolean) => request<ViewOptOut>("POST", "/api/public/view-opt-out", { body: { optOut } }),
 };
+
+/** True when this browser turned on "Don't count my views" (cookie sr_nocount=1). */
+export function viewsOptedOut(): boolean {
+  return typeof document !== "undefined" && /(?:^|;\s*)sr_nocount=1(?:;|$)/.test(document.cookie);
+}
 
 /** For pagehide: survives the page closing. Returns false if the browser refused it. */
 export function sendViewBeacon(slug: string, body: ViewEvent): boolean {
@@ -126,6 +134,7 @@ export const ownerApi = {
   insights: (id: string) => request<Insights>("GET", `/api/videos/${encodeURIComponent(id)}/insights`, { auth: true }),
   activity: (id: string) => request<Activity>("GET", `/api/videos/${encodeURIComponent(id)}/activity`, { auth: true }),
   deleteComment: (id: string) => request<void>("DELETE", `/api/comments/${encodeURIComponent(id)}`, { auth: true }),
+  approveComment: (id: string) => request<Comment>("POST", `/api/comments/${encodeURIComponent(id)}/approve`, { auth: true }),
   block: (target: { commentId: string } | { reactionId: string }) =>
     request<void>("POST", "/api/blocks", { body: target, auth: true }),
   deleteAccount: () => request<void>("POST", "/api/account/delete", { auth: true }),

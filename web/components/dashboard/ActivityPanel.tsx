@@ -1,6 +1,7 @@
 "use client";
 
-// Comments and reactions on one video, with delete and block (App Review 1.2: user-generated content).
+// Comments and reactions on one video, with delete and block (App Review 1.2: user-generated content). Comments the
+// word filter held are listed first, marked "Held", and stay hidden from viewers until approved here.
 import { useMemo, useState } from "react";
 import type { Activity, Comment, Reaction } from "@/lib/contract";
 import { errorMessage, ownerApi } from "@/lib/client/api";
@@ -25,7 +26,9 @@ export function ActivityPanel({ initial, allowComments }: { initial: Activity; a
   const [showAllReactions, setShowAllReactions] = useState(false);
 
   const { roots, replies } = useMemo(() => {
-    const roots = comments.filter((c) => !c.parentId).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    const roots = comments
+      .filter((c) => !c.parentId)
+      .sort((a, b) => Number(b.held) - Number(a.held) || b.createdAt.localeCompare(a.createdAt));
     const replies = new Map<string, Comment[]>();
     for (const c of comments) {
       if (!c.parentId) continue;
@@ -33,6 +36,7 @@ export function ActivityPanel({ initial, allowComments }: { initial: Activity; a
     }
     return { roots, replies };
   }, [comments]);
+  const heldCount = comments.filter((c) => c.held).length;
 
   const tally = useMemo(() => {
     const m = new Map<string, number>();
@@ -52,6 +56,20 @@ export function ActivityPanel({ initial, allowComments }: { initial: Activity; a
     } finally {
       setBusy(null);
       setConfirmDelete(null);
+    }
+  }
+
+  async function approve(id: string) {
+    setBusy(`approve:${id}`);
+    setError(null);
+    try {
+      const approved = await ownerApi.approveComment(id);
+      setComments((all) => all.map((c) => (c.id === id ? approved : c)));
+      setNotice("Comment approved. Viewers can see it now.");
+    } catch (err) {
+      setError(errorMessage(err, "That comment wasn't approved. Try again."));
+    } finally {
+      setBusy(null);
     }
   }
 
@@ -90,6 +108,18 @@ export function ActivityPanel({ initial, allowComments }: { initial: Activity; a
       {error && (
         <p role="alert" className="mb-4 rounded-2xl bg-red-soft px-3.5 py-3 text-sm text-red-text">
           {error}
+        </p>
+      )}
+
+      {heldCount > 0 && (
+        <p className="mb-4 rounded-2xl border border-line bg-fill/70 px-3.5 py-3 text-sm">
+          <span className="font-semibold">
+            {heldCount === 1 ? "1 comment is waiting for you." : `${heldCount} comments are waiting for you.`}
+          </span>{" "}
+          <span className="text-text-2">
+            {heldCount === 1 ? "It contains" : "They contain"} words on Snapreel&rsquo;s filter list, so viewers can&rsquo;t
+            see {heldCount === 1 ? "it" : "them"} until you approve {heldCount === 1 ? "it" : "them"}.
+          </span>
         </p>
       )}
 
@@ -161,7 +191,9 @@ export function ActivityPanel({ initial, allowComments }: { initial: Activity; a
                   hasReplies={(replies.get(c.id)?.length ?? 0) > 0}
                   confirming={confirmDelete === c.id}
                   deleting={busy === c.id}
+                  approving={busy === `approve:${c.id}`}
                   onSeek={(t) => store.seek(t, true)}
+                  onApprove={() => approve(c.id)}
                   onAskDelete={() => setConfirmDelete(c.id)}
                   onCancelDelete={() => setConfirmDelete(null)}
                   onDelete={() => remove(c.id)}
@@ -172,17 +204,19 @@ export function ActivityPanel({ initial, allowComments }: { initial: Activity; a
                     {replies.get(c.id)!.map((r) => (
                       <li key={r.id}>
                         <CommentRow
-                  c={r}
-                  reply
-                  hasReplies={(replies.get(r.id)?.length ?? 0) > 0}
-                  confirming={confirmDelete === r.id}
-                  deleting={busy === r.id}
-                  onSeek={(t) => store.seek(t, true)}
-                  onAskDelete={() => setConfirmDelete(r.id)}
-                  onCancelDelete={() => setConfirmDelete(null)}
-                  onDelete={() => remove(r.id)}
-                  onBlock={() => setBlockTarget({ kind: "comment", item: r })}
-                />
+                          c={r}
+                          reply
+                          hasReplies={(replies.get(r.id)?.length ?? 0) > 0}
+                          confirming={confirmDelete === r.id}
+                          deleting={busy === r.id}
+                          approving={busy === `approve:${r.id}`}
+                          onSeek={(t) => store.seek(t, true)}
+                          onApprove={() => approve(r.id)}
+                          onAskDelete={() => setConfirmDelete(r.id)}
+                          onCancelDelete={() => setConfirmDelete(null)}
+                          onDelete={() => remove(r.id)}
+                          onBlock={() => setBlockTarget({ kind: "comment", item: r })}
+                        />
                       </li>
                     ))}
                   </ol>
@@ -217,37 +251,47 @@ export function ActivityPanel({ initial, allowComments }: { initial: Activity; a
 }
 
 function CommentRow({
-c,
-reply = false,
-hasReplies = false,
-confirming,
-deleting,
-onSeek,
-onAskDelete,
-onCancelDelete,
-onDelete,
-onBlock,
+  c,
+  reply = false,
+  hasReplies = false,
+  confirming,
+  deleting,
+  approving,
+  onSeek,
+  onApprove,
+  onAskDelete,
+  onCancelDelete,
+  onDelete,
+  onBlock,
 }: {
-c: Comment;
-reply?: boolean;
-hasReplies?: boolean;
-confirming: boolean;
-deleting: boolean;
-onSeek: (t: number) => void;
-onAskDelete: () => void;
-onCancelDelete: () => void;
-onDelete: () => void;
-onBlock: () => void;
+  c: Comment;
+  reply?: boolean;
+  hasReplies?: boolean;
+  confirming: boolean;
+  deleting: boolean;
+  approving: boolean;
+  onSeek: (t: number) => void;
+  onApprove: () => void;
+  onAskDelete: () => void;
+  onCancelDelete: () => void;
+  onDelete: () => void;
+  onBlock: () => void;
 }) {
   return (
-    <article className="flex gap-3">
+    <article className={`flex gap-3 ${c.held ? "-mx-2 rounded-2xl bg-fill/70 p-2" : ""}`}>
       <Avatar name={c.authorName} size={reply ? 26 : 32} owner={c.isOwner} />
       <div className="min-w-0 flex-1">
         <header className="flex flex-wrap items-baseline gap-x-2">
           <span className="font-semibold">{c.authorName}</span>
           {c.isOwner && <span className="rounded-full bg-red-soft px-1.5 py-px text-[11px] font-semibold text-red-text">You</span>}
+          {c.held && (
+            <span className="rounded-full border border-line bg-surface px-1.5 py-px text-[11px] font-semibold text-text-2">
+              Held
+            </span>
+          )}
           <RelativeTime iso={c.createdAt} className="text-xs text-text-3" />
         </header>
+        {c.held && <p className="mt-0.5 text-[13px] text-text-2">Only you can see this until you approve it.</p>}
         <p className="mt-1 whitespace-pre-wrap break-words text-[15px] leading-relaxed">
           {c.atS !== null && (
             <button
@@ -274,6 +318,11 @@ onBlock: () => void;
             </>
           ) : (
             <>
+              {c.held && (
+                <button type="button" onClick={onApprove} disabled={approving} className={btn("secondary", "sm", "h-8 text-[13px]")}>
+                  {approving ? <Spinner size={14} /> : <CheckIcon size={15} />} Approve
+                </button>
+              )}
               <button type="button" onClick={onAskDelete} className={btn("quiet", "sm", "h-8 text-[13px]")}>
                 <TrashIcon size={15} /> Delete
               </button>

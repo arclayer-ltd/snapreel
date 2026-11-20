@@ -4,6 +4,8 @@ import SwiftUI
 /// Sign in to Snapreel: Sign in with Apple, or a 6-digit code sent to your email. It opens
 /// the first time you tap Copy link (never at launch), before subscribing, and from
 /// "I already have an account" on Welcome. Follows Light and Dark; a swipe down closes it.
+/// Where US app-store age laws apply, it first reads the age range declared to Apple (`AgeGate`);
+/// under-13s can't make an account, and 13 to 17s wait for a parent's approval.
 struct SignInSheet: View {
     enum Step: Equatable {
         case start
@@ -21,6 +23,8 @@ struct SignInSheet: View {
     @State private var error: String?
     @State private var rawNonce = ""
     @State private var resendAfter: Date?
+    /// The age check's answer; nil while Apple is being asked.
+    @State private var age: AgeGate.Outcome?
     @FocusState private var focus: Field?
 
     private enum Field: Hashable {
@@ -29,7 +33,8 @@ struct SignInSheet: View {
     }
 
     init(reason: SignInReason, step: Step = .start, email: String = "", code: String = "",
-         isWorking: Bool = false, error: String? = nil, onDone: @escaping @MainActor (Bool) -> Void) {
+         isWorking: Bool = false, error: String? = nil, age: AgeGate.Outcome? = nil,
+         onDone: @escaping @MainActor (Bool) -> Void) {
         self.reason = reason
         self.onDone = onDone
         _step = State(initialValue: step)
@@ -37,6 +42,7 @@ struct SignInSheet: View {
         _code = State(initialValue: code)
         _isWorking = State(initialValue: isWorking)
         _error = State(initialValue: error)
+        _age = State(initialValue: age)
     }
 
     var body: some View {
@@ -45,13 +51,18 @@ struct SignInSheet: View {
             ScrollView {
                 VStack(spacing: Space.xl) {
                     header
-                    switch step {
-                    case .start:
-                        startContent
-                            .transition(.opacity.combined(with: .move(edge: .leading)))
-                    case .code:
-                        codeContent
-                            .transition(.opacity.combined(with: .move(edge: .trailing)))
+                    if let age, age != .allowed {
+                        ageContent(age)
+                            .transition(.opacity)
+                    } else {
+                        switch step {
+                        case .start:
+                            startContent
+                                .transition(.opacity.combined(with: .move(edge: .leading)))
+                        case .code:
+                            codeContent
+                                .transition(.opacity.combined(with: .move(edge: .trailing)))
+                        }
                     }
                     if let error {
                         Label(error, systemImage: "exclamationmark.circle.fill")
@@ -68,10 +79,14 @@ struct SignInSheet: View {
                 .padding(.bottom, Space.xxl)
                 .animation(Motion.standard, value: step)
                 .animation(Motion.quick, value: error)
+                .animation(Motion.standard, value: age)
             }
             .scrollDismissesKeyboard(.interactively)
             CircleIconButton(systemName: "xmark", label: "Close", tone: .light, size: 32) { onDone(false) }
                 .padding(Space.m)
+        }
+        .task {
+            if age == nil { await checkAge() }
         }
     }
 
@@ -125,7 +140,7 @@ struct SignInSheet: View {
             .signInWithAppleButtonStyle(colorScheme == .dark ? .white : .black)
             .frame(height: 54)
             .clipShape(Capsule())
-            .disabled(isWorking)
+            .disabled(isWorking || age == nil)
             .accessibilityLabel("Continue with Apple")
 
             HStack(spacing: Space.s) {
@@ -167,9 +182,42 @@ struct SignInSheet: View {
                     }
                 }
                 .buttonStyle(.srPrimary)
-                .disabled(!emailLooksValid || isWorking)
+                .disabled(!emailLooksValid || isWorking || age == nil)
             }
         }
+    }
+
+    // MARK: Age
+
+    /// Instead of the sign-in options, when the age check says not yet (or not at all).
+    private func ageContent(_ outcome: AgeGate.Outcome) -> some View {
+        VStack(spacing: Space.l) {
+            VStack(alignment: .leading, spacing: Space.s) {
+                Label(outcome == .tooYoung ? "Snapreel accounts are for 13 and over" : "A parent or guardian needs to agree",
+                      systemImage: outcome == .tooYoung ? "person.crop.circle.badge.xmark" : "person.2.fill")
+                    .font(.srSubheadlineStrong)
+                    .foregroundStyle(Color.srText)
+                Text(AgeGate.message(for: outcome, moment: .accountCreation) ?? "")
+                    .font(.srSubheadline)
+                    .foregroundStyle(Color.srTextSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(Space.m)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: Radius.l, style: .continuous).fill(Color.srSurface))
+            if outcome != .tooYoung {
+                Button("Try again") {
+                    Task { @MainActor in await checkAge() }
+                }
+                .buttonStyle(.srPrimary)
+            }
+        }
+    }
+
+    private func checkAge() async {
+        withAnimation(Motion.standard) { age = nil }
+        let outcome = await AgeGate.check(.accountCreation)
+        withAnimation(Motion.standard) { age = outcome }
     }
 
     // MARK: Code

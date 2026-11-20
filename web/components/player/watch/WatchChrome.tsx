@@ -59,7 +59,7 @@ export function WatchFooter({ showBadge, children }: { showBadge: boolean; child
   return (
     <footer className="mx-auto mt-auto flex w-full max-w-[1400px] flex-wrap items-center justify-center gap-x-5 gap-y-3 px-4 pb-8 pt-10 text-[13px] text-text-2 sm:justify-between lg:px-6">
       {showBadge ? <MadeWithSnapreel /> : <span />}
-      <div className="flex items-center gap-4">
+      <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2">
         {children}
         <a href={`${SITE_URL}/privacy`} className="rounded hover:text-text focus-visible:outline-2 focus-visible:outline-sr-red">
           Privacy

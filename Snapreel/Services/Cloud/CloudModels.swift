@@ -334,6 +334,11 @@ struct CloudComment: Codable, Hashable, Identifiable {
     var atS: Double?
     var parentId: String?
     var createdAt: Date
+    /// The server's word filter held it (App Review guideline 1.2): viewers can't see it until you
+    /// approve it. Missing from servers older than the filter, which means not held.
+    var held: Bool?
+
+    var isHeld: Bool { held == true }
 }
 
 struct CloudReaction: Codable, Hashable, Identifiable {

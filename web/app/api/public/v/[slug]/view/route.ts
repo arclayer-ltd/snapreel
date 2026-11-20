@@ -4,18 +4,20 @@ import { notifyView } from "@/lib/server/notify";
 import { publicContext, withCookie } from "@/lib/server/public";
 import { rateLimit } from "@/lib/server/ratelimit";
 import { db } from "@/lib/server/supabase";
+import { viewsOptedOut } from "@/lib/server/tokens";
 import { countryFrom, deviceFrom, isBot, referrerHost } from "@/lib/server/viewer";
 
 // POST /api/public/v/{slug}/view {event: "start"|"progress"|"end", positionS, watched: [bucketIndex], viewId?, referrer?}
 // -> {viewId}. Sent with sendBeacon on pagehide too. A view counts once it has 5 s watched, 75% of the length, or
-// reaches the last second (public.record_view). The owner's own views and link-preview bots are never recorded.
+// reaches the last second (public.record_view). The owner's own views, link-preview bots and browsers that turned on
+// "Don't count my views" (cookie sr_nocount=1) are never recorded.
 export async function POST(req: Request, ctx: RouteContext<"/api/public/v/[slug]/view">) {
   return run(async () => {
     const { slug } = await ctx.params;
     const { video, isOwner, viewer, sessionId, setCookie } = await publicContext(req, slug);
     const headers = withCookie(setCookie);
     const ua = req.headers.get("user-agent");
-    if (isOwner || isBot(ua) || video.status !== "ready") return json({ viewId: null }, 200, headers);
+    if (isOwner || isBot(ua) || viewsOptedOut(req) || video.status !== "ready") return json({ viewId: null }, 200, headers);
     await rateLimit(req, "view", sessionId);
 
     const body = await readJson(req, 8_000);

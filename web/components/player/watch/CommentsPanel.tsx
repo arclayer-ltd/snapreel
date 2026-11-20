@@ -1,7 +1,8 @@
 "use client";
 
 // Comments pinned to moments in the video, with replies. A viewer's name is asked once and remembered
-// on this device. `website` is the contract's honeypot and stays empty for people.
+// on this device. `website` is the contract's honeypot and stays empty for people. A comment the server's word
+// filter holds isn't shown; its writer is told it waits for the owner.
 import { useEffect, useId, useMemo, useRef, useState, type FormEvent } from "react";
 import type { Comment } from "@/lib/contract";
 import { errorMessage, publicApi } from "@/lib/client/api";
@@ -16,6 +17,7 @@ export function CommentsPanel({
   comments,
   loading,
   allowComments,
+  ownerName = null,
   closedMessage = "Comments are turned off for this video.",
   onPosted,
   onSeek,
@@ -24,6 +26,7 @@ export function CommentsPanel({
   comments: Comment[];
   loading: boolean;
   allowComments: boolean;
+  ownerName?: string | null;
   closedMessage?: string;
   onPosted: (c: Comment) => void;
   onSeek: (t: number) => void;
@@ -49,7 +52,7 @@ export function CommentsPanel({
     <div className="flex min-h-0 flex-1 flex-col">
       {allowComments ? (
         <div className="order-first border-b border-line p-4 lg:order-last lg:border-b-0 lg:border-t">
-          <Composer slug={slug} onPosted={onPosted} />
+          <Composer slug={slug} ownerName={ownerName} onPosted={onPosted} />
         </div>
       ) : (
         <p className="order-first border-b border-line px-4 py-3 text-sm text-text-2 lg:order-last lg:border-b-0 lg:border-t">
@@ -90,6 +93,7 @@ export function CommentsPanel({
                   <div className="mt-3 sm:ml-11">
                     <Composer
                       slug={slug}
+                      ownerName={ownerName}
                       parent={c}
                       onPosted={(posted) => {
                         onPosted(posted);
@@ -159,11 +163,13 @@ function CommentItem({
 
 function Composer({
   slug,
+  ownerName,
   parent,
   onPosted,
   onCancel,
 }: {
   slug: string;
+  ownerName: string | null;
   parent?: Comment;
   onPosted: (c: Comment) => void;
   onCancel?: () => void;
@@ -179,6 +185,7 @@ function Composer({
   const [pinTime, setPinTime] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [heldNotice, setHeldNotice] = useState(false);
   const [website, setWebsite] = useState("");
 
   useEffect(() => {
@@ -207,6 +214,7 @@ function Composer({
     }
     setBusy(true);
     setError(null);
+    setHeldNotice(false);
     try {
       const atS = parent ? null : pinTime ? Math.round(store.getSnapshot().time * 10) / 10 : null;
       const posted = await publicApi.comment(slug, { name: who, body: text, atS, parentId: parent?.id ?? null, website });
@@ -214,7 +222,8 @@ function Composer({
       setKnownName(true);
       setAskName(false);
       setBody("");
-      onPosted(posted);
+      if (posted.held) setHeldNotice(true);
+      else onPosted(posted);
     } catch (err) {
       setError(errorMessage(err, "Your comment didn't post. Try again."));
     } finally {
@@ -295,6 +304,11 @@ function Composer({
       {error && (
         <p role="alert" className="text-sm text-red-text">
           {error}
+        </p>
+      )}
+      {heldNotice && (
+        <p role="status" className="rounded-xl bg-fill px-3 py-2 text-sm text-text-2">
+          Thanks. Your comment will show here once {ownerName || "the video's owner"} approves it.
         </p>
       )}
     </form>

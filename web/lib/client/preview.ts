@@ -104,7 +104,10 @@ function route(method: string, p: string[], body: unknown): unknown {
       document.cookie = `sr_unlock_${slug}=1; Path=/; Max-Age=${60 * 60 * 12}; SameSite=Lax`;
       return undefined;
     }
-    if (action === "activity") return structuredClone(activityFor(slug));
+    if (action === "activity") {
+      const a = structuredClone(activityFor(slug));
+      return { ...a, comments: a.comments.filter((c) => !c.held) };
+    }
     if (action === "view") return { viewId: "preview-view" };
     if (action === "report") return undefined;
     if (action === "comments") {
@@ -118,6 +121,8 @@ function route(method: string, p: string[], body: unknown): unknown {
         atS: c.atS,
         parentId: c.parentId ?? null,
         createdAt: new Date().toISOString(),
+        // The real word list is server-only; in preview, "#held" in a comment stands in for a match.
+        held: c.body.includes("#held"),
       };
       activityFor(slug).comments.push(comment);
       return comment;
@@ -170,6 +175,21 @@ function route(method: string, p: string[], body: unknown): unknown {
       return { ...found.detail, ...next };
     }
     return { ...found.detail, ...(videoEdits.get(id) ?? {}) };
+  }
+  if (p[0] === "public" && p[1] === "view-opt-out") {
+    const { optOut } = body as { optOut: boolean };
+    document.cookie = optOut ? "sr_nocount=1; Path=/; Max-Age=31536000; SameSite=Lax" : "sr_nocount=; Path=/; Max-Age=0; SameSite=Lax";
+    return { optOut };
+  }
+  if (p[0] === "comments" && p[2] === "approve" && method === "POST") {
+    for (const v of previewVideos(Date.now())) {
+      const c = activityFor(v.detail.slug).comments.find((x) => x.id === decodeURIComponent(p[1] ?? ""));
+      if (c) {
+        c.held = false;
+        return structuredClone(c);
+      }
+    }
+    throw new ApiError(404, "not_found");
   }
   if (p[0] === "comments" && method === "DELETE") return undefined;
   if (p[0] === "blocks") return undefined;

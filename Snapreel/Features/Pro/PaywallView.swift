@@ -364,6 +364,13 @@ struct PaywallView: View {
             return
         }
         Task { @MainActor in
+            // US app-store age laws: read the declared age range first (see AgeGate).
+            let age = await AgeGate.check(.purchase)
+            if let message = AgeGate.message(for: age, moment: .purchase) {
+                Haptics.error()
+                self.error = message
+                return
+            }
             do {
                 switch try await store.purchase(plan.id) {
                 case .purchased:

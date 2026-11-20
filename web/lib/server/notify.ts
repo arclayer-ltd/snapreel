@@ -1,7 +1,7 @@
 import "server-only";
 import type { PushPayload } from "@/lib/contract";
 import { APNS_HOSTS, apnsConfigured, apnsReason, sendToApns } from "./apns";
-import { commentEmail, reactionEmail, sendEmail, viewEmail } from "./email";
+import { commentEmail, heldCommentEmail, reactionEmail, sendEmail, viewEmail } from "./email";
 import { SITE_URL, env } from "./env";
 import { dashboardUrl, formatTimestamp, type VideoRow } from "./shape";
 import { signUrls, videoPaths } from "./storage";
@@ -91,25 +91,32 @@ export async function notifyView(video: VideoRow, view: { id: string; viewerName
   });
 }
 
-export async function notifyComment(video: VideoRow, comment: { id: string; authorName: string; body: string; atS: number | null }) {
+// A held comment (word filter) alerts the owner without its name or text, so nothing objectionable lands on a Lock
+// Screen or in an inbox; the owner reads it in the app or the dashboard.
+export async function notifyComment(
+  video: VideoRow,
+  comment: { id: string; authorName: string; body: string; atS: number | null; held?: boolean },
+) {
   if (!(await claim(video.owner_id, "comment", video.id, `comment:${comment.id}`))) return;
   const title = video.title || "your video";
-  await pushToOwner(video.owner_id, `${comment.authorName} commented on “${title}”`, comment.body.slice(0, 180), {
-    type: "comment",
-    videoId: video.id,
-    localId: video.local_id,
-    commentId: comment.id,
-  });
+  const sr: PushPayload = { type: "comment", videoId: video.id, localId: video.local_id, commentId: comment.id };
+  if (comment.held) {
+    await pushToOwner(video.owner_id, `A comment on “${title}” is waiting for you`, "Viewers can't see it until you approve it.", sr);
+  } else {
+    await pushToOwner(video.owner_id, `${comment.authorName} commented on “${title}”`, comment.body.slice(0, 180), sr);
+  }
   const to = await ownerEmail(video.owner_id);
   if (!to) return;
-  const mail = commentEmail({
-    authorName: comment.authorName,
-    body: comment.body,
-    title: video.title,
-    atLabel: comment.atS === null ? null : formatTimestamp(comment.atS),
-    dashboardUrl: dashboardUrl(video.id),
-    unsubscribeUrl: unsubscribeUrl(video.owner_id),
-  });
+  const mail = comment.held
+    ? heldCommentEmail({ title: video.title, dashboardUrl: dashboardUrl(video.id), unsubscribeUrl: unsubscribeUrl(video.owner_id) })
+    : commentEmail({
+        authorName: comment.authorName,
+        body: comment.body,
+        title: video.title,
+        atLabel: comment.atS === null ? null : formatTimestamp(comment.atS),
+        dashboardUrl: dashboardUrl(video.id),
+        unsubscribeUrl: unsubscribeUrl(video.owner_id),
+      });
   await sendEmail({
     to,
     ...mail,
