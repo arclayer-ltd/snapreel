@@ -1,0 +1,77 @@
+<!doctype html>
+<!-- Stand-in for the snapreel.video watch page, only for the laptop in the website art.
+     Rendered at 1440x900 by: msedge --headless=new --window-size=1440,900 --screenshot=... "file:///.../watch-page.html?theme=dark"
+     Replace light/web.watch.png and dark/web.watch.png with captures of the real watch page when it ships. -->
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Launch plan walkthrough</title>
+<style>
+  :root { --bg:#f4f4f6; --surface:#fff; --fill:#ececf0; --line:#e3e3e8; --text:#13141b; --text2:#5b5e6b; --red:#f04850; --redText:#d32434; }
+  .dark { --bg:#0e0f14; --surface:#1c1e27; --fill:#2a2c37; --line:#30323d; --text:#f4f4f6; --text2:#a6a9b5; --redText:#ff6e72; }
+  * { box-sizing:border-box; margin:0; }
+  html, body { width:1440px; height:900px; overflow:hidden; }
+  body { background:var(--bg); color:var(--text); font-family:"Segoe UI", system-ui, sans-serif; }
+  header { height:72px; display:flex; align-items:center; justify-content:space-between; padding:0 40px; border-bottom:1px solid var(--line); background:var(--surface); }
+  .brand { display:flex; align-items:center; gap:10px; font-weight:700; font-size:22px; }
+  .dot { width:30px; height:30px; border-radius:50%; background:var(--red); display:grid; place-items:center; }
+  .dot::after { content:""; width:12px; height:12px; border-radius:50%; background:#fff; }
+  .btn { background:var(--red); color:#fff; font-weight:600; padding:11px 20px; border-radius:999px; font-size:16px; }
+  main { display:grid; grid-template-columns: 1fr 380px; gap:32px; padding:32px 40px; }
+  .player { border-radius:18px; overflow:hidden; background:#000; position:relative; aspect-ratio:16/9; }
+  .poster { position:absolute; inset:0; background:radial-gradient(60% 70% at 50% 40%, #fe6262, #d32434 60%, #5e0b16); }
+  .poster img { position:absolute; left:50%; bottom:0; transform:translateX(-50%); width:92%; }
+  .play { position:absolute; left:50%; top:46%; width:92px; height:92px; margin:-46px; border-radius:50%; background:rgba(255,255,255,.92); }
+  .play::after { content:""; position:absolute; left:36px; top:27px; border-left:30px solid #13141b; border-top:19px solid transparent; border-bottom:19px solid transparent; }
+  .bar { position:absolute; left:0; right:0; bottom:0; padding:44px 22px 16px; background:linear-gradient(transparent, rgba(0,0,0,.65)); color:#fff; font-size:15px; }
+  .track { height:5px; border-radius:3px; background:rgba(255,255,255,.35); position:relative; margin:10px 0 10px; }
+  .track b { position:absolute; left:0; top:0; bottom:0; width:38%; background:var(--red); border-radius:3px; }
+  .emo { position:absolute; top:-26px; font-size:20px; }
+  .row { display:flex; justify-content:space-between; }
+  h1 { font-size:28px; margin:22px 0 6px; }
+  .meta { color:var(--text2); font-size:16px; }
+  aside { background:var(--surface); border:1px solid var(--line); border-radius:18px; padding:20px; height:740px; }
+  .tabs { display:flex; gap:8px; margin-bottom:18px; }
+  .tab { padding:8px 16px; border-radius:999px; background:var(--fill); font-weight:600; font-size:15px; color:var(--text2); }
+  .tab.on { background:var(--text); color:var(--bg); }
+  .c { display:flex; gap:12px; padding:14px 0; border-bottom:1px solid var(--line); }
+  .av { width:38px; height:38px; border-radius:50%; flex:none; display:grid; place-items:center; color:#fff; font-weight:700; }
+  .c p { font-size:15px; line-height:1.4; }
+  .c small { color:var(--text2); font-size:13px; }
+  .at { color:var(--redText); font-weight:600; }
+  .react { display:flex; gap:10px; margin-top:18px; font-size:24px; }
+  .react span { background:var(--fill); border-radius:999px; padding:6px 12px; }
+  .made { margin-top:16px; font-size:14px; color:var(--text2); }
+</style>
+</head>
+<body>
+<script>if (new URLSearchParams(location.search).get('theme') === 'dark') document.documentElement.className = 'dark';</script>
+<header>
+  <div class="brand"><span class="dot"></span>Snapreel</div>
+  <div class="btn">Get Snapreel</div>
+</header>
+<main>
+  <section>
+    <div class="player">
+      <div class="poster"><img src="../gen/group-v1.webp" alt=""></div>
+      <div class="play"></div>
+      <div class="bar">
+        <div class="track"><b></b><span class="emo" style="left:12%">👍</span><span class="emo" style="left:31%">🔥</span><span class="emo" style="left:57%">😮</span><span class="emo" style="left:80%">👏</span></div>
+        <div class="row"><span>0:46</span><span>2:05</span></div>
+      </div>
+    </div>
+    <h1>Launch plan walkthrough</h1>
+    <div class="meta">Sam Carter · 2 min · 12 views</div>
+  </section>
+  <aside>
+    <div class="tabs"><span class="tab on">Comments</span><span class="tab">Transcript</span></div>
+    <div class="c"><span class="av" style="background:#d32434">P</span><div><p><b>Priya</b> <span class="at">0:14</span> Love the new checkout. Ship it!</p><small>2 min ago</small></div></div>
+    <div class="c"><span class="av" style="background:#5b5e6b">J</span><div><p><b>Jonah</b> <span class="at">0:41</span> Can we keep the coupon field open by default?</p><small>5 min ago</small></div></div>
+    <div class="c"><span class="av" style="background:#8f1424">A</span><div><p><b>Ama</b> <span class="at">1:22</span> The total updates instantly now 👏</p><small>12 min ago</small></div></div>
+    <div class="c"><span class="av" style="background:#13141b">L</span><div><p><b>Lucía</b> <span class="at">1:50</span> Sending this to the team.</p><small>20 min ago</small></div></div>
+    <div class="react"><span>👍 4</span><span>🔥 2</span><span>👏 3</span><span>😮 1</span></div>
+    <div class="made">Made with Snapreel</div>
+  </aside>
+</main>
+</body>
+</html>

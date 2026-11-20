@@ -1,0 +1,357 @@
+/* Snapreel marketing site: the red-field visual system.
+   Colours come from the shared tokens in app/globals.css (taken from the app's Tokens.swift).
+   The red panels stay red in Light and Dark; everything around them follows the system setting. */
+
+/* In the components layer, so Tailwind utilities (hidden, md:flex, …) still win. */
+@layer components {
+  .mk {
+    --mk-red: var(--sr-red);
+    --mk-deep: var(--sr-red-deep);
+    --mk-glow: var(--sr-red-glow);
+    --mk-wine: var(--sr-wine);
+    --mk-wine-mid: var(--sr-wine-mid);
+    --mk-cream: var(--sr-cream);
+    --mk-radius: 24px;
+    --mk-gutter: 16px;
+    font-family: var(--font-geist-sans), system-ui, sans-serif;
+  }
+
+  @media (min-width: 768px) {
+    .mk {
+      --mk-gutter: 24px;
+    }
+  }
+
+  .mk-display {
+    font-family: var(--font-display), var(--font-geist-sans), system-ui, sans-serif;
+    letter-spacing: -0.02em;
+  }
+
+  /* Headline in the reference's rhythm: light words with bold highlights. */
+  .mk-headline {
+    font-family: var(--font-display), var(--font-geist-sans), system-ui, sans-serif;
+    font-weight: 300;
+    letter-spacing: -0.025em;
+    line-height: 1.04;
+    text-wrap: balance;
+  }
+  .mk-headline b,
+  .mk-headline strong {
+    font-weight: 700;
+  }
+  .mk-field .mk-headline b,
+  .mk-field .mk-headline strong {
+    color: var(--mk-cream);
+  }
+  .mk-on-canvas .mk-headline b,
+  .mk-on-canvas .mk-headline strong,
+  .mk-headline.mk-accent b {
+    color: var(--sr-red-text);
+  }
+
+  /* ---------------------------------------------------------------- The red field */
+
+  .mk-field {
+    --pool-x: 68%;
+    --pool-y: 46%;
+    --pool-size: 58%;
+    position: relative;
+    isolation: isolate;
+    overflow: hidden;
+    border-radius: var(--mk-radius);
+    color: #fff;
+    background-color: var(--mk-deep);
+    background-image:
+      /* the light pool behind the character */
+      radial-gradient(
+        var(--pool-size) calc(var(--pool-size) * 1.05) at var(--pool-x) var(--pool-y),
+        color-mix(in srgb, var(--mk-glow) 85%, transparent) 0%,
+        color-mix(in srgb, var(--mk-red) 55%, transparent) 36%,
+        transparent 72%
+      ),
+      /* the wine vignette at the edges */
+      radial-gradient(130% 110% at 45% 40%, transparent 42%, color-mix(in srgb, var(--mk-wine-mid) 70%, transparent) 78%, var(--mk-wine) 100%),
+      linear-gradient(180deg, #d42a39 0%, var(--mk-deep) 55%, #b81c2c 100%);
+  }
+
+  /* A faint square grid over the field, fading out towards the edges. */
+  .mk-field::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background-image:
+      linear-gradient(rgb(255 255 255 / 0.07) 1px, transparent 1px),
+      linear-gradient(90deg, rgb(255 255 255 / 0.07) 1px, transparent 1px);
+    background-size: 44px 44px;
+    background-position: -1px -1px;
+    mask-image: radial-gradient(75% 70% at 55% 45%, #000 0%, transparent 100%);
+  }
+
+  /* Soft diagonal light beams. */
+  .mk-field::after {
+    content: "";
+    position: absolute;
+    inset: -10%;
+    z-index: -1;
+    pointer-events: none;
+    background:
+      linear-gradient(112deg, transparent 22%, rgb(255 236 230 / 0.08) 30%, transparent 40%),
+      linear-gradient(112deg, transparent 52%, rgb(255 236 230 / 0.05) 58%, transparent 66%),
+      linear-gradient(112deg, transparent 70%, rgb(255 236 230 / 0.05) 74%, transparent 80%);
+  }
+
+  /* Darker variant for text-led panels (wine leaning). */
+  .mk-field--deep {
+    background-image:
+      radial-gradient(var(--pool-size) var(--pool-size) at var(--pool-x) var(--pool-y), color-mix(in srgb, var(--mk-red) 75%, transparent) 0%, transparent 70%),
+      radial-gradient(120% 110% at 50% 40%, transparent 30%, var(--mk-wine) 100%),
+      linear-gradient(180deg, var(--mk-deep), var(--mk-wine-mid));
+  }
+
+  /* A soft wine contact shadow under floating characters. */
+  .mk-ground {
+    position: absolute;
+    left: 50%;
+    bottom: 4%;
+    width: 62%;
+    height: 7%;
+    transform: translateX(-50%);
+    border-radius: 50%;
+    background: radial-gradient(closest-side, rgb(94 11 22 / 0.55), transparent);
+    filter: blur(6px);
+    z-index: 0;
+    pointer-events: none;
+  }
+
+  /* ---------------------------------------------------------------- Marks */
+
+  .mk-sparkle {
+    position: absolute;
+    color: #fff;
+    pointer-events: none;
+  }
+  .mk-sparkle--twinkle {
+    animation: mk-twinkle var(--mk-twinkle, 3.6s) ease-in-out infinite;
+    animation-delay: var(--mk-delay, 0s);
+  }
+  .mk-strokes,
+  .mk-loop {
+    position: absolute;
+    color: #fff;
+    pointer-events: none;
+  }
+
+  .mk-float {
+    animation: mk-float 7s ease-in-out infinite;
+    animation-delay: var(--mk-delay, 0s);
+  }
+
+  @keyframes mk-twinkle {
+    0%,
+    100% {
+      opacity: 1;
+      transform: scale(1) rotate(0deg);
+    }
+    45% {
+      opacity: 0.45;
+      transform: scale(0.72) rotate(12deg);
+    }
+  }
+
+  @keyframes mk-float {
+    0%,
+    100% {
+      transform: translateY(0);
+    }
+    50% {
+      transform: translateY(-8px);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .mk-sparkle--twinkle,
+    .mk-float {
+      animation: none;
+    }
+  }
+
+  /* ---------------------------------------------------------------- Pieces */
+
+  .mk-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    border-radius: 999px;
+    padding: 0.375rem 0.875rem;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    line-height: 1.2;
+  }
+  .mk-field .mk-pill {
+    background: rgb(94 11 22 / 0.55);
+    color: #fff;
+    box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.18);
+  }
+
+  .mk-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    min-height: 48px;
+    border-radius: 999px;
+    padding: 0 1.25rem;
+    font-weight: 600;
+    font-size: 0.9375rem;
+    transition:
+      transform 0.15s ease,
+      background-color 0.15s ease;
+  }
+  .mk-button:active {
+    transform: scale(0.98);
+  }
+  .mk-button--light {
+    background: #fff;
+    color: var(--sr-ink);
+  }
+  .mk-button--light:hover {
+    background: var(--mk-cream);
+  }
+  .mk-button--ghost {
+    color: #fff;
+    background: rgb(94 11 22 / 0.4);
+    box-shadow: inset 0 0 0 1.5px rgb(255 255 255 / 0.6);
+  }
+  .mk-button--ghost:hover {
+    background: rgb(94 11 22 / 0.58);
+  }
+  .mk-button--red {
+    background: var(--sr-red-deep);
+    color: #fff;
+  }
+  .mk-button--red:hover {
+    background: #b81c2c;
+  }
+  .mk-button--quiet {
+    background: var(--sr-fill);
+    color: var(--sr-text);
+  }
+  .mk-button--quiet:hover {
+    background: var(--sr-line);
+  }
+
+  /* The pill arrow button from the reference. */
+  .mk-arrow {
+    display: inline-grid;
+    place-items: center;
+    width: 64px;
+    height: 40px;
+    border-radius: 999px;
+    background: rgb(94 11 22 / 0.5);
+    color: #fff;
+    box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.2);
+    transition: background-color 0.15s ease;
+  }
+  a:hover .mk-arrow,
+  .mk-arrow:hover {
+    background: rgb(94 11 22 / 0.75);
+  }
+
+  .mk-focus:focus-visible,
+  .mk a:focus-visible,
+  .mk button:focus-visible,
+  .mk summary:focus-visible {
+    outline: 3px solid var(--sr-red-text);
+    outline-offset: 3px;
+    border-radius: 10px;
+  }
+  .mk-field a:focus-visible,
+  .mk-field button:focus-visible {
+    outline-color: #fff;
+  }
+
+  /* Images from the art manifest. */
+  .mk-art {
+    display: block;
+    width: 100%;
+    height: auto;
+    user-select: none;
+  }
+
+  /* FAQ disclosure. */
+  .mk-faq summary {
+    list-style: none;
+    cursor: pointer;
+  }
+  .mk-faq summary::-webkit-details-marker {
+    display: none;
+  }
+  .mk-faq .mk-faq-icon {
+    transition: transform 0.2s ease;
+  }
+  .mk-faq[open] .mk-faq-icon {
+    transform: rotate(45deg);
+  }
+
+  /* Long-form text (help, privacy, terms). */
+  .mk-prose {
+    color: var(--sr-text);
+    font-size: 1.0625rem;
+    line-height: 1.65;
+  }
+  .mk-prose > * + * {
+    margin-top: 1rem;
+  }
+  .mk-prose h2 {
+    font-family: var(--font-display), var(--font-geist-sans), sans-serif;
+    font-weight: 600;
+    font-size: 1.5rem;
+    line-height: 1.25;
+    letter-spacing: -0.01em;
+    margin-top: 2.25rem;
+  }
+  .mk-prose h3 {
+    font-family: var(--font-display), var(--font-geist-sans), sans-serif;
+    font-weight: 600;
+    font-size: 1.1875rem;
+    margin-top: 1.75rem;
+  }
+  .mk-prose ul,
+  .mk-prose ol {
+    padding-left: 1.4rem;
+  }
+  .mk-prose ul {
+    list-style: disc;
+  }
+  .mk-prose ol {
+    list-style: decimal;
+  }
+  .mk-prose li + li {
+    margin-top: 0.4rem;
+  }
+  .mk-prose li::marker {
+    color: var(--sr-red-text);
+  }
+  .mk-prose a {
+    color: var(--sr-red-text);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+  .mk-prose strong {
+    font-weight: 650;
+  }
+  .mk-prose code {
+    font-family: var(--font-geist-mono), ui-monospace, monospace;
+    font-size: 0.9em;
+    background: var(--sr-fill);
+    border-radius: 6px;
+    padding: 0.1em 0.35em;
+  }
+  .mk-prose blockquote {
+    border-left: 3px solid var(--sr-red-text);
+    padding-left: 1rem;
+    color: var(--sr-text-2);
+  }
+}

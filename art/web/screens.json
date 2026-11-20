@@ -1,0 +1,127 @@
+{
+  "$comment": "Slot -> screenshot id for scripts/web-compose.py. Screens are looked up in art/web/screens/{dark,light}/ first, then in the CI folders below (Dark falls back to Light). 'swapTo' names the Pro screen that should replace today's stand-in once CI photographs it: change 'screen' to that id and re-run the script.",
+  "screenshots": {
+    "light": "E:/Snapreel/ci-out/r31/snapreel-ci/screenshots",
+    "dark": "E:/Snapreel/ci-out/r31/snapreel-ci/dark/screenshots"
+  },
+  "output": "web/public/marketing/art",
+  "manifest": "web/components/marketing/art-manifest.ts",
+  "slots": {
+    "hero": {
+      "kind": "art",
+      "art": "art/web/gen/hero-v1.webp",
+      "device": "iphone",
+      "screen": "video.player",
+      "swapTo": "share.link.ready",
+      "width": 760,
+      "bounceSide": "right",
+      "alt": "A smiling woman in a red hoodie holds out an iPhone playing a Snapreel recording and gives a thumbs-up"
+    },
+    "run-link": {
+      "kind": "art",
+      "art": "art/web/gen/run-v1.webp",
+      "device": "iphone",
+      "screen": "rec.review",
+      "swapTo": "share.link.ready",
+      "width": 520,
+      "bounceSide": "left",
+      "alt": "A young man in red headphones sprints with his iPhone showing a finished Snapreel recording"
+    },
+    "watch-laptop": {
+      "kind": "art",
+      "art": "art/web/gen/point-v1.webp",
+      "device": "laptop",
+      "screen": "web.watch",
+      "swapTo": "the real watch page at snapreel.video/v/{id}, captured at 1440x900 into art/web/screens/{light,dark}/web.watch.png",
+      "width": 560,
+      "bounceSide": "left",
+      "alt": "A young man in a bucket hat points at a laptop showing a Snapreel video in the browser"
+    },
+    "jump": {
+      "kind": "art",
+      "art": "art/web/gen/jump-v1.webp",
+      "width": 520,
+      "alt": "A young woman in a varsity jacket jumps and holds out her open hand"
+    },
+    "celebrate": {
+      "kind": "art",
+      "art": "art/web/gen/celebrate-v1.webp",
+      "width": 520,
+      "alt": "A young man in a red beanie throws both fists in the air, laughing"
+    },
+    "group": {
+      "kind": "art",
+      "art": "art/web/gen/group-v1.webp",
+      "width": 1200,
+      "shadow": { "body": [0.006, 0.012, 0.01, 0.22] },
+      "alt": "Five friends wave and smile"
+    },
+    "record-screen": {
+      "kind": "iphone",
+      "screen": "rec.shell.screen",
+      "pose": { "yaw": 18, "pitch": 6, "roll": 5 },
+      "width": 320,
+      "alt": "Snapreel's recorder set to Screen"
+    },
+    "record-camera": {
+      "kind": "iphone",
+      "screen": "rec.camera.recording",
+      "pose": { "yaw": -4, "pitch": 8, "roll": -2 },
+      "width": 320,
+      "alt": "Snapreel recording with the front camera"
+    },
+    "record-voice": {
+      "kind": "iphone",
+      "screen": "video.audio.playing",
+      "pose": { "yaw": -18, "pitch": 6, "roll": -5 },
+      "width": 320,
+      "alt": "A voice recording playing in Snapreel, with its waveform"
+    },
+    "insights": {
+      "kind": "iphone",
+      "screen": "video.details",
+      "swapTo": "insights.overview",
+      "pose": { "yaw": -14, "pitch": 7, "roll": -4 },
+      "width": 340,
+      "alt": "A recording's details in Snapreel: played 3 times, 82% watched"
+    },
+    "comments": {
+      "kind": "iphone",
+      "screen": "notif.feed",
+      "swapTo": "comments.thread",
+      "pose": { "yaw": 14, "pitch": 7, "roll": 4 },
+      "width": 340,
+      "alt": "Snapreel's notifications feed"
+    },
+    "files": {
+      "kind": "iphone",
+      "screen": "lib.videos",
+      "pose": { "yaw": 16, "pitch": 6, "roll": 5 },
+      "width": 340,
+      "alt": "The Snapreel library with recordings on the iPhone"
+    },
+    "pro": {
+      "kind": "iphone",
+      "screen": "home.filled",
+      "swapTo": "pro.paywall",
+      "pose": { "yaw": -16, "pitch": 7, "roll": -5 },
+      "width": 340,
+      "alt": "Snapreel's home screen"
+    },
+    "help": {
+      "kind": "iphone",
+      "screen": "help.home",
+      "pose": { "yaw": -14, "pitch": 6, "roll": -4 },
+      "width": 300,
+      "alt": "Snapreel's help centre in the app"
+    },
+    "support": {
+      "kind": "iphone",
+      "screen": "settings.root",
+      "swapTo": "account.root",
+      "pose": { "yaw": 14, "pitch": 6, "roll": 4 },
+      "width": 300,
+      "alt": "Snapreel's settings with Help centre and Contact support"
+    }
+  }
+}
