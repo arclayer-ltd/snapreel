@@ -4,16 +4,16 @@ import Foundation
 /// its own copy of every limit; these are only for the screens). Values follow
 /// `docs/pro/API.md`.
 ///
-/// The Supabase URL and publishable key are public values. Until the backend fills them in,
-/// they hold placeholders: `isConfigured` is then false, nothing reaches the network, and
+/// The Supabase URL and publishable key are public values (project "Snapreel", us-east-1). With
+/// placeholders instead, `isConfigured` is false, nothing reaches the network, and
 /// Copy link explains that links aren't switched on in this build.
 enum CloudConfig {
     // MARK: Supabase (public values)
 
     /// `SUPABASE_URL` from docs/pro/API.md, for example "https://abcdefghijklmnopqrst.supabase.co".
-    static let supabaseURLString = "https://SUPABASE-PROJECT-REF.supabase.co"
+    static let supabaseURLString = "https://jaajkutdglblwtpfcgag.supabase.co"
     /// `SUPABASE_PUBLISHABLE_KEY` from docs/pro/API.md ("sb_publishable_…").
-    static let publishableKey = "SUPABASE-PUBLISHABLE-KEY"
+    static let publishableKey = "sb_publishable_TMSX2mDy_fE7eYhJggL8hg_tMU_Eq91"
 
     // MARK: snapreel.video
 
