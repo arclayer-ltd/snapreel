@@ -210,6 +210,19 @@ struct VideoCardBadges: View {
 
     private var counts: some View {
         HStack(spacing: Space.s) {
+            if video.editedFrom != nil {
+                HStack(spacing: 3) {
+                    Image(systemName: "scissors")
+                        .font(.system(size: 10, weight: .bold))
+                    Text("Edited")
+                }
+                .font(.srCaption)
+                .foregroundStyle(Color.srTextSecondary)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 2)
+                .background(Capsule().fill(Color.srFill))
+                .accessibilityLabel("Edited copy")
+            }
             if video.needsTitle {
                 HStack(spacing: 3) {
                     Image(systemName: "pencil")

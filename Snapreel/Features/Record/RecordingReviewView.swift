@@ -8,6 +8,7 @@ struct RecordingReviewView: View {
 
     @EnvironmentObject private var model: RecorderModel
     @EnvironmentObject private var library: Library
+    @EnvironmentObject private var router: AppRouter
     @State private var confirmsDelete: Bool
     @State private var editsTitle: Bool
     @State private var shareTarget: Video?
@@ -49,12 +50,25 @@ struct RecordingReviewView: View {
                              startAt: model.preset?.reviewPosition)
             ReviewTitleBlock(video: video) { editsTitle = true }
             actions(video)
-            Button {
-                done()
-            } label: {
-                Text("Done")
+            HStack(spacing: Space.s) {
+                // Trim the start and end, cut sentences, add text: the edit is a new recording.
+                Button {
+                    Haptics.tap()
+                    done()
+                    router.edit(video.id, afterClosing: true)
+                } label: {
+                    Label("Edit", systemImage: "scissors")
+                }
+                .buttonStyle(SRButtonStyle(kind: .secondary, fullWidth: false))
+                .disabled(!video.state.isReady)
+                .accessibilityHint("Opens the editor. Your recording stays as it is.")
+                Button {
+                    done()
+                } label: {
+                    Text("Done")
+                }
+                .buttonStyle(.srPrimary)
             }
-            .buttonStyle(.srPrimary)
         }
         .padding(.horizontal, Space.m)
         .padding(.top, Space.xs)

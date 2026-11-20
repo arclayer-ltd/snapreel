@@ -65,6 +65,13 @@ struct MainShell: View {
                     .clearCoverBackground()
             }
         }
+        .fullScreenCover(item: $router.editor) { launch in
+            EditorScreen(videoID: launch.videoID, library: library)
+                .environmentObject(library)
+                .environmentObject(settings)
+                .environmentObject(router)
+                .clearCoverBackground()
+        }
         .sheet(isPresented: $router.isSettingsPresented) {
             SettingsView(initialPath: router.settingsPath)
                 .environmentObject(library)

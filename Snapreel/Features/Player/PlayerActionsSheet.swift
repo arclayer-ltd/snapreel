@@ -12,20 +12,25 @@ struct PlayerActionsSheet: View {
         case delete
         case copyLink
         case linkSettings
+        case editVideo
+        case deleteWithEdits
     }
 
     let video: Video
     var isShared = false
+    /// Edited copies of this recording; deleting it offers to delete them too.
+    var editCount = 0
     let onChoose: @MainActor (Action) -> Void
     let onClose: @MainActor () -> Void
 
     @State private var confirmingDelete: Bool
 
-    init(video: Video, isShared: Bool = false, startsConfirmingDelete: Bool = false,
+    init(video: Video, isShared: Bool = false, editCount: Int = 0, startsConfirmingDelete: Bool = false,
          onChoose: @escaping @MainActor (Action) -> Void,
          onClose: @escaping @MainActor () -> Void) {
         self.video = video
         self.isShared = isShared
+        self.editCount = editCount
         self.onChoose = onChoose
         self.onClose = onClose
         _confirmingDelete = State(initialValue: startsConfirmingDelete)
@@ -55,6 +60,12 @@ struct PlayerActionsSheet: View {
             Rectangle().fill(Color.srStageLine).frame(height: 0.5)
             ScrollView {
                 VStack(spacing: 0) {
+                    if video.state.isReady {
+                        ActionRow(systemImage: "scissors", title: video.isAudioOnly ? "Edit recording" : "Edit video",
+                                  subtitle: "Trim, cut sentences, add text and captions. Saves a new copy") {
+                            onChoose(.editVideo)
+                        }
+                    }
                     ActionRow(systemImage: "pencil", title: "Edit title") { onChoose(.editTitle) }
                     ActionRow(systemImage: "square.and.arrow.down", title: "Save to Photos",
                               subtitle: video.isAudioOnly ? "Audio recordings can't go to Photos. Share the file instead." : nil) {
@@ -128,7 +139,9 @@ struct PlayerActionsSheet: View {
                 Text("Delete this recording?")
                     .font(.srTitle)
                     .foregroundStyle(Color.srStageText)
-                Text("This removes the video, its notes and transcript from this iPhone.")
+                Text(editCount > 0
+                     ? "This removes the video, its notes and transcript from this iPhone. Its \(editCount == 1 ? "edited copy stays" : "\(editCount) edited copies stay") unless you delete \(editCount == 1 ? "it" : "them") too."
+                     : "This removes the video, its notes and transcript from this iPhone.")
                     .font(.srSubheadline)
                     .foregroundStyle(Color.srStageTextSecondary)
                 Text("\u{201C}\(video.title)\u{201D}")
@@ -143,6 +156,12 @@ struct PlayerActionsSheet: View {
             VStack(spacing: Space.s) {
                 Button("Delete recording") { onChoose(.delete) }
                     .buttonStyle(.srPrimary)
+                if editCount > 0 {
+                    Button(editCount == 1 ? "Delete it and its edit" : "Delete it and its \(editCount) edits") {
+                        onChoose(.deleteWithEdits)
+                    }
+                    .buttonStyle(.srDestructive)
+                }
                 Button("Keep it") {
                     withAnimation(Motion.standard) { confirmingDelete = false }
                 }

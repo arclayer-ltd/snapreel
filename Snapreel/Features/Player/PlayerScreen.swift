@@ -290,7 +290,9 @@ struct PlayerScreen: View {
                              link: currentLink,
                              linkState: shareLinks.state(for: video.id),
                              onCopyLink: { ShareLinks.shared.copyLink(video.id) },
-                             onLinkTapped: { ProPresenter.shareLink(video.id) })
+                             onLinkTapped: { ProPresenter.shareLink(video.id) },
+                             original: video.editedFrom.flatMap { library.video($0) },
+                             onOpenOriginal: { if let id = video.editedFrom { router.play(id) } })
     }
 
     private var panelHeader: some View {
@@ -412,10 +414,11 @@ struct PlayerScreen: View {
                 .presentationDetents([.medium, .large])
         case .actions(let confirming):
             if let video = currentVideo {
-                PlayerActionsSheet(video: video, isShared: currentLink != nil, startsConfirmingDelete: confirming,
+                PlayerActionsSheet(video: video, isShared: currentLink != nil,
+                                   editCount: library.edits(of: video.id).count, startsConfirmingDelete: confirming,
                                   onChoose: { chooseAction($0) },
                                   onClose: { sheet = nil })
-                    .presentationDetents([.height(currentLink != nil ? 690 : 630), .large])
+                    .presentationDetents([.height((currentLink != nil ? 690 : 630) + (video.state.isReady ? 64 : 0)), .large])
             }
         case .title:
             if let video = currentVideo {
@@ -664,6 +667,8 @@ struct PlayerScreen: View {
         case .delete: followUp = .delete
         case .copyLink: followUp = .copyLink
         case .linkSettings: followUp = .linkSettings
+        case .editVideo: followUp = .editVideo
+        case .deleteWithEdits: followUp = .deleteWithEdits
         case .toggleWatchLater:
             library.toggleWatchLater(video.id)
             let added = library.video(video.id)?.isInWatchLater ?? false
@@ -695,6 +700,8 @@ struct PlayerScreen: View {
         case .react(let emoji): react(emoji)
         case .copyLink: ShareLinks.shared.copyLink(video.id)
         case .linkSettings: ProPresenter.linkSettings(video.id)
+        case .editVideo: router.edit(video.id)
+        case .deleteWithEdits: deleteRecording(video, withEdits: true)
         }
     }
 
@@ -769,12 +776,14 @@ struct PlayerScreen: View {
         Task { @MainActor in sheet = next }
     }
 
-    private func deleteRecording(_ video: Video) {
+    private func deleteRecording(_ video: Video, withEdits: Bool = false) {
         Haptics.success()
         session.close()
         router.closePlayer()
+        let edits = withEdits ? library.edits(of: video.id) : []
+        for edit in edits { library.delete(edit.id) }
         library.delete(video.id)
-        router.showToast("Recording deleted", systemImage: "trash.fill")
+        router.showToast(edits.isEmpty ? "Recording deleted" : "Recording and its edits deleted", systemImage: "trash.fill")
     }
 }
 

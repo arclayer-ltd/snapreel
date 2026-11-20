@@ -15,6 +15,10 @@ final class Library: ObservableObject {
     /// Share links on snapreel.video, by recording id (`CloudLink`). A link outlives its
     /// recording on this iPhone: deleting the recording here leaves the link working.
     @Published private(set) var links: [UUID: CloudLink] = [:]
+    /// The editor's unsaved work, by source recording id (`EditDraft`).
+    @Published private(set) var drafts: [UUID: EditDraft] = [:]
+    /// Recipes of edits still rendering or that failed, by the new recording's id.
+    private(set) var editOutputs: [UUID: EditOutput] = [:]
     /// Last storage error in plain language, for a banner. Cleared by the view that shows it.
     @Published var lastError: String?
 
@@ -38,6 +42,10 @@ final class Library: ObservableObject {
             notifications = try storage.all(AppNotification.self)
             let loadedLinks = try storage.all(CloudLink.self)
             links = Dictionary(loadedLinks.map { ($0.videoID, $0) }, uniquingKeysWith: { a, _ in a })
+            let loadedDrafts = try storage.all(EditDraft.self)
+            drafts = Dictionary(loadedDrafts.map { ($0.recipe.sourceID, $0) }, uniquingKeysWith: { a, _ in a })
+            let loadedOutputs = try storage.all(EditOutput.self)
+            editOutputs = Dictionary(loadedOutputs.map { ($0.videoID, $0) }, uniquingKeysWith: { a, _ in a })
         } catch {
             lastError = error.localizedDescription
         }
@@ -142,9 +150,57 @@ final class Library: ObservableObject {
         for item in notifications where item.videoID == id { remove(AppNotification.self, id: item.recordID) }
         notifications.removeAll { $0.videoID == id }
 
+        // The editor's draft for it, and the recipe it was rendered from.
+        if drafts.removeValue(forKey: id) != nil { remove(EditDraft.self, id: id.uuidString) }
+        if editOutputs.removeValue(forKey: id) != nil { remove(EditOutput.self, id: id.uuidString) }
+        removeEditFilesIfUnused(video.editedFrom)
+        removeEditFilesIfUnused(id)
+
         videos.removeAll { $0.id == id }
         remove(Video.self, id: id.uuidString)
         Notifier.shared.cancelScheduled(key: "needs-title-\(id.uuidString)")
+    }
+
+    // MARK: - Edits
+
+    /// Recordings edited from `id`, newest first. Deleting an original leaves them.
+    func edits(of id: UUID) -> [Video] {
+        allVideos.filter { $0.editedFrom == id }
+    }
+
+    func draft(for sourceID: UUID) -> EditDraft? { drafts[sourceID] }
+
+    func saveDraft(_ recipe: EditRecipe) {
+        let draft = EditDraft(recipe: recipe)
+        drafts[recipe.sourceID] = draft
+        persist(draft)
+    }
+
+    func deleteDraft(_ sourceID: UUID) {
+        guard drafts.removeValue(forKey: sourceID) != nil else { return }
+        remove(EditDraft.self, id: sourceID.uuidString)
+    }
+
+    func editOutput(_ videoID: UUID) -> EditOutput? { editOutputs[videoID] }
+
+    func saveEditOutput(_ output: EditOutput) {
+        editOutputs[output.videoID] = output
+        persist(output)
+    }
+
+    func deleteEditOutput(_ videoID: UUID) {
+        guard editOutputs.removeValue(forKey: videoID) != nil else { return }
+        remove(EditOutput.self, id: videoID.uuidString)
+    }
+
+    /// Voice-over takes and cleaned sound of a recording's edits, once no draft or pending edit
+    /// needs them.
+    func removeEditFilesIfUnused(_ sourceID: UUID?) {
+        guard let sourceID, drafts[sourceID] == nil,
+              !editOutputs.values.contains(where: { $0.recipe.sourceID == sourceID }) else { return }
+        let folder = media.root.appendingPathComponent("Edits", isDirectory: true)
+            .appendingPathComponent(sourceID.uuidString, isDirectory: true)
+        try? FileManager.default.removeItem(at: folder)
     }
 
     func toggleWatchLater(_ id: UUID) {
@@ -337,6 +393,8 @@ final class Library: ObservableObject {
         notifications = []
         // The links keep working on snapreel.video; ShareLinks.refresh() lists them again.
         links = [:]
+        drafts = [:]
+        editOutputs = [:]
         ThumbnailCache.shared.removeAll()
     }
 

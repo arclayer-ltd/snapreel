@@ -56,6 +56,8 @@ enum PlayerFollowUp: Equatable {
     case react(String)
     case copyLink
     case linkSettings
+    case editVideo
+    case deleteWithEdits
 }
 
 /// What the Transcript tab shows.

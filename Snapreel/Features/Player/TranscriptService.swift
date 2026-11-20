@@ -322,7 +322,8 @@ final class TranscriptService: ObservableObject {
             let start = offset + first.start
             let end = offset + last.start + last.duration
             if !text.isEmpty {
-                result.append(TranscriptSegment(start: start, duration: max(0.2, end - start), text: text))
+                let words = current.map { TranscriptWord(text: $0.text, start: offset + $0.start, duration: $0.duration) }
+                result.append(TranscriptSegment(start: start, duration: max(0.2, end - start), text: text, words: words))
             }
             current.removeAll()
         }

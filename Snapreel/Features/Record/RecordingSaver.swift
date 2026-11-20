@@ -62,6 +62,11 @@ final class RecordingSaver {
         process(request.id, library: library)
     }
 
+    /// Starts saving an edit whose row `EditRenderer` has just added; `save` renders it.
+    func beginEdit(_ id: UUID, library: Library) {
+        process(id, library: library)
+    }
+
     /// Saving failed earlier (or was interrupted): try again from wherever the file is.
     func retry(_ id: UUID, library: Library) {
         guard library.video(id) != nil else { return }
@@ -118,6 +123,17 @@ final class RecordingSaver {
         let destination = library.media.videoURL(video.fileName)
         if DiskSpace.available < 20_000_000 { throw RecordingSaveError.noSpace }
 
+        // 0. An edit is rendered from its recipe until its file is in the library (again after
+        //    a failure or the app closing, which can leave a partial file in staging).
+        if video.editedFrom != nil, library.editOutput(id) != nil, !fm.fileExists(atPath: destination.path) {
+            try? fm.removeItem(at: staged)
+            try await EditRenderer.shared.render(id, to: staged, library: library)
+            guard library.video(id) != nil else {
+                try? fm.removeItem(at: staged)
+                return
+            }
+        }
+
         // 1. Ready for review: the file into the library (a move on the same volume), then its
         //    length, size and picture size.
         if fm.fileExists(atPath: staged.path) {
@@ -166,7 +182,9 @@ final class RecordingSaver {
         if hasVideo && video.thumbnailFileName == nil {
             let started = Date()
             let thumbnails = library.media.thumbnails
-            let at = min(0.5, video.duration / 2)
+            let at = video.editedFrom != nil
+                ? EditRenderer.shared.thumbnailTime(id, library: library, duration: video.duration)
+                : min(0.5, video.duration / 2)
             let name = await Task.detached(priority: .utility) {
                 await RecordingSaver.makeThumbnail(for: destination, at: at, named: id.uuidString, in: thumbnails)
             }.value
@@ -205,6 +223,8 @@ final class RecordingSaver {
             reason = "Your iPhone ran out of space while saving."
         } else if let saveError {
             reason = saveError.message
+        } else if let editError = error as? EditRenderError {
+            reason = editError.message
         } else {
             reason = "Something went wrong while saving. Try again."
         }
@@ -216,6 +236,16 @@ final class RecordingSaver {
     /// is looking at it.
     private func announce(_ video: Video, library: Library) {
         let alert = video.reviewedAt == nil && !ReviewCoordinator.shared.isReviewing(video.id)
+        if video.editedFrom != nil {
+            // The original's transcript, moved onto the edit's clock; recognition only when
+            // the original had none.
+            let hasTranscript = EditRenderer.shared.finish(video.id, library: library)
+            Notifier.shared.post(.recordingSaved, title: "Edit saved",
+                                 body: "\(Format.clock(video.duration)) edit is in your library.",
+                                 videoID: video.id, alert: alert)
+            if !hasTranscript { TranscriptService.shared.enqueue(videoID: video.id, library: library) }
+            return
+        }
         if video.kind == .imported {
             Notifier.shared.post(.importFinished, title: "Import finished",
                                  body: "Your video was copied from Photos and is in your library.",

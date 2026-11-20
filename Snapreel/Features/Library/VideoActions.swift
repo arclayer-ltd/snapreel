@@ -38,6 +38,8 @@ enum LibraryVideoAction {
     case tags
     case retry
     case delete
+    case edit
+    case deleteWithEdits
 }
 
 @MainActor
@@ -55,8 +57,9 @@ final class LibraryActionsModel: ObservableObject {
         case share(Video)
         case copyLink(UUID)
         case photos(Video)
-        case delete(UUID)
+        case delete(UUID, withEdits: Bool)
         case storage
+        case edit(UUID)
     }
 
     private var followUp: FollowUp?
@@ -122,20 +125,32 @@ final class LibraryActionsModel: ObservableObject {
     }
 
     /// Deletes once the actions sheet (where the person already confirmed) has gone.
-    func deleteAfterClosing(_ id: UUID, library: Library, router: AppRouter) {
+    func deleteAfterClosing(_ id: UUID, withEdits: Bool = false, library: Library, router: AppRouter) {
         if sheet == nil {
-            performDelete(id, library: library, router: router)
+            performDelete(id, withEdits: withEdits, library: library, router: router)
         } else {
-            followUp = .delete(id)
+            followUp = .delete(id, withEdits: withEdits)
             sheet = nil
         }
     }
 
-    func performDelete(_ id: UUID, library: Library, router: AppRouter) {
+    /// Opens the editor once the actions sheet has gone.
+    func edit(_ id: UUID, router: AppRouter) {
+        if sheet == nil {
+            router.edit(id)
+        } else {
+            followUp = .edit(id)
+            sheet = nil
+        }
+    }
+
+    func performDelete(_ id: UUID, withEdits: Bool = false, library: Library, router: AppRouter) {
         guard library.video(id) != nil else { return }
+        let edits = withEdits ? library.edits(of: id) : []
+        for edit in edits { library.delete(edit.id) }
         library.delete(id)
         Haptics.success()
-        router.showToast("Recording deleted", systemImage: "trash.fill")
+        router.showToast(edits.isEmpty ? "Recording deleted" : "Recording and its edits deleted", systemImage: "trash.fill")
     }
 
     /// Called by the host when a sheet has been dismissed.
@@ -147,8 +162,9 @@ final class LibraryActionsModel: ObservableObject {
         case .share(let video): shareTarget = video
         case .copyLink(let id): ShareLinks.shared.copyLink(id)
         case .photos(let video): photosTarget = video
-        case .delete(let id): performDelete(id, library: library, router: router)
+        case .delete(let id, let withEdits): performDelete(id, withEdits: withEdits, library: library, router: router)
         case .storage: showsStorage = true
+        case .edit(let id): router.edit(id)
         }
     }
 
@@ -204,9 +220,14 @@ struct LibraryVideoActionsHost: ViewModifier {
                 Button("Delete", role: .destructive) {
                     model.performDelete(video.id, library: library, router: router)
                 }
+                if !library.edits(of: video.id).isEmpty {
+                    Button("Delete with its edits", role: .destructive) {
+                        model.performDelete(video.id, withEdits: true, library: library, router: router)
+                    }
+                }
                 Button("Cancel", role: .cancel) {}
             } message: { video in
-                Text("“\(video.title)” and its notes, reactions and transcript will be removed from this iPhone. You can't undo this.")
+                Text(LibraryActionsSheet.deleteMessage(video, edits: library.edits(of: video.id).count))
             }
     }
 
@@ -226,7 +247,7 @@ struct LibraryVideoActionsHost: ViewModifier {
             LibraryActionsSheet(videoID: id, onAction: { action in
                 handle(action, videoID: id)
             })
-            .presentationDetents([.fraction(0.68), .large])
+            .presentationDetents([.fraction(0.74), .large])
             .presentationDragIndicator(.visible)
         case .rename(let id):
             TitleEditorSheet(initialTitle: library.video(id)?.title ?? "",
@@ -292,6 +313,10 @@ struct LibraryVideoActionsHost: ViewModifier {
             model.retry(videoID, library: library, router: router)
         case .delete:
             model.deleteAfterClosing(videoID, library: library, router: router)
+        case .deleteWithEdits:
+            model.deleteAfterClosing(videoID, withEdits: true, library: library, router: router)
+        case .edit:
+            model.edit(videoID, router: router)
         }
     }
 }
@@ -337,10 +362,25 @@ struct LibraryActionsSheet: View {
                     onAction(.delete)
                 }
             }
+            if !library.edits(of: video.id).isEmpty {
+                Button("Delete with its edits", role: .destructive) {
+                    Task { @MainActor in
+                        try? await Task.sleep(nanoseconds: 250_000_000)
+                        onAction(.deleteWithEdits)
+                    }
+                }
+            }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("“\(video.title)” and its notes, reactions and transcript will be removed from this iPhone. You can't undo this.")
+            Text(Self.deleteMessage(video, edits: library.edits(of: video.id).count))
         }
+    }
+
+    /// The delete warning; an original with edits says they stay unless deleted too.
+    static func deleteMessage(_ video: Video, edits: Int) -> String {
+        let base = "“\(video.title)” and its notes, reactions and transcript will be removed from this iPhone. You can't undo this."
+        guard edits > 0 else { return base }
+        return base + (edits == 1 ? " Its edited copy stays unless you delete it too." : " Its \(edits) edited copies stay unless you delete them too.")
     }
 
     private func header(_ video: Video) -> some View {
@@ -391,6 +431,10 @@ struct LibraryActionsSheet: View {
         VStack(spacing: 0) {
             if case .failed = video.state {
                 row("Try saving again", systemImage: "arrow.clockwise", value: nil) { onAction(.retry) }
+                Divider().padding(.leading, 44)
+            }
+            if video.state.isReady {
+                row(video.isAudioOnly ? "Edit recording" : "Edit video", systemImage: "scissors", value: nil) { onAction(.edit) }
                 Divider().padding(.leading, 44)
             }
             row("Edit title", systemImage: "pencil", value: nil) { onAction(.rename) }
@@ -527,6 +571,13 @@ struct LibraryVideoMenu: View {
             } label: {
                 Label(video.isInWatchLater ? "Remove from Watch later" : "Watch later",
                       systemImage: video.isInWatchLater ? "bookmark.slash" : "bookmark")
+            }
+        }
+        if video.state.isReady {
+            Button {
+                router.edit(video.id, afterClosing: true)
+            } label: {
+                Label(video.isAudioOnly ? "Edit recording" : "Edit video", systemImage: "scissors")
             }
         }
         Button {

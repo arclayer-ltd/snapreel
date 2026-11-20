@@ -1,0 +1,655 @@
+import SwiftUI
+
+/// The editor as the shell presents it, full screen over everything.
+struct EditorScreen: View {
+    @StateObject private var model: EditorModel
+    @EnvironmentObject private var router: AppRouter
+
+    init(videoID: UUID, library: Library) {
+        _model = StateObject(wrappedValue: EditorModel(videoID: videoID, library: library))
+    }
+
+    var body: some View {
+        EditorView(model: model,
+                   onClose: { router.closeEditor() },
+                   onOpen: { id in router.closeEditor(thenPlay: id) })
+    }
+}
+
+/// Close on the left and a red Save on the right; the preview; time, play and undo/redo; the
+/// timeline under a fixed playhead; and the tools along the bottom, which swap to a tool's
+/// panel or to section actions when something is selected. Follows Light and Dark; only the
+/// picture is dark.
+struct EditorView: View {
+    @ObservedObject var model: EditorModel
+    let onClose: () -> Void
+    let onOpen: (UUID) -> Void
+
+    @EnvironmentObject private var library: Library
+    @ObservedObject private var transcripts: TranscriptService = .shared
+    @State private var pageOffset: CGFloat = 0
+    @State private var shareTarget: Video?
+
+    var body: some View {
+        ZStack {
+            Color.srStage.ignoresSafeArea()
+            VStack(spacing: 0) {
+                topBar
+                EditorPreview(model: model)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                transport
+                EditorTimeline(model: model)
+                EditorBottomBar(model: model)
+            }
+            if model.textEntry != nil {
+                EditorTextEntry(model: model)
+                    .transition(.opacity)
+                    .zIndex(2)
+            }
+            phaseOverlay
+                .zIndex(3)
+        }
+        .offset(y: pageOffset)
+        .animation(Motion.quick, value: model.tool)
+        .animation(Motion.quick, value: model.selection)
+        .sheet(item: $model.sheet) { sheet in
+            sheetView(sheet)
+        }
+        .toast($model.toast, bottomInset: 170)
+        .shareVideo($shareTarget)
+        .task { await model.load() }
+        .onDisappear { model.teardown() }
+    }
+
+    // MARK: - Top bar
+
+    private var topBar: some View {
+        HStack(spacing: Space.s) {
+            CircleIconButton(systemName: "xmark", label: "Close editor", tone: .stage, size: 36) {
+                requestClose()
+            }
+            Spacer(minLength: 0)
+            Menu {
+                Button {
+                    model.revertToOriginal()
+                } label: {
+                    Label("Revert to original", systemImage: "arrow.uturn.backward")
+                }
+                .disabled(!model.isDirty)
+                Button(role: .destructive) {
+                    model.discardDraft()
+                    model.revertToOriginal()
+                } label: {
+                    Label("Discard draft", systemImage: "trash")
+                }
+                .disabled(!model.isDirty)
+            } label: {
+                Image(systemName: "ellipsis")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(Color.srStageText)
+                    .frame(width: 36, height: 36)
+                    .background(Circle().fill(Color.srStageControl))
+            }
+            .accessibilityLabel("More")
+            Button {
+                Haptics.tap()
+                model.pause()
+                model.sheet = .export
+            } label: {
+                Text("Save")
+            }
+            .buttonStyle(.srPrimaryCompact)
+            .accessibilityHint("Saves the edit as a new recording")
+        }
+        .padding(.horizontal, Space.m)
+        .frame(height: 52)
+        .contentShape(Rectangle())
+        .gesture(swipeDown)
+    }
+
+    private var swipeDown: some Gesture {
+        DragGesture(minimumDistance: 10)
+            .onChanged { value in
+                guard SwipeDismiss.isDownward(value) else { return }
+                pageOffset = value.translation.height
+            }
+            .onEnded { value in
+                if SwipeDismiss.isDownward(value) && SwipeDismiss.commits(value) {
+                    requestClose()
+                } else {
+                    withAnimation(SwipeDismiss.springBack) { pageOffset = 0 }
+                }
+            }
+    }
+
+    private func requestClose() {
+        model.pause()
+        switch model.phase {
+        case .rendering, .restorePrompt:
+            // A save carries on in the library; an unanswered draft stays as it was.
+            close()
+            return
+        case .editing, .cancelled:
+            break
+        }
+        if model.isDirty {
+            withAnimation(SwipeDismiss.springBack) { pageOffset = 0 }
+            model.sheet = .discard
+        } else {
+            model.keepDraft()
+            close()
+        }
+    }
+
+    private func close() {
+        withAnimation(SwipeDismiss.slideAway) { pageOffset = SwipeDismiss.offscreen }
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 200_000_000)
+            onClose()
+        }
+    }
+
+    /// Closes after the sheet on screen has gone.
+    private func closeAfterSheet() {
+        model.sheet = nil
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 350_000_000)
+            close()
+        }
+    }
+
+    // MARK: - Transport
+
+    private var transport: some View {
+        ZStack {
+            HStack(spacing: Space.xs) {
+                Text("\(Format.clock(model.playhead)) / \(Format.clock(model.duration))")
+                    .font(.srTimerSmall)
+                    .foregroundStyle(Color.srStageTextSecondary)
+                    .accessibilityLabel("\(Format.clock(model.playhead)) of \(Format.clock(model.duration))")
+                Spacer(minLength: 0)
+                historyButton("arrow.uturn.backward", label: "Undo", enabled: model.canUndo) { model.undo() }
+                historyButton("arrow.uturn.forward", label: "Redo", enabled: model.canRedo) { model.redo() }
+            }
+            Button {
+                Haptics.tap()
+                model.togglePlay()
+            } label: {
+                Image(systemName: model.isPlaying ? "pause.fill" : "play.fill")
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundStyle(Color.srStageText)
+                    .frame(width: 48, height: 44)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(PressScaleStyle())
+            .accessibilityLabel(model.isPlaying ? "Pause" : "Play")
+        }
+        .padding(.horizontal, Space.m)
+        .frame(height: 46)
+    }
+
+    private func historyButton(_ systemImage: String, label: String, enabled: Bool,
+                               action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(enabled ? Color.srStageText : Color.srStageTextTertiary.opacity(0.6))
+                .frame(width: 38, height: 38)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(PressScaleStyle())
+        .disabled(!enabled)
+        .accessibilityLabel(label)
+    }
+
+    // MARK: - Sheets
+
+    @ViewBuilder
+    private func sheetView(_ sheet: EditorSheet) -> some View {
+        switch sheet {
+        case .transcript:
+            EditorTranscriptSheet(model: model, transcripts: transcripts)
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
+        case .speed:
+            EditorSpeedSheet(model: model)
+                .presentationDetents([.height(model.selectedSegment == nil ? 300 : 360)])
+                .presentationDragIndicator(.visible)
+        case .export:
+            EditorExportSheet(model: model)
+                .presentationDetents([.height(520), .large])
+                .presentationDragIndicator(.visible)
+        case .discard:
+            EditorDiscardSheet(onKeepDraft: {
+                model.keepDraft()
+                closeAfterSheet()
+            }, onDiscard: {
+                model.discardDraft()
+                closeAfterSheet()
+            }, onKeepEditing: {
+                model.sheet = nil
+            })
+            .presentationDetents([.height(330)])
+            .presentationDragIndicator(.visible)
+        case .captionWords:
+            EditorCaptionWordsSheet(model: model)
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
+        case .emoji:
+            EmojiPickerSheet(title: "Emoji", onPick: { emoji in
+                model.sheet = nil
+                model.addSticker(.emoji, emoji: emoji)
+            }, onClose: { model.sheet = nil })
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
+        }
+    }
+
+    // MARK: - Full-screen states
+
+    @ViewBuilder
+    private var phaseOverlay: some View {
+        switch model.phase {
+        case .editing:
+            EmptyView()
+        case .restorePrompt:
+            EditorRestorePrompt(date: model.draftDate, onContinue: {
+                withAnimation(Motion.standard) { model.continueDraft() }
+            }, onStartOver: {
+                withAnimation(Motion.standard) { model.startOver() }
+            })
+            .transition(.opacity)
+        case .rendering(let id):
+            EditorRenderingView(model: model, videoID: id,
+                                onOpen: { onOpen(id) },
+                                onShare: { shareTarget = library.video(id) },
+                                onDone: { close() })
+            .transition(.opacity)
+        case .cancelled:
+            EditorCancelledView { withAnimation(Motion.standard) { model.backToEditing() } }
+                .transition(.opacity)
+        }
+    }
+}
+
+// MARK: - Bottom bar
+
+/// The tools, or what replaces them: section actions, a tool's panel, or a confirmation.
+struct EditorBottomBar: View {
+    @ObservedObject var model: EditorModel
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Rectangle().fill(Color.srStageLine).frame(height: 0.5)
+            content
+                .frame(maxWidth: .infinity)
+        }
+        .background(Color.srStage.ignoresSafeArea(edges: .bottom))
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        if model.confirmsSectionDelete, let segment = model.selectedSegment {
+            EditorDeleteSectionConfirm(model: model, segment: segment)
+        } else if model.selectedSegment != nil {
+            EditorSectionBar(model: model)
+        } else if let tool = model.tool {
+            EditorToolPanel(model: model, tool: tool)
+        } else {
+            EditorToolBar(model: model)
+        }
+    }
+}
+
+/// The main tools in one scrolling row.
+struct EditorToolBar: View {
+    @ObservedObject var model: EditorModel
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 2) {
+                ForEach(model.tools) { tool in
+                    EditorToolButton(title: tool.title, systemImage: tool.systemImage) {
+                        model.open(tool)
+                    }
+                }
+            }
+            .padding(.horizontal, Space.xs)
+        }
+        .frame(height: 76)
+    }
+}
+
+struct EditorToolButton: View {
+    let title: String
+    let systemImage: String
+    var isOn = false
+    var isDestructive = false
+    var enabled = true
+    let action: () -> Void
+
+    var body: some View {
+        Button {
+            Haptics.tap()
+            action()
+        } label: {
+            VStack(spacing: 6) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 20, weight: .medium))
+                    .frame(height: 24)
+                Text(title)
+                    .font(.system(size: 11, weight: .medium))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
+            .foregroundStyle(isOn ? Color.srStageRed : (isDestructive ? Color.srStageRed : Color.srStageText))
+            .frame(width: 66, height: 64)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(PressScaleStyle())
+        .disabled(!enabled)
+        .opacity(enabled ? 1 : 0.4)
+        .accessibilityAddTraits(isOn ? .isSelected : [])
+    }
+}
+
+/// Section actions: back, Split, Delete, Speed.
+struct EditorSectionBar: View {
+    @ObservedObject var model: EditorModel
+
+    var body: some View {
+        HStack(spacing: 0) {
+            Button {
+                Haptics.tap()
+                model.selection = nil
+            } label: {
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(Color.srStageText)
+                    .frame(width: 48, height: 64)
+                    .contentShape(Rectangle())
+            }
+            .accessibilityLabel("Back to tools")
+            Rectangle().fill(Color.srStageLine).frame(width: 0.5, height: 36)
+            EditorToolButton(title: "Split", systemImage: "scissors") { model.splitAtPlayhead() }
+            EditorToolButton(title: "Delete", systemImage: "trash", isDestructive: true,
+                             enabled: model.recipe.segments.count > 1) {
+                Haptics.warning()
+                model.confirmsSectionDelete = true
+            }
+            EditorToolButton(title: "Speed", systemImage: "speedometer") { model.sheet = .speed }
+            Spacer(minLength: 0)
+            if let segment = model.selectedSegment, let index = model.recipe.segmentIndex(segment.id) {
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text("Part \(index + 1) of \(model.recipe.segments.count)")
+                        .font(.srCaption)
+                        .foregroundStyle(Color.srStageText)
+                    Text(EditorText.length(segment.outputLength))
+                        .font(.srTimerSmall)
+                        .foregroundStyle(Color.srStageTextTertiary)
+                }
+                .padding(.trailing, Space.m)
+            }
+        }
+        .frame(height: 76)
+    }
+}
+
+/// "Delete this part?" in place of the section actions.
+struct EditorDeleteSectionConfirm: View {
+    @ObservedObject var model: EditorModel
+    let segment: EditSegment
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Space.s) {
+            HStack(spacing: Space.xs) {
+                Image(systemName: "trash.fill")
+                    .foregroundStyle(Color.srStageRed)
+                Text("Delete this \(EditorText.length(segment.outputLength)) part?")
+                    .font(.srHeadline)
+                    .foregroundStyle(Color.srStageText)
+            }
+            Text("What comes after it moves up. Undo brings it back.")
+                .font(.srFootnote)
+                .foregroundStyle(Color.srStageTextSecondary)
+            HStack(spacing: Space.s) {
+                Button("Keep it") { model.confirmsSectionDelete = false }
+                    .buttonStyle(.srSecondaryCompact)
+                Button("Delete part") { model.deleteSelectedSegment() }
+                    .buttonStyle(.srPrimaryCompact)
+                Spacer(minLength: 0)
+            }
+        }
+        .padding(.horizontal, Space.gutter)
+        .padding(.vertical, Space.s)
+    }
+}
+
+// MARK: - Full-screen states
+
+/// "Pick up where you left off?"
+struct EditorRestorePrompt: View {
+    let date: Date?
+    let onContinue: () -> Void
+    let onStartOver: () -> Void
+
+    var body: some View {
+        ZStack {
+            Color.black.opacity(0.45).ignoresSafeArea()
+            VStack(spacing: Space.m) {
+                ZStack {
+                    Circle().fill(Color.srRedSoft)
+                    Image(systemName: "clock.arrow.circlepath")
+                        .font(.system(size: 24, weight: .semibold))
+                        .foregroundStyle(Color.srStageRed)
+                }
+                .frame(width: 60, height: 60)
+                VStack(spacing: Space.xs) {
+                    Text("Pick up where you left off?")
+                        .font(.srTitle3)
+                        .foregroundStyle(Color.srStageText)
+                    Text(date.map { "You have unsaved edits from \(Format.age($0).lowercased())." }
+                         ?? "You have unsaved edits to this recording.")
+                        .font(.srSubheadline)
+                        .foregroundStyle(Color.srStageTextSecondary)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                VStack(spacing: Space.s) {
+                    Button("Continue editing") { onContinue() }
+                        .buttonStyle(.srPrimary)
+                    Button("Start over") { onStartOver() }
+                        .buttonStyle(.srSecondary)
+                }
+            }
+            .padding(Space.l)
+            .background(RoundedRectangle(cornerRadius: Radius.xl, style: .continuous).fill(Color.srStageRaised))
+            .padding(.horizontal, Space.l)
+        }
+    }
+}
+
+/// The save was stopped.
+struct EditorCancelledView: View {
+    let onBack: () -> Void
+
+    var body: some View {
+        ZStack {
+            Color.srStage.ignoresSafeArea()
+            VStack(spacing: Space.m) {
+                Spacer()
+                ZStack {
+                    Circle().fill(Color.srStageControl)
+                    Image(systemName: "stop.fill")
+                        .font(.system(size: 22, weight: .semibold))
+                        .foregroundStyle(Color.srStageText)
+                }
+                .frame(width: 64, height: 64)
+                Text("Saving stopped")
+                    .font(.srTitle)
+                    .foregroundStyle(Color.srStageText)
+                Text("Nothing was added to your library. Your edits are still here.")
+                    .font(.srSubheadline)
+                    .foregroundStyle(Color.srStageTextSecondary)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer()
+                Button("Back to the editor") { onBack() }
+                    .buttonStyle(.srPrimary)
+            }
+            .padding(.horizontal, Space.gutter)
+            .padding(.bottom, Space.l)
+        }
+    }
+}
+
+// MARK: - Text entry
+
+/// The keyboard is up: the text in its style over a dimmed page, with styles and colours just
+/// above the keyboard.
+struct EditorTextEntry: View {
+    @ObservedObject var model: EditorModel
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        ZStack {
+            Color.black.opacity(0.62).ignoresSafeArea()
+                .onTapGesture { model.commitTextEntry() }
+            VStack(spacing: 0) {
+                HStack {
+                    Button("Cancel") {
+                        model.textEntry = nil
+                    }
+                    .font(.srBody)
+                    .foregroundStyle(Color.white.opacity(0.85))
+                    Spacer()
+                    Button("Done") { model.commitTextEntry() }
+                        .font(.srHeadline)
+                        .foregroundStyle(Color.white)
+                        .padding(.horizontal, Space.m)
+                        .frame(height: 36)
+                        .background(Capsule().fill(Color.srRed))
+                }
+                .padding(.horizontal, Space.gutter)
+                .frame(height: 56)
+                Spacer(minLength: Space.m)
+                field
+                    .padding(.horizontal, Space.l)
+                Spacer(minLength: Space.m)
+                if let entry = model.textEntry {
+                    EditorTextStyleRow(style: entry.style, color: entry.color, onDark: true,
+                                       onStyle: { style in model.textEntry?.style = style },
+                                       onColor: { color in model.textEntry?.color = color })
+                        .padding(.bottom, Space.s)
+                }
+            }
+        }
+        .onAppear { focused = true }
+    }
+
+    @ViewBuilder
+    private var field: some View {
+        if let entry = model.textEntry {
+            let binding = Binding<String>(get: { model.textEntry?.text ?? "" },
+                                          set: { model.textEntry?.text = $0 })
+            TextField("Type something", text: binding, axis: .vertical)
+                .font(.system(size: 30, weight: .bold))
+                .multilineTextAlignment(.center)
+                .lineLimit(1...5)
+                .focused($focused)
+                .foregroundStyle(foreground(entry))
+                .tint(Color.srRed)
+                .padding(.horizontal, entry.style == .box ? 14 : 4)
+                .padding(.vertical, 6)
+                .background(background(entry))
+                .submitLabel(.done)
+                .accessibilityLabel("Text")
+        }
+    }
+
+    private func foreground(_ entry: EditText) -> Color {
+        entry.style == .box ? entry.color.contrasting : entry.color.color
+    }
+
+    @ViewBuilder
+    private func background(_ entry: EditText) -> some View {
+        switch entry.style {
+        case .box:
+            RoundedRectangle(cornerRadius: 10, style: .continuous).fill(entry.color.color)
+        case .bar:
+            Rectangle().fill(Color(hex: 0x13141B).opacity(0.82))
+        case .plain, .outline:
+            Color.clear
+        }
+    }
+}
+
+/// Style chips and colour dots, shared by the keyboard bar and the text panel.
+struct EditorTextStyleRow: View {
+    let style: EditTextStyle
+    let color: EditColor
+    var onDark = false
+    let onStyle: (EditTextStyle) -> Void
+    let onColor: (EditColor) -> Void
+
+    var body: some View {
+        VStack(spacing: Space.s) {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: Space.xs) {
+                    ForEach(EditTextStyle.allCases) { option in
+                        Button {
+                            Haptics.selection()
+                            onStyle(option)
+                        } label: {
+                            Text(option.label)
+                                .font(.srSubheadlineStrong)
+                                .foregroundStyle(option == style ? selectedText : text)
+                                .padding(.horizontal, Space.s)
+                                .frame(height: 34)
+                                .background(Capsule().fill(option == style ? selectedFill : fill))
+                        }
+                        .buttonStyle(PressScaleStyle())
+                        .accessibilityAddTraits(option == style ? .isSelected : [])
+                    }
+                }
+                .padding(.horizontal, Space.gutter)
+            }
+            EditorColorDots(selected: color, onDark: onDark, onPick: onColor)
+        }
+    }
+
+    private var text: Color { onDark ? .white : .srStageText }
+    private var fill: Color { onDark ? Color.white.opacity(0.16) : .srStageControl }
+    private var selectedText: Color { onDark ? .srInk : .srOnInverse }
+    private var selectedFill: Color { onDark ? .white : .srInverse }
+}
+
+struct EditorColorDots: View {
+    let selected: EditColor
+    var onDark = false
+    let onPick: (EditColor) -> Void
+
+    var body: some View {
+        HStack(spacing: Space.s) {
+            ForEach(EditColor.allCases) { option in
+                Button {
+                    Haptics.selection()
+                    onPick(option)
+                } label: {
+                    Circle()
+                        .fill(option.color)
+                        .overlay(Circle().strokeBorder(onDark ? Color.white.opacity(0.4) : Color.srStageLine, lineWidth: 1))
+                        .frame(width: 28, height: 28)
+                        .padding(3)
+                        .overlay(Circle().strokeBorder(option == selected ? (onDark ? Color.white : Color.srStageText) : .clear,
+                                                       lineWidth: 2))
+                        .frame(width: 40, height: 40)
+                        .contentShape(Circle())
+                }
+                .buttonStyle(PressScaleStyle())
+                .accessibilityLabel(option.label)
+                .accessibilityAddTraits(option == selected ? .isSelected : [])
+            }
+        }
+    }
+}

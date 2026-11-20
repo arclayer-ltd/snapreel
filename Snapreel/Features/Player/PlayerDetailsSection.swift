@@ -22,6 +22,9 @@ struct PlayerDetailsSection: View {
     /// Copy link next to Share; nil hides it.
     var onCopyLink: (@MainActor () -> Void)? = nil
     var onLinkTapped: (@MainActor () -> Void)? = nil
+    /// For an edited recording: its original, when it is still on this iPhone.
+    var original: Video? = nil
+    var onOpenOriginal: (@MainActor () -> Void)? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: Space.s) {
@@ -33,7 +36,7 @@ struct PlayerDetailsSection: View {
             metaRow
             if isExpanded {
                 PlayerFactsCard(video: video, folderName: folderName, transcript: transcript,
-                                isSummarizing: isSummarizing)
+                                isSummarizing: isSummarizing, original: original, onOpenOriginal: onOpenOriginal)
                     .transition(.opacity.combined(with: .move(edge: .top)))
             }
             statsRow
@@ -227,6 +230,8 @@ struct PlayerFactsCard: View {
     let folderName: String?
     let transcript: Transcript?
     let isSummarizing: Bool
+    var original: Video? = nil
+    var onOpenOriginal: (@MainActor () -> Void)? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: Space.s) {
@@ -242,11 +247,44 @@ struct PlayerFactsCard: View {
                 FactRow(title: "Resolution", value: Format.resolution(width: video.pixelWidth, height: video.pixelHeight))
                 FactRow(title: "File size", value: Format.bytes(video.fileSize))
                 FactRow(title: "Folder", value: folderName ?? "Not in a folder")
+                if video.editedFrom != nil { originalRow }
                 tagsRow
             }
             .padding(.horizontal, Space.m)
             .background(RoundedRectangle(cornerRadius: Radius.l, style: .continuous).fill(Color.srStageRaised))
         }
+    }
+
+    /// "Edited from" with a link to the original recording.
+    private var originalRow: some View {
+        Button {
+            Haptics.tap()
+            onOpenOriginal?()
+        } label: {
+            HStack(alignment: .firstTextBaseline) {
+                Text("Edited from")
+                    .foregroundStyle(Color.srStageTextSecondary)
+                Spacer(minLength: Space.s)
+                if let original {
+                    Text(original.title)
+                        .foregroundStyle(Color.srStageRed)
+                        .lineLimit(1)
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(Color.srStageTextTertiary)
+                } else {
+                    Text("Original deleted")
+                        .foregroundStyle(Color.srStageTextTertiary)
+                }
+            }
+            .font(.srSubheadline)
+            .padding(.vertical, Space.s)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(original == nil || onOpenOriginal == nil)
+        .overlay(alignment: .bottom) { Rectangle().fill(Color.srStageLine).frame(height: 0.5) }
+        .accessibilityHint(original == nil ? "" : "Opens the original recording")
     }
 
     private var kindValue: String {

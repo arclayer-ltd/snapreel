@@ -3,6 +3,8 @@ import SwiftUI
 /// Every reaction, from Snapreel's own list: search by name, jump between categories, and your
 /// recent picks at the top. No emoji keyboard needed.
 struct EmojiPickerSheet: View {
+    /// "Reactions" in the player, "Emoji" in the editor.
+    var title = "Reactions"
     let onPick: @MainActor (String) -> Void
     let onClose: @MainActor () -> Void
 
@@ -14,7 +16,7 @@ struct EmojiPickerSheet: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            SheetHeader(title: "Reactions", leadingTitle: "Close", leadingAction: { onClose() }, onStage: true)
+            SheetHeader(title: title, leadingTitle: "Close", leadingAction: { onClose() }, onStage: true)
             searchField
                 .padding(.horizontal, Space.gutter)
                 .padding(.bottom, Space.s)

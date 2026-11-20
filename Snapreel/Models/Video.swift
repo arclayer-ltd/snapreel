@@ -127,6 +127,9 @@ struct Video: Identifiable, Codable, Hashable {
     /// library card's frame, a screen recording's one sound track, the "saved" notice and the
     /// transcript). Stored, so a launch finishes what a killed app left (`RecordingSaver`).
     var isFinishing: Bool?
+    /// The recording this one was edited from (the editor saves every edit as a new recording
+    /// and never changes the original). Nil for recordings made or imported directly.
+    var editedFrom: UUID?
 
     var isAudioOnly: Bool { kind == .audio || pixelWidth == 0 }
     var isPortrait: Bool { pixelHeight > pixelWidth }
@@ -179,4 +182,14 @@ struct TranscriptSegment: Identifiable, Codable, Hashable {
     var start: Double
     var duration: Double
     var text: String
+    /// Each word's time, when recognition gave them (transcripts from build 41 on). The editor
+    /// uses them to find filler words and to keep captions in step after cuts.
+    var words: [TranscriptWord]? = nil
+}
+
+struct TranscriptWord: Codable, Hashable {
+    var text: String
+    /// Seconds into the video.
+    var start: Double
+    var duration: Double
 }

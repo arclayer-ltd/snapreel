@@ -72,6 +72,12 @@ struct PlayerPresentation: Equatable {
     var token = UUID()
 }
 
+/// The video editor, full screen over everything (`EditorScreen`).
+struct EditorLaunch: Identifiable, Equatable {
+    let id = UUID()
+    var videoID: UUID
+}
+
 /// App-wide navigation state. Views use `@EnvironmentObject var router: AppRouter`.
 @MainActor
 final class AppRouter: ObservableObject {
@@ -86,6 +92,7 @@ final class AppRouter: ObservableObject {
     /// swiped down.
     @Published var minimizedRecorder: RecorderModel?
     @Published var player: PlayerPresentation?
+    @Published var editor: EditorLaunch?
     @Published var isSettingsPresented = false
     /// Pages pushed when Settings opens (empty = the root). Set through `openSettings(_:)`.
     @Published var settingsPath: [SettingsPage] = []
@@ -138,6 +145,43 @@ final class AppRouter: ObservableObject {
         withAnimation(Motion.standard) {
             player = PlayerPresentation(videoID: videoID, startAt: time, opensTranscript: opensTranscript,
                                         opensComments: opensComments)
+        }
+    }
+
+    /// Opens the editor on a recording. One full-screen page at a time: the player or the
+    /// recorder closes first, and the editor follows once it has gone.
+    func edit(_ videoID: UUID, afterClosing: Bool = false) {
+        if minimizedRecorder != nil {
+            showToast("Stop your recording to edit", systemImage: "mic.fill")
+            return
+        }
+        let waits = afterClosing || recorder != nil || (player.map { !$0.isMinimized } ?? false)
+        if player != nil {
+            PlaybackSession.shared.close()
+            withAnimation(Motion.standard) { player = nil }
+        }
+        recorder = nil
+        isSettingsPresented = false
+        guard waits else {
+            editor = EditorLaunch(videoID: videoID)
+            return
+        }
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 650_000_000)
+            self.editor = EditorLaunch(videoID: videoID)
+        }
+    }
+
+    func closeEditor() {
+        editor = nil
+    }
+
+    /// Closes the editor and plays a recording (a saved edit's "Open").
+    func closeEditor(thenPlay videoID: UUID) {
+        editor = nil
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 650_000_000)
+            self.play(videoID)
         }
     }
 
