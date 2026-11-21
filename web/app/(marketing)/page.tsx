@@ -42,7 +42,6 @@ const ways = [
 /* Your phone. Your files: pieces of the app lifted out of the Library phone's screen (scripts/web-lifts.py),
    placed in % of the phone's box: x the left edge, y the middle, w the width; from: where they slide in from. */
 const liftPieces: { name: LiftName; x: number; y: number; w: number; from: number; behind?: boolean; alt: string }[] = [
-  { name: "row-checkout", x: 40, y: 43, w: 108, from: -30, behind: true, alt: "" },
   { name: "saved", x: -52, y: 14, w: 62, from: 40, alt: "Saved on this iPhone" },
   { name: "tabs", x: 46, y: 28, w: 96, from: -40, alt: "Notes, Transcript and Comments" },
   { name: "row-feedback", x: -66, y: 64, w: 122, from: 36, alt: "A recording in the library: Feedback on the onboarding copy, in the Clients folder" },
