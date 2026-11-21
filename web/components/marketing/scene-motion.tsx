@@ -9,6 +9,10 @@ import type { MotionSlot, SceneMotion as Engine } from "./scene-motion-engine";
  * `.mk-scene-art`, under the phone, the cards and the text. The picture stays the first paint: the canvas
  * fades in over it once its first frame (identical to the picture) is drawn.
  *
+ * A scene with a foreground cut-out in front of the phone (`.mk-scene-fg`, the hero's flower bed) gets a
+ * second, transparent canvas over that cut-out, made here and driven by the same engine, so the flowers
+ * in front of the phone sway too. It takes the cut-out picture's place once its first frame is drawn.
+ *
  * Three.js and the scene's data load only after the page has loaded and gone idle, and only when the scene
  * is near the viewport. It draws only while on screen in a visible tab. With reduced motion there is no
  * canvas and nothing is downloaded. If WebGL is missing or anything fails, the picture simply stays.
@@ -26,17 +30,19 @@ function watchReduce(notify: () => void) {
   return () => query.removeEventListener("change", notify);
 }
 
-export function SceneMotion({ slot }: { slot: MotionSlot }) {
+/** `fg`: the scene has a foreground cut-out with motion data (art.tsx reads that from the manifest on the
+    server, so the manifest itself only ever loads with the engine). */
+export function SceneMotion({ slot, fg = false }: { slot: MotionSlot; fg?: boolean }) {
   // Reduced motion on the server and until hydration, so the markup never holds a canvas by default.
   const reduce = useSyncExternalStore(
     watchReduce,
     () => window.matchMedia(REDUCE).matches,
     () => true,
   );
-  return reduce ? null : <MotionCanvas slot={slot} />;
+  return reduce ? null : <MotionCanvas slot={slot} fg={fg} />;
 }
 
-function MotionCanvas({ slot }: { slot: MotionSlot }) {
+function MotionCanvas({ slot, fg }: { slot: MotionSlot; fg: boolean }) {
   const ref = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
@@ -44,6 +50,17 @@ function MotionCanvas({ slot }: { slot: MotionSlot }) {
     const art = canvas?.parentElement;
     const img = art?.querySelector("img");
     if (!canvas || !art || !img) return;
+
+    // The foreground cut-out's canvas, if the scene has one.
+    const fgHost = fg ? art.parentElement?.querySelector<HTMLElement>(":scope > .mk-scene-fg") : null;
+    const fgImg = fgHost?.querySelector("img");
+    let fgCanvas: HTMLCanvasElement | null = null;
+    if (fgHost && fgImg) {
+      fgCanvas = document.createElement("canvas");
+      fgCanvas.className = "mk-scene-motion mk-scene-motion--fg";
+      fgCanvas.setAttribute("aria-hidden", "true");
+      fgHost.appendChild(fgCanvas);
+    }
 
     let engine: Engine | null = null;
     let dead = false;
@@ -62,15 +79,33 @@ function MotionCanvas({ slot }: { slot: MotionSlot }) {
     const wanted = () => ({ theme: dark.matches ? ("dark" as const) : ("light" as const), narrow: narrow.matches, lite: lite.matches });
     const key = (o: ReturnType<typeof wanted>) => `${o.theme}/${o.narrow}/${o.lite}`;
     const run = () => engine?.setRunning(onScreen && !document.hidden && !swapping);
-    // The picture's box can be a fraction of a device pixel short of whole (its height comes from an
-    // aspect ratio). The browser still paints the picture a whole number of pixels tall, but it rounds a
-    // canvas of that fractional height down, squeezing it by a pixel against the picture. A whole size
-    // keeps the two lined up exactly, so the fade between them can't be seen.
+    // The picture's box is rarely a whole number of device pixels (its height comes from an aspect ratio,
+    // its place from the text above it), and a canvas of that fractional box ends up squeezed or stretched
+    // by a pixel against the picture as the browser paints it. Measured in Chromium: across, the picture
+    // keeps its fractional place and a whole width lines up; down, it is painted from the nearest whole
+    // pixel to the nearest whole pixel. The canvas is laid the same way, so the fade can't be seen.
+    // Returns whether anything changed (the picture's place on the page can move by a fraction of a pixel
+    // when text above it reflows, without its size changing).
+    let laid = "";
     const snap = () => {
       const box = art.getBoundingClientRect();
       const ratio = window.devicePixelRatio || 1;
-      canvas.style.width = `${Math.round(box.width * ratio) / ratio}px`;
-      canvas.style.height = `${Math.round(box.height * ratio) / ratio}px`;
+      const edge = (v: number) => Math.round(v * ratio) / ratio;
+      const now = `${edge(box.width)}/${(edge(box.top) - box.top).toFixed(3)}/${edge(box.bottom) - edge(box.top)}`;
+      if (now === laid) return false;
+      laid = now;
+      canvas.style.width = `${edge(box.width)}px`;
+      canvas.style.top = `${edge(box.top) - box.top}px`;
+      canvas.style.height = `${edge(box.bottom) - edge(box.top)}px`;
+      return true;
+    };
+    let checking = 0;
+    const recheck = () => {
+      if (checking || !onScreen) return;
+      checking = requestAnimationFrame(() => {
+        checking = 0;
+        if (snap()) engine?.resize();
+      });
     };
 
     const fail = () => {
@@ -79,6 +114,8 @@ function MotionCanvas({ slot }: { slot: MotionSlot }) {
       canvas.removeAttribute("data-on");
       engine?.dispose();
       engine = null;
+      fgCanvas?.remove();
+      fgCanvas = null;
     };
 
     const build = async () => {
@@ -109,6 +146,7 @@ function MotionCanvas({ slot }: { slot: MotionSlot }) {
       swapping = true;
       run();
       canvas.removeAttribute("data-on");
+      engine.rest();
       timer = window.setTimeout(build, 320);
     };
 
@@ -118,7 +156,7 @@ function MotionCanvas({ slot }: { slot: MotionSlot }) {
       try {
         const { SceneMotion: Motion } = await import("./scene-motion-engine");
         if (dead) return;
-        engine = new Motion(canvas, img, slot);
+        engine = new Motion(canvas, img, slot, fgCanvas && fgImg ? { canvas: fgCanvas, img: fgImg } : undefined);
       } catch {
         fail();
         return;
@@ -150,6 +188,7 @@ function MotionCanvas({ slot }: { slot: MotionSlot }) {
     );
     const visible = new IntersectionObserver(([entry]) => {
       onScreen = entry.isIntersecting;
+      recheck();
       run();
     });
     nearby.observe(canvas);
@@ -167,10 +206,12 @@ function MotionCanvas({ slot }: { slot: MotionSlot }) {
     };
     canvas.addEventListener("webglcontextlost", lost);
     document.addEventListener("visibilitychange", run);
+    window.addEventListener("scroll", recheck, { passive: true });
     dark.addEventListener("change", swap);
     lite.addEventListener("change", swap);
     narrow.addEventListener("change", swap);
     img.addEventListener("load", swap); // the <picture> switched files
+    fgImg?.addEventListener("load", swap);
 
     return () => {
       dead = true;
@@ -182,14 +223,18 @@ function MotionCanvas({ slot }: { slot: MotionSlot }) {
       resized.disconnect();
       canvas.removeEventListener("webglcontextlost", lost);
       document.removeEventListener("visibilitychange", run);
+      window.removeEventListener("scroll", recheck);
+      cancelAnimationFrame(checking);
       dark.removeEventListener("change", swap);
       lite.removeEventListener("change", swap);
       narrow.removeEventListener("change", swap);
       img.removeEventListener("load", swap);
+      fgImg?.removeEventListener("load", swap);
       engine?.dispose();
       engine = null;
+      fgCanvas?.remove();
     };
-  }, [slot]);
+  }, [slot, fg]);
 
   return <canvas ref={ref} className="mk-scene-motion" aria-hidden="true" />;
 }

@@ -15,6 +15,9 @@ Sources: art/web/screens/{light,dark}/{id}.png (or .webp). Add a screen by copyi
 (`gh run download <run> -n snapreel-ci`, files under screenshots/ and dark/screenshots/) into those folders
 and adding an entry to SCREENS.
 
+Every screen is fitted to the site's iPhone 16 Pro frame first (scripts/web_island.py): the CI simulator is a
+notch-era iPhone, so content and sheets move 12 pt down to clear the Dynamic Island.
+
 The flow-* stills are frames of the recorded app flows (scripts/web-flows.py writes them into
 art/web/screens/); the page plays the flow's video over its still.
 
@@ -32,6 +35,8 @@ from pathlib import Path
 
 import numpy as np
 from PIL import Image
+
+from web_island import fit_image
 
 ROOT = Path(__file__).resolve().parent.parent
 SRC = ROOT / "art/web/screens"
@@ -127,6 +132,8 @@ def main() -> None:
             if img.size != SCREEN:
                 raise SystemExit(f"{spec['id']} ({mode}) is {img.size}, expected {SCREEN}")
             bgs[mode] = hexcol(img.getpixel((SCREEN[0] // 2, 6)))
+            # Content and sheets start 12 pt lower, below the 16 Pro frame's Dynamic Island (web_island.py).
+            img = fit_image(img)
             if not args.slugs or slug in args.slugs:
                 save(img, slug, mode)
                 if args.preview:

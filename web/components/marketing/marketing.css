@@ -33,6 +33,11 @@
       0 24px 48px -16px rgb(22 38 72 / 0.11), 0 56px 96px -32px rgb(22 38 72 / 0.15);
     --mk-shadow-panel:
       0 1px 2px rgb(15 23 42 / 0.06), 0 12px 28px -12px rgb(15 23 42 / 0.18), 0 40px 80px -32px rgb(15 23 42 / 0.24);
+    /* A card link under the pointer: lifted a little, so a tighter, slightly darker shadow than md, with the
+       same five layers so it changes smoothly (a wide, faint layer under a big card reads as a smudge). */
+    --mk-shadow-hover:
+      0 0 0 1px rgb(15 23 42 / 0.05), 0 1px 2px rgb(15 23 42 / 0.05), 0 6px 12px -6px rgb(22 38 72 / 0.1),
+      0 14px 24px -12px rgb(22 38 72 / 0.12), 0 24px 40px -24px rgb(22 38 72 / 0.12);
     /* The iPhone's shadow, in its own width (cqw), so it scales with the phone. */
     --mk-phone-shadow:
       0 0.3cqw 0.6cqw rgb(15 23 42 / 0.1), 0 2cqw 4cqw -1cqw rgb(15 23 42 / 0.1),
@@ -70,6 +75,9 @@
         0 12px 28px -10px rgb(4 6 20 / 0.45), 0 40px 80px -28px rgb(4 6 20 / 0.6);
       --mk-shadow-panel:
         0 0 0 1px rgb(255 255 255 / 0.07), 0 12px 28px -12px rgb(0 0 0 / 0.5), 0 40px 80px -32px rgb(0 0 0 / 0.6);
+      --mk-shadow-hover:
+        0 0 0 1px rgb(255 255 255 / 0.1), inset 0 1px 0 rgb(255 255 255 / 0.05), 0 2px 4px rgb(0 0 0 / 0.3),
+        0 10px 20px -10px rgb(0 0 0 / 0.5), 0 22px 40px -20px rgb(4 6 20 / 0.55);
       --mk-phone-shadow:
         0 0 0 0.25cqw rgb(255 255 255 / 0.05), 0 0.4cqw 0.8cqw rgb(0 0 0 / 0.3), 0 3cqw 6cqw -1cqw rgb(0 0 0 / 0.3),
         0 10cqw 20cqw -5cqw rgb(4 6 20 / 0.42), 0 28cqw 52cqw -14cqw rgb(4 6 20 / 0.5);
@@ -235,8 +243,8 @@
   }
   @media (hover: hover) {
     .mk-lift:hover {
-      transform: translateY(-2px);
-      box-shadow: var(--mk-shadow-lg);
+      transform: translateY(-3px);
+      box-shadow: var(--mk-shadow-hover);
     }
   }
 
@@ -600,6 +608,15 @@
   .mk-scene-motion[data-on] {
     opacity: 1;
   }
+  /* The foreground cut-out's own canvas (the hero's flower bed, in front of the phone): placed over the
+     bed's box by the engine. It takes the cut-out picture's place in one go, with no fade, or the phone
+     would show through the flowers for a moment. */
+  .mk-scene-motion--fg {
+    transition: none;
+  }
+  .mk-scene-fg[data-live] > picture {
+    visibility: hidden;
+  }
   .mk-scene-phone {
     position: absolute;
     z-index: 1;
@@ -703,27 +720,252 @@
       pointer-events: none;
     }
   }
-  /* ---------------------------------------------------------------- Share links: the phone and its cards
+  /* ---------------------------------------------------------------- Home sections
 
-     Wide screens: the iPhone stands in the middle of the meadow and the four cards sit around it,
-     overlapping its edges, as one composition. Phones: the iPhone, then the cards in a grid. */
-  .mk-share-comp {
-    position: relative;
-    z-index: 3;
+     Copy link: pieces of the phone's screen lifted out beside it (share-callouts.tsx). The layer covers the
+     phone's own box, so --y (the card's middle and its target) is a % of the phone's height and --tx a % of its
+     width; a thin line runs from the card's edge to a dot on the target. Wide screens only. */
+  .mk-callouts {
+    display: none;
   }
   @media (min-width: 1024px) {
-    .mk-share-comp {
+    .mk-callouts {
+      --gap: clamp(36px, 4.2cqw, 64px);
+      display: block;
       position: absolute;
       inset: 0;
+      container-type: size;
       pointer-events: none;
     }
-    .mk-share-comp > * {
-      pointer-events: auto;
-    }
-    .mk-share-card {
+    .mk-callout {
       position: absolute;
-      width: 300px;
+      top: calc(var(--y) * 1%);
+      width: var(--w);
+      translate: 0 -50%;
     }
+    .mk-callout--l {
+      right: calc(100% + var(--gap));
+    }
+    .mk-callout--r {
+      left: calc(100% + var(--gap));
+    }
+    .mk-callout-card {
+      position: relative;
+      border-radius: var(--mk-r-l);
+      background: var(--sr-surface);
+      padding: 12px 14px;
+      color: var(--sr-text);
+      box-shadow: var(--mk-shadow-lg);
+    }
+    .mk-callout-line {
+      position: absolute;
+      top: 50%;
+      height: 1.5px;
+      border-radius: 1px;
+      background: rgb(255 255 255 / 0.92);
+      box-shadow: 0 0 0 0.5px rgb(15 23 42 / 0.16), 0 1px 3px rgb(15 23 42 / 0.18);
+    }
+    .mk-callout--l .mk-callout-line {
+      left: 100%;
+      width: calc(var(--gap) + var(--tx) * 1cqw);
+      transform-origin: left;
+    }
+    .mk-callout--r .mk-callout-line {
+      right: 100%;
+      width: calc(var(--gap) + (100 - var(--tx)) * 1cqw);
+      transform-origin: right;
+    }
+    /* The dot on the target. */
+    .mk-callout-line::after {
+      content: "";
+      position: absolute;
+      top: 50%;
+      width: 11px;
+      height: 11px;
+      margin-top: -5.5px;
+      border-radius: 50%;
+      background: var(--sr-red);
+      box-shadow: 0 0 0 2.5px #fff, 0 1px 4px 2px rgb(15 23 42 / 0.25);
+    }
+    .mk-callout--l .mk-callout-line::after {
+      right: -5.5px;
+    }
+    .mk-callout--r .mk-callout-line::after {
+      left: -5.5px;
+    }
+    /* In: the card slides out from the phone, then its line draws to the target. */
+    .mk-callouts[data-anim] .mk-callout {
+      opacity: 0;
+      transition:
+        opacity 0.5s ease var(--d),
+        transform 0.7s cubic-bezier(0.2, 0.8, 0.2, 1) var(--d);
+    }
+    .mk-callouts[data-anim] .mk-callout--l {
+      transform: translateX(28px) scale(0.96);
+    }
+    .mk-callouts[data-anim] .mk-callout--r {
+      transform: translateX(-28px) scale(0.96);
+    }
+    .mk-callouts[data-anim] .mk-callout-line {
+      scale: 0 1;
+      transition: scale 0.55s cubic-bezier(0.3, 0.7, 0.2, 1) calc(var(--d) + 0.35s);
+    }
+    .mk-callouts[data-in] .mk-callout {
+      opacity: 1;
+      transform: none;
+    }
+    .mk-callouts[data-in] .mk-callout-line {
+      scale: 1 1;
+    }
+  }
+
+  /* Three ways to record: three whole iPhones standing on the terrace, each with a small tag above it. The
+     row is the scene's "phone" (--pw wide), standing on the deck. */
+  .mk-ways-row ul {
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    gap: 7%;
+  }
+  .mk-way {
+    display: flex;
+    width: 28.5%;
+    flex-direction: column;
+    align-items: center;
+  }
+  .mk-way--main {
+    width: 31%;
+  }
+  .mk-way-tag {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: clamp(8px, 1.6cqw, 18px);
+    border-radius: 999px;
+    background: var(--sr-surface);
+    padding: 0.3rem 0.75rem 0.3rem 0.3rem;
+    color: var(--sr-text);
+    font-size: 0.8125rem;
+    font-weight: 600;
+    white-space: nowrap;
+    box-shadow: var(--mk-shadow-lg);
+  }
+  .mk-way-tag .mk-icon {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+  }
+  @media (min-width: 1024px) {
+    .mk-way-tag {
+      flex-direction: column;
+      gap: 0.35rem;
+      border-radius: var(--mk-r-l);
+      padding: 0.75rem 0.9rem;
+      text-align: center;
+      white-space: normal;
+      font-size: 0.9375rem;
+    }
+    .mk-way-tag .mk-icon {
+      width: 34px;
+      height: 34px;
+      border-radius: var(--mk-r-m);
+    }
+    .mk-way-tag small {
+      display: block;
+      max-width: 15em;
+      color: var(--sr-text-2);
+      font-size: 0.8125rem;
+      font-weight: 400;
+      line-height: 1.35;
+    }
+  }
+  @media (max-width: 1023px) {
+    .mk-way-tag small {
+      display: none;
+    }
+  }
+  .mk-ways-row[data-anim] .mk-way {
+    opacity: 0;
+    transform: translateY(24px);
+    transition:
+      opacity 0.6s ease var(--d),
+      transform 0.8s cubic-bezier(0.2, 0.8, 0.2, 1) var(--d);
+  }
+  .mk-ways-row[data-in] .mk-way {
+    opacity: 1;
+    transform: none;
+  }
+
+  /* Your phone. Your files: a dark panel with the Library on an iPhone and pieces of the app lifted out of its
+     screen around it, some in front and some behind. Pieces are placed in % of the phone's box (--x: left
+     edge, --y: middle, --w: width), so the composition scales as one. */
+  .mk-private {
+    position: relative;
+    isolation: isolate;
+    overflow: hidden;
+    border-radius: var(--mk-r-xl);
+    background:
+      radial-gradient(60% 55% at 72% 58%, rgb(226 35 61 / 0.32), transparent 70%),
+      radial-gradient(40% 40% at 12% 8%, rgb(255 255 255 / 0.06), transparent 70%),
+      var(--mk-panel);
+    color: #fff;
+    box-shadow:
+      inset 0 0 0 1px var(--mk-panel-line),
+      var(--mk-shadow-panel);
+  }
+  .mk-private-stage {
+    position: relative;
+    width: min(50%, 290px);
+    margin-inline: auto;
+  }
+  @media (min-width: 1024px) {
+    .mk-private-stage {
+      width: min(44%, 290px);
+    }
+  }
+  .mk-lift-piece {
+    position: absolute;
+    z-index: 3;
+    left: calc(var(--x) * 1%);
+    top: calc(var(--y) * 1%);
+    width: calc(var(--w) * 1%);
+    translate: 0 -50%;
+    filter: drop-shadow(0 2px 3px rgb(0 0 0 / 0.18)) drop-shadow(0 18px 28px rgb(0 0 0 / 0.38));
+  }
+  .mk-lift-piece img {
+    display: block;
+    width: 100%;
+    height: auto;
+  }
+  .mk-lift-piece--behind {
+    z-index: 0;
+    opacity: 0.55;
+    filter: blur(0.6px) drop-shadow(0 18px 28px rgb(0 0 0 / 0.35));
+  }
+  @media (prefers-color-scheme: dark) {
+    /* Dark pieces on the dark panel: a faint light edge, as a lit card has. */
+    .mk-lift-piece:not(.mk-lift-piece--behind) {
+      filter: drop-shadow(0 0 0.6px rgb(255 255 255 / 0.55)) drop-shadow(0 2px 3px rgb(0 0 0 / 0.3))
+        drop-shadow(0 18px 28px rgb(0 0 0 / 0.5));
+    }
+  }
+  .mk-private-stage .mk-iphone {
+    position: relative;
+    z-index: 1;
+  }
+  .mk-lifts[data-anim] .mk-lift-piece {
+    opacity: 0;
+    transform: translateX(calc(var(--from, 0) * 1%)) scale(0.92);
+    transition:
+      opacity 0.6s ease var(--d),
+      transform 0.9s cubic-bezier(0.2, 0.8, 0.2, 1) var(--d);
+  }
+  .mk-lifts[data-in] .mk-lift-piece {
+    opacity: 1;
+    transform: none;
+  }
+  .mk-lifts[data-in] .mk-lift-piece--behind {
+    opacity: 0.55;
   }
 
   /* ---------------------------------------------------------------- The dark panel */

@@ -120,7 +120,7 @@ export function SceneStage({
     <div className="mk-scene-stage">
       <div className="mk-scene-art">
         <ScenePicture crops={{ wide: e.wide, mobile: e.mobile }} alt={alt ?? e.alt} sizes={sizes} priority={priority} />
-        {slot in motion ? <SceneMotion slot={slot as keyof typeof motion} /> : null}
+        {slot in motion ? <SceneMotion slot={slot as keyof typeof motion} fg={!!motion[slot as keyof typeof motion].fg} /> : null}
       </div>
       {children ? <div className="mk-scene-phone">{children}</div> : null}
       {e.fg ? (

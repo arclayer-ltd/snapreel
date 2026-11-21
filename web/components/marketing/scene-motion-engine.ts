@@ -3,9 +3,17 @@
    own bundle.
 
    The picture itself is the base texture. Where something that moves was painted into it (clouds, the two
-   birds, the kite, butterflies), a clean plate shows instead and the element is drawn again as a sprite
-   cut from the same art, so the first frame equals the still picture. Everything starts at rest and eases
-   in. Data comes from scripts/web-motion.py (motion-manifest.ts and /marketing/motion/*).
+   birds, the kite, the balloon, butterflies), a clean plate shows instead and the element is drawn again
+   as a sprite cut from the same art, so the first frame equals the still picture. Everything starts at
+   rest and eases in. Data comes from scripts/web-motion.py (motion-manifest.ts and /marketing/motion/*).
+
+   Trees and flowers are pieces: each tree crown (with its branches) turns as one rigid piece about a
+   point low on its trunk, each flower bends from the soil. The pieces' angles are worked out here, a gust
+   reaching one after the other, and the picture is drawn turned back by them. On top, leaves flutter in
+   small patches along the crowns' edges only.
+
+   A scene's foreground cut-out (the hero's flower bed, in front of the phone) gets a second, transparent
+   canvas over it, drawn with the same pieces in the same frame, so the two layers always agree.
 
    World units are pixels of the scene's source picture, x right and y down. */
 import {
@@ -13,15 +21,20 @@ import {
   BufferAttribute,
   BufferGeometry,
   CanvasTexture,
+  DataTexture,
   DoubleSide,
   DynamicDrawUsage,
+  FloatType,
   Group,
   LinearFilter,
   LinearMipmapLinearFilter,
   LinearSRGBColorSpace,
   Mesh,
+  NearestFilter,
+  NoBlending,
   NoColorSpace,
   OrthographicCamera,
+  RGBAFormat,
   Scene,
   ShaderMaterial,
   Texture,
@@ -42,7 +55,7 @@ type ThemeData = {
   readonly plate: string;
   readonly atlas: string;
   readonly atlasSize: Pt;
-  readonly clouds: readonly (Sprite & { readonly pin: number })[];
+  readonly clouds: readonly Sprite[];
   readonly birds: readonly (Sprite & { readonly ink: readonly number[] })[];
   readonly butterflies: readonly (Sprite & { readonly axis: readonly number[]; readonly perches: readonly Pt[] })[];
   readonly kite?: {
@@ -53,14 +66,23 @@ type ThemeData = {
     readonly body: Sprite;
     readonly tail: Sprite;
   };
+  readonly balloon?: Sprite;
   readonly lamps?: readonly { readonly at: Pt; readonly r: number; readonly pool?: Box }[];
+  /** String lights: x, y, radius, the piece the bulb hangs in (0: none) and how much of its sway it takes. */
+  readonly bulbs?: readonly (readonly number[])[];
   readonly stars?: readonly (readonly number[])[];
   readonly fireflies?: readonly Box[];
 };
 type SceneData = {
   readonly size: Pt;
   readonly mobile: Box | null;
-  readonly maxShift: number;
+  /** The foreground cut-out's box (fractions of the picture), drawn in front of the phone. */
+  readonly fg: Box | null;
+  readonly seg: string;
+  /** The swaying pieces: pivot x, y, angle in a full gust (1/10000 rad), stem length (0: rigid), pace (1/100 Hz). */
+  readonly segs: readonly (readonly number[])[];
+  /** Top and bottom (fractions) of the heights travelling clouds keep to. */
+  readonly cloudBand: Pt;
   readonly lanes: readonly Lane[];
   readonly lanesMobile: readonly Lane[];
   readonly birdExit: Pt;
@@ -78,6 +100,8 @@ export type MotionOptions = {
   /** Phones and touch screens: fewer things, 30 frames a second. */
   lite: boolean;
 };
+/** The canvas over a scene's foreground cut-out, and the cut-out's own picture. */
+export type MotionFront = { canvas: HTMLCanvasElement; img: HTMLImageElement };
 
 const TAU = Math.PI * 2;
 const rand = (a: number, b: number) => a + Math.random() * (b - a);
@@ -101,32 +125,63 @@ const VERTEX = /* glsl */ `
   }
 `;
 
-/* Wind: how far the picture is pulled at a point (in fractions of the picture), given the point's sway
-   weight. Gusts travel left to right (wide slow swells with shorter ones riding on them), so neighbouring
-   trees move one after the other; a crown leans with the gust, rocks on its own rhythm and its leaves
-   flutter in small patches. The periods don't divide into each other, so it never visibly repeats. */
+/* Wind: where the picture at a point comes from (in fractions of the picture). uSeg says which piece
+   the point belongs to (and its neighbour, so two crowns that touch blend instead of tearing); uPieces
+   holds each piece's pivot, its angle right now and its stem length. A rigid piece is simply turned back
+   about its pivot: no waves run through a crown. A stem bends more the higher up it is. Leaf flutter is a
+   small, quick shake in leaf-clump-sized patches, only where uSeg marks a crown's edge, stronger in a gust. */
 const WIND = /* glsl */ `
   uniform sampler2D uMask;
+  uniform sampler2D uSeg;
+  uniform sampler2D uPieces;
   uniform vec2 uSize;
   uniform float uTime;
   uniform float uIntro;
-  uniform float uShift;
+  uniform float uPieceStep;
+  uniform float uFlutter;
   uniform vec3 uSeed;
-  vec2 windAt(vec2 p, float weight) {
-    if (weight <= 0.0) return vec2(0.0);
+  vec2 pieceMove(float id, vec2 px) {
+    vec4 piece = texture2D(uPieces, vec2((id * 255.0 + 0.5) * uPieceStep, 0.5));
+    vec2 r = px - piece.xy;
+    float a = piece.z;
+    if (piece.w > 0.0) a *= pow(clamp(-r.y / piece.w, 0.0, 1.25), 1.3);
+    float c = cos(a);
+    float s = sin(a);
+    return vec2(c * r.x + s * r.y, c * r.y - s * r.x) - r;
+  }
+  float gustAt(float x) {
     float t = uTime;
-    float gust = 0.5
-      + 0.30 * sin(6.2832 * (p.x * 0.85 - t * 0.067) + uSeed.x)
-      + 0.17 * sin(6.2832 * (p.x * 2.10 - t * 0.109) + uSeed.y)
-      + 0.11 * sin(6.2832 * (p.x * 0.31 - t * 0.0271) + uSeed.z);
-    gust = clamp(gust, 0.0, 1.0);
+    return clamp(0.5
+      + 0.30 * sin(6.2832 * (x * 0.85 - t * 0.067) + uSeed.x)
+      + 0.17 * sin(6.2832 * (x * 2.10 - t * 0.109) + uSeed.y)
+      + 0.11 * sin(6.2832 * (x * 0.31 - t * 0.0271) + uSeed.z), 0.0, 1.0);
+  }
+  vec2 leafCell(vec2 cell) {
+    float h = fract(sin(dot(cell, vec2(127.1, 311.7)) + uSeed.x) * 43758.5453);
+    float k = fract(h * 57.31 + 0.37);
+    float pace = 5.0 + 5.5 * h;
+    float burst = 0.55 + 0.45 * sin(uTime * (0.5 + k) + h * 40.0);
+    return vec2(sin(uTime * pace + k * 6.2832), 0.7 * sin(uTime * pace * 1.27 + h * 6.2832)) * burst;
+  }
+  vec2 leafMove(vec2 px) {
+    vec2 g = px / 64.0;
+    vec2 i = floor(g);
+    vec2 f = fract(g);
+    f = f * f * (3.0 - 2.0 * f);
+    return mix(mix(leafCell(i), leafCell(i + vec2(1.0, 0.0)), f.x), mix(leafCell(i + vec2(0.0, 1.0)), leafCell(i + vec2(1.0, 1.0)), f.x), f.y);
+  }
+  vec2 windAt(vec2 p) {
+    float weight = texture2D(uMask, p).r;
+    if (weight <= 0.0) return vec2(0.0);
+    vec4 seg = texture2D(uSeg, p);
     vec2 px = p * uSize;
-    float rock = 0.6 * sin(6.2832 * (t * 0.21 - p.x * 1.9) + px.y * 0.004 + uSeed.y)
-               + 0.4 * sin(6.2832 * (t * 0.34 - p.x * 3.1) - px.y * 0.007 + uSeed.z);
-    float flutter = sin(px.x * 0.021 + px.y * 0.013 + t * 4.3 + uSeed.x) * sin(px.y * 0.019 - px.x * 0.011 - t * 3.1 + uSeed.y);
-    float dx = (gust - 0.4) * 0.55 + rock * (0.12 + 0.28 * gust) + flutter * (0.05 + 0.13 * gust);
-    float dy = (gust - 0.4) * 0.08 + rock * 0.10 + flutter * (0.04 + 0.10 * gust);
-    return vec2(dx, dy) * (weight * uShift * uIntro) / uSize;
+    float packed = floor(seg.b * 255.0 + 0.5);
+    float share = floor(packed / 16.0) / 30.0;
+    float edge = mod(packed, 16.0) / 15.0;
+    vec2 move = pieceMove(seg.r, px);
+    if (share > 0.0) move = mix(move, pieceMove(seg.g, px), share);
+    if (edge > 0.0) move += leafMove(px + move) * (uFlutter * edge * (0.4 + 0.6 * gustAt(p.x)));
+    return move * weight / uSize;
   }
 `;
 
@@ -141,23 +196,46 @@ const BASE_FRAGMENT = /* glsl */ `
   varying vec2 vSrc;
   void main() {
     vec4 here = texture2D(uMask, vSrc);
-    vec2 at = vSrc + windAt(vSrc, here.r);
+    vec2 at = vSrc + windAt(vSrc);
     float glint = 0.0;
+    float shade = 0.0;
     if (uWater > 0.0 && here.g > 0.0) {
-      // The pond: the reflection wobbles in thin horizontal ripples, with glints running along them.
+      // The pond: ripples wobble the reflections sideways, the surface shimmers, and glints run along
+      // the ripples in short dashes.
       vec2 px = vSrc * uSize;
       float t = uTime;
-      float a = sin(px.y * 0.55 + t * 1.6 + 2.0 * sin(px.x * 0.02 + t * 0.5));
-      float b = sin(px.y * 0.23 - t * 1.1 + px.x * 0.011);
-      at += vec2(a * 1.6 + b * 2.4, b * 0.5) * (here.g * uIntro) / uSize;
-      float line = pow(max(0.0, sin(px.y * 0.8 + t * 1.3 + 3.0 * sin(px.x * 0.035 - t * 0.4))), 14.0);
-      glint = line * (0.5 + 0.5 * sin(px.x * 0.05 + t * 0.7 + uSeed.x)) * here.g * uIntro;
+      float k = here.g * uIntro;
+      float a = sin(px.y * 0.40 + t * 2.1 + 1.8 * sin(px.x * 0.016 + t * 0.55));
+      float b = sin(px.y * 0.19 - t * 1.35 + px.x * 0.011);
+      float c = sin(px.x * 0.035 + px.y * 0.05 + t * 0.9);
+      at += vec2(a * 3.4 + b * 4.6, a * 0.9 + c * 0.8) * k / uSize;
+      shade = (0.055 * b + 0.04 * a) * k;
+      float line = pow(max(0.0, sin(px.y * 0.33 + t * 1.7 + 2.6 * sin(px.x * 0.028 - t * 0.45))), 9.0);
+      float dash = smoothstep(0.35, 0.8, 0.5 + 0.5 * sin(px.x * 0.043 - t * 1.1 + 3.0 * sin(px.y * 0.07) + uSeed.x));
+      glint = line * dash * k;
     }
+    // A crown that leans in from beyond the picture's edge brings leaves with it, not a smear.
+    at = abs(at);
+    at = 1.0 - abs(1.0 - at);
     vec4 there = texture2D(uMask, at);
     vec3 base = texture2D(uBase, (at - uCrop.xy) / uCrop.zw).rgb;
     vec3 plate = texture2D(uPlate, at).rgb;
     vec3 colour = mix(base, plate, smoothstep(0.6, 0.9, there.b));
-    gl_FragColor = vec4(colour + uGlint * glint, 1.0);
+    gl_FragColor = vec4(colour * (1.0 + shade) + uGlint * glint, 1.0);
+  }
+`;
+
+/* The foreground cut-out (transparent around its flowers), moved by the same wind. Its colours are
+   already multiplied by its alpha, as the page's compositor wants them. */
+const FRONT_FRAGMENT = /* glsl */ `
+  precision highp float;
+  ${WIND}
+  uniform sampler2D uBase;
+  uniform vec4 uCrop;
+  varying vec2 vSrc;
+  void main() {
+    vec2 at = vSrc + windAt(vSrc);
+    gl_FragColor = texture2D(uBase, (at - uCrop.xy) / uCrop.zw);
   }
 `;
 
@@ -176,8 +254,7 @@ const SPRITE_FRAGMENT = /* glsl */ `
     vec4 c = texture2D(uMap, mix(uRect.xy, uRect.zw, vUv));
     float open = 1.0;
     if (uBehind > 0.0) {
-      vec2 at = vSrc + windAt(vSrc, texture2D(uMask, vSrc).r);
-      open = smoothstep(0.1, 0.4, texture2D(uMask, at).b);
+      open = smoothstep(0.1, 0.4, texture2D(uMask, vSrc + windAt(vSrc)).b);
     }
     gl_FragColor = vec4(c.rgb * uTint, c.a * uOpacity * open);
   }
@@ -384,7 +461,10 @@ export class SceneMotion {
   private disposables: { dispose(): void }[] = [];
   private bitmaps: ImageBitmap[] = [];
   private abort = new AbortController();
-  private shared: Record<"uMask" | "uSize" | "uTime" | "uIntro" | "uShift" | "uSeed", IUniform>;
+  private shared: Record<"uMask" | "uSeg" | "uPieces" | "uPieceStep" | "uFlutter" | "uSize" | "uTime" | "uIntro" | "uSeed", IUniform>;
+  /** x, y, angle now, stem length of every piece (row 0: no piece), as the shaders read them. */
+  private pieces = new Float32Array(4);
+  private front: { canvas: HTMLCanvasElement; img: HTMLImageElement; renderer: WebGLRenderer; scene: Scene; camera: OrthographicCamera; ready: boolean; inView: boolean } | null = null;
   private pxScale = { value: 1 }; // screen pixels per source pixel
   private options: MotionOptions = { theme: "light", narrow: false, lite: false };
   private view: Box = [0, 0, 1, 1]; // the part of the source on screen
@@ -400,6 +480,7 @@ export class SceneMotion {
     private canvas: HTMLCanvasElement,
     private img: HTMLImageElement,
     slot: MotionSlot,
+    front?: MotionFront,
   ) {
     this.data = motion[slot] as unknown as SceneData;
     this.renderer = new WebGLRenderer({ canvas, antialias: false, alpha: false, depth: false, stencil: false, powerPreference: "low-power" });
@@ -407,12 +488,26 @@ export class SceneMotion {
     this.renderer.setPixelRatio(1);
     this.shared = {
       uMask: { value: null },
+      uSeg: { value: null },
+      uPieces: { value: null },
+      uPieceStep: { value: 1 },
+      uFlutter: { value: 0 },
       uSize: { value: new Vector2(this.data.size[0], this.data.size[1]) },
       uTime: { value: 0 },
       uIntro: { value: 0 },
-      uShift: { value: this.data.maxShift },
       uSeed: { value: new Vector3(rand(0, TAU), rand(0, TAU), rand(0, TAU)) },
     };
+    if (front && this.data.fg) {
+      try {
+        const renderer = new WebGLRenderer({ canvas: front.canvas, antialias: false, alpha: true, premultipliedAlpha: true, depth: false, stencil: false, powerPreference: "low-power" });
+        renderer.outputColorSpace = LinearSRGBColorSpace;
+        renderer.setPixelRatio(1);
+        renderer.setClearColor(0x000000, 0);
+        this.front = { ...front, renderer, scene: new Scene(), camera: new OrthographicCamera(0, 1, 0, 1, -1, 1), ready: false, inView: false };
+      } catch {
+        this.front = null; // the bed then stays the still picture, and the layer under it keeps it still too
+      }
+    }
   }
 
   /** Build the scene for a theme and crop. Resolves once its first frame (the still picture) is drawn. */
@@ -421,28 +516,39 @@ export class SceneMotion {
     this.options = options;
     const signal = this.abort.signal;
     const theme = this.data[options.theme];
-    await pictureReady(this.img, options.theme, options.narrow && !!this.data.mobile, signal);
-    const [base, mask, plate, atlas] = await Promise.all([
+    const narrow = options.narrow && !!this.data.mobile;
+    const front = this.front;
+    await Promise.all([pictureReady(this.img, options.theme, narrow, signal), front ? pictureReady(front.img, options.theme, narrow, signal) : null]);
+    const [base, mask, seg, plate, atlas, cutout] = await Promise.all([
       createImageBitmap(this.img),
       loadBitmap(theme.mask, signal),
+      loadBitmap(this.data.seg, signal),
       loadBitmap(theme.plate, signal),
       loadBitmap(theme.atlas, signal),
+      front ? createImageBitmap(front.img, { premultiplyAlpha: "premultiply" }) : null,
     ]);
-    this.bitmaps.push(base, mask, plate, atlas);
+    this.bitmaps.push(base, mask, seg, plate, atlas);
+    if (cutout) this.bitmaps.push(cutout);
     if (signal.aborted) throw new Error("aborted");
 
-    const textures = { base: dataTexture(base, false), mask: dataTexture(mask, false), plate: dataTexture(plate, false), atlas: dataTexture(atlas, true) };
+    const textures = { base: dataTexture(base, false), mask: dataTexture(mask, false), seg: dataTexture(seg, false), plate: dataTexture(plate, false), atlas: dataTexture(atlas, true) };
+    textures.seg.minFilter = textures.seg.magFilter = NearestFilter; // piece numbers must not be blended
     this.disposables.push(...Object.values(textures));
     this.shared.uMask.value = textures.mask;
+    this.shared.uSeg.value = textures.seg;
     this.shared.uSeed.value = new Vector3(rand(0, TAU), rand(0, TAU), rand(0, TAU));
     this.time = 0;
 
     this.resize(); // the actors below ask what is in view
+    // Without the foreground's own canvas its flowers must stay still in this layer too.
+    this.addWind(front ? null : this.data.fg);
     this.addBase(textures.base, textures.plate);
+    if (front && cutout) this.addFront(dataTexture(cutout, false));
     const dark = options.theme === "dark";
     this.addClouds(theme, textures.atlas);
     this.addBirds(theme, textures.atlas);
     if (theme.kite) this.addKite(theme.kite, textures.atlas, theme.atlasSize);
+    if (theme.balloon) this.addBalloon(theme.balloon, textures.atlas, theme.atlasSize);
     this.addButterflies(theme, textures.atlas);
     if (dark) this.addLights(theme);
 
@@ -465,8 +571,9 @@ export class SceneMotion {
   }
 
   resize() {
-    const w = this.canvas.clientWidth;
-    const h = this.canvas.clientHeight;
+    const rect = this.canvas.getBoundingClientRect(); // scene-motion.tsx lays it on whole device pixels
+    const w = rect.width;
+    const h = rect.height;
     if (!w || !h) return;
     // Sharp enough for the inked lines, but never more pixels than a mid-range GPU fills comfortably.
     const cap = this.options.lite ? 2 : 1.5;
@@ -499,7 +606,49 @@ export class SceneMotion {
     this.camera.bottom = y0 + ch;
     this.camera.updateProjectionMatrix();
     this.pxScale.value = (w * ratio) / cw;
+    this.placeFront(ratio);
     if (this.loaded && !this.running) this.draw(0);
+  }
+
+  /** Back to the still pictures at once (before a rebuild for another theme or crop). */
+  rest() {
+    const front = this.front;
+    if (!front) return;
+    front.canvas.removeAttribute("data-on");
+    front.canvas.parentElement?.removeAttribute("data-live");
+  }
+
+  /** Lay the foreground's canvas over its box of the picture, on whole device pixels, and aim its camera
+      at exactly that part of the source. */
+  private placeFront(ratio: number) {
+    const front = this.front;
+    const box = this.data.fg;
+    if (!front || !box) return;
+    const main = this.canvas.getBoundingClientRect(); // shows this.view
+    const host = (front.canvas.parentElement ?? front.canvas).getBoundingClientRect();
+    if (!main.width || !main.height) return;
+    const [vx, vy, vw, vh] = this.view;
+    const [sw, sh] = this.data.size;
+    const dpr = window.devicePixelRatio || 1;
+    const pad = 0.012 * sw; // room for a flower that leans out of the box
+    // Where a source coordinate falls in the main canvas, on a whole device pixel of it.
+    const edge = (source: number, from: number, span: number, size: number) => Math.round(clamp01((source - from) / span) * size * dpr) / dpr;
+    const left = edge(box[0] * sw - pad, vx, vw, main.width);
+    const right = edge(box[2] * sw + pad, vx, vw, main.width);
+    const top = edge(box[1] * sh - pad, vy, vh, main.height);
+    const bottom = edge(box[3] * sh, vy, vh, main.height);
+    front.inView = right - left > 4 && bottom - top > 4;
+    if (!front.inView) {
+      this.rest();
+      return;
+    }
+    Object.assign(front.canvas.style, { left: `${left + main.left - host.left}px`, top: `${top + main.top - host.top}px`, width: `${right - left}px`, height: `${bottom - top}px` });
+    front.renderer.setSize(Math.max(1, Math.round((right - left) * ratio)), Math.max(1, Math.round((bottom - top) * ratio)), false);
+    front.camera.left = vx + (left / main.width) * vw;
+    front.camera.right = vx + (right / main.width) * vw;
+    front.camera.top = vy + (top / main.height) * vh;
+    front.camera.bottom = vy + (bottom / main.height) * vh;
+    front.camera.updateProjectionMatrix();
   }
 
   dispose() {
@@ -509,6 +658,7 @@ export class SceneMotion {
     this.clear();
     this.quad.dispose();
     this.renderer.dispose();
+    this.front?.renderer.dispose();
   }
 
   /* ---------------------------------------------------------------------------------- frame loop */
@@ -533,6 +683,16 @@ export class SceneMotion {
     this.shared.uIntro.value = smooth(t / 3);
     for (const act of this.actors) act(t, dt);
     this.renderer.render(this.scene, this.camera);
+    const front = this.front;
+    if (front?.ready && front.inView) {
+      front.renderer.render(front.scene, front.camera);
+      if (!front.canvas.hasAttribute("data-on")) {
+        // Its first frame equals the cut-out's picture: swap them in one go (a fade would let the phone
+        // show through the flowers for a moment).
+        front.canvas.setAttribute("data-on", "");
+        front.canvas.parentElement?.setAttribute("data-live", "");
+      }
+    }
     if (this.firstFrame) {
       const fn = this.firstFrame;
       this.firstFrame = null;
@@ -545,6 +705,11 @@ export class SceneMotion {
     this.last = 0;
     this.actors = [];
     this.scene.clear();
+    this.rest();
+    if (this.front) {
+      this.front.ready = false;
+      this.front.scene.clear();
+    }
     for (const d of this.disposables) d.dispose();
     for (const b of this.bitmaps) b.close();
     this.disposables = [];
@@ -605,7 +770,7 @@ export class SceneMotion {
       uPlate: { value: plate },
       uCrop: { value: new Vector4(crop[0], crop[1], crop[2], crop[3]) },
       uWater: { value: this.data.water ? 1 : 0 },
-      uGlint: { value: this.options.theme === "dark" ? new Vector3(0.2, 0.13, 0.1) : new Vector3(0.24, 0.26, 0.28) },
+      uGlint: { value: this.options.theme === "dark" ? new Vector3(0.3, 0.2, 0.15) : new Vector3(0.34, 0.36, 0.38) },
     });
     material.transparent = false;
     const mesh = this.mesh(material, 0);
@@ -613,28 +778,124 @@ export class SceneMotion {
     mesh.scale.set(w, h, 1);
   }
 
+  /** The foreground cut-out on its own canvas. */
+  private addFront(cutout: Texture) {
+    const front = this.front;
+    if (!front) return;
+    this.disposables.push(cutout);
+    const [w, h] = this.data.size;
+    const crop = this.crop();
+    const material = this.material(FRONT_FRAGMENT, { uBase: { value: cutout }, uCrop: { value: new Vector4(crop[0], crop[1], crop[2], crop[3]) } });
+    material.transparent = false;
+    material.blending = NoBlending; // straight into the canvas, alpha and all
+    const mesh = this.mesh(material, 0, front.scene);
+    mesh.position.set(w / 2, h / 2, 0);
+    mesh.scale.set(w, h, 1);
+    front.ready = true;
+  }
+
+  /* ---------------------------------------------------------------------------------- wind */
+
+  /** How hard the wind blows at x (0..1 across the picture) at a moment: wide slow swells with shorter
+      ones riding on them, travelling left to right, so a gust reaches one tree after the other. The
+      periods don't divide into each other, so it never visibly repeats. (The same sum as gustAt in WIND.) */
+  private gust(x: number, t: number) {
+    const seed = this.shared.uSeed.value as Vector3;
+    return clamp01(0.5 + 0.3 * Math.sin(TAU * (x * 0.85 - t * 0.067) + seed.x) + 0.17 * Math.sin(TAU * (x * 2.1 - t * 0.109) + seed.y) + 0.11 * Math.sin(TAU * (x * 0.31 - t * 0.0271) + seed.z));
+  }
+
+  /** Every piece's angle, each frame: it leans with the gust and rocks at its own pace (a big tree slowly,
+      a flower quickly), each a little out of step with its neighbours. `still`: a box whose pieces stay put. */
+  private addWind(still: Box | null) {
+    const [w, h] = this.data.size;
+    const segs = this.data.segs;
+    const count = segs.length + 1;
+    const array = (this.pieces = new Float32Array(count * 4));
+    const texture = new DataTexture(array, count, 1, RGBAFormat, FloatType);
+    texture.minFilter = texture.magFilter = NearestFilter;
+    texture.generateMipmaps = false;
+    texture.needsUpdate = true;
+    this.disposables.push(texture);
+    this.shared.uPieces.value = texture;
+    this.shared.uPieceStep.value = 1 / count;
+    const pieces = segs.map(([x, y, amp, stem, pace], i) => {
+      array[(i + 1) * 4] = x;
+      array[(i + 1) * 4 + 1] = y;
+      array[(i + 1) * 4 + 3] = stem;
+      const held = still && x >= still[0] * w && x <= still[2] * w && y - stem >= still[1] * h;
+      return { at: x / w, amp: held ? 0 : amp / 1e4, pace: (pace / 100) * rand(0.87, 1.15), a: rand(0, TAU), b: rand(0, TAU) };
+    });
+    this.actors.push((t) => {
+      const intro = this.shared.uIntro.value as number;
+      this.shared.uFlutter.value = 2.6 * intro;
+      for (let i = 0; i < pieces.length; i++) {
+        const p = pieces[i];
+        const gust = this.gust(p.at, t);
+        const rock = 0.68 * Math.sin(TAU * p.pace * t + p.a) + 0.32 * Math.sin(TAU * p.pace * 1.618 * t + p.b);
+        array[(i + 1) * 4 + 2] = p.amp * intro * (0.5 * (gust - 0.35) + (0.36 + 0.42 * gust) * rock);
+      }
+      texture.needsUpdate = true;
+    });
+  }
+
+  /** Where a point that hangs in a piece (a bulb in a tree) is right now. */
+  private carried(x: number, y: number, piece: number, weight: number, out: Vector2) {
+    const a = this.pieces[piece * 4 + 2] * weight;
+    if (!piece || !a) return out.set(x, y);
+    const px = this.pieces[piece * 4];
+    const py = this.pieces[piece * 4 + 1];
+    const cos = Math.cos(a);
+    const sin = Math.sin(a);
+    return out.set(px + cos * (x - px) - sin * (y - py), py + sin * (x - px) + cos * (y - py));
+  }
+
   /* ---------------------------------------------------------------------------------- clouds */
 
   private addClouds(theme: ThemeData, atlas: Texture) {
-    const w = this.data.size[0];
-    for (const cloud of theme.clouds) {
+    const [w, h] = this.data.size;
+    const [bandTop, bandBottom] = [this.data.cloudBand[0] * h, this.data.cloudBand[1] * h];
+    theme.clouds.forEach((cloud, index) => {
       const { mesh } = this.sprite(cloud, atlas, theme.atlasSize, 1, true);
-      const home = mesh.position.clone();
-      const period = rand(150, 260); // each cloud at its own pace, for a little parallax
-      const reach = w * rand(0.013, 0.022);
-      const dir = cloud.pin || (Math.random() < 0.5 ? -1 : 1);
+      const [, y, cw, ch] = cloud.r;
+      // Every cloud sails with the wind, left to right: the bigger (nearer) ones faster. They start where
+      // they were painted, ease up to speed, and on the way settle into the band of open sky.
+      const lane = (top: number) => Math.min(Math.max(top, bandTop), Math.max(bandTop, bandBottom - ch));
+      const speed = w * (0.0026 + 0.003 * clamp01(cw / (0.2 * w))) * rand(0.9, 1.1);
       const phase = rand(0, TAU);
-      this.actors.push((t) => {
-        // A cloud cut by the picture's edge only leans out towards it and comes back; the others wander
-        // both ways around where they were painted. They stay where they frame the scene.
-        const angle = (TAU * t) / period + 0.25 * Math.sin((TAU * t) / (period * 0.53));
-        const along = cloud.pin ? (1 - Math.cos(angle)) / 2 : Math.sin(angle);
-        const breathe = 1 + 0.012 * drift(t, period * 0.31, phase);
-        mesh.scale.set(cloud.r[2] * breathe, cloud.r[3] * (2 - breathe), 1);
-        mesh.position.x = home.x + dir * reach * along - (cloud.pin * (breathe - 1) * cloud.r[2]) / 2;
-        mesh.position.y = home.y + w * 0.0025 * drift(t, period * 0.53, phase);
+      let left = cloud.r[0];
+      let from = y;
+      let to = lane(y);
+      let gone = 0;
+      this.actors.push((t, dt) => {
+        const step = speed * smooth(t / 4) * dt;
+        left += step;
+        gone += step;
+        const [vx, , vw] = this.view;
+        if (left > vx + vw + 4) {
+          // Out of sight on the right: the same (whole) cloud comes in again from the left, at a new height.
+          left = vx - cw - w * rand(0.01, 0.16) * (1 + index * 0.5);
+          from = to = lane(rand(bandTop, Math.max(bandTop, bandBottom - ch)));
+          gone = w;
+        }
+        const top = from + (to - from) * smooth(gone / (0.1 * w)) + w * 0.0015 * drift(t, 41, phase);
+        mesh.position.set(left + cw / 2, top + ch / 2, 0);
       });
-    }
+    });
+  }
+
+  /* ---------------------------------------------------------------------------------- the balloon */
+
+  private addBalloon(balloon: Sprite, atlas: Texture, atlasSize: Pt) {
+    const w = this.data.size[0];
+    const { mesh } = this.sprite(balloon, atlas, atlasSize, 4, false);
+    const home = mesh.position.clone();
+    const phase = rand(0, TAU);
+    this.actors.push((t) => {
+      // It hangs in the air, wandering slowly around where it was painted, and tilts a little as it goes.
+      const ease = smooth(t / 3);
+      mesh.position.set(home.x + w * 0.034 * drift(t, 127, phase) * ease, home.y + w * 0.011 * drift(t, 71, phase + 2) * ease, 0);
+      mesh.rotation.z = 0.035 * drift(t, 17, phase + 4) * ease;
+    });
   }
 
   /* ---------------------------------------------------------------------------------- birds */
@@ -958,6 +1219,24 @@ export class SceneMotion {
         halo.power.value = 0.15 * level;
         core.power.value = 0.13 * level;
         if (pool) pool.power.value = 0.07 * level * (0.85 + 0.15 * Math.sin(t * 0.6 + phase));
+      });
+    }
+
+    // String lights: each bulb glows and flickers gently on its own, swaying with the branch it hangs in.
+    const at = new Vector2();
+    for (const [x, y, r, piece, weight] of theme.bulbs ?? []) {
+      const halo = this.glow(x, y, r * 4.2, r * 4.2, warm, 6);
+      const core = this.glow(x, y, r * 1.7, r * 1.7, warm, 6);
+      const phase = rand(0, TAU);
+      const pace = rand(0.8, 1.3);
+      this.actors.push((t) => {
+        const flicker = 0.74 + 0.14 * Math.sin(t * 1.7 * pace + phase) + 0.08 * Math.sin(t * 4.3 * pace + phase * 2) + 0.04 * Math.sin(t * 11.3 + phase * 3);
+        const level = flicker * (this.shared.uIntro.value as number);
+        halo.power.value = 0.2 * level;
+        core.power.value = 0.16 * level;
+        this.carried(x, y, piece, weight, at);
+        halo.mesh.position.set(at.x, at.y, 0);
+        core.mesh.position.set(at.x, at.y, 0);
       });
     }
 
