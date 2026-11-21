@@ -584,6 +584,22 @@
     object-fit: cover;
     user-select: none;
   }
+  /* The moving layer (scene-motion.tsx): a canvas exactly over the picture, faded in once its first
+     frame, which equals the picture, is drawn. */
+  .mk-scene-motion {
+    position: absolute;
+    left: 0;
+    top: 0;
+    display: block;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.6s ease;
+  }
+  .mk-scene-motion[data-on] {
+    opacity: 1;
+  }
   .mk-scene-phone {
     position: absolute;
     z-index: 1;

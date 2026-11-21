@@ -3,6 +3,8 @@
    them are drawn by iphone.tsx. */
 import type { CSSProperties, ReactNode } from "react";
 import { art, type ArtSlot } from "./art-manifest";
+import { motion } from "./motion-manifest";
+import { SceneMotion } from "./scene-motion";
 
 type Set = { avif: [number, string][]; webp: [number, string][] };
 type Crop = { width: number; height: number; light: Set; dark?: Set };
@@ -97,7 +99,8 @@ export function sceneVars(slot: SceneSlot, extra: Record<string, string | number
 /**
  * The picture layers of a scene: the environment, an optional phone (or anything else) that
  * stands in it, and the scene's foreground cut-out in front of that. Positioned by the
- * .mk-scene CSS in marketing.css.
+ * .mk-scene CSS in marketing.css. Scenes with motion data (scripts/web-motion.py) get a canvas
+ * over the environment that brings its nature to life (scene-motion.tsx).
  */
 export function SceneStage({
   slot,
@@ -117,6 +120,7 @@ export function SceneStage({
     <div className="mk-scene-stage">
       <div className="mk-scene-art">
         <ScenePicture crops={{ wide: e.wide, mobile: e.mobile }} alt={alt ?? e.alt} sizes={sizes} priority={priority} />
+        {slot in motion ? <SceneMotion slot={slot as keyof typeof motion} /> : null}
       </div>
       {children ? <div className="mk-scene-phone">{children}</div> : null}
       {e.fg ? (
