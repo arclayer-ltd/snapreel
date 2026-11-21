@@ -5,7 +5,10 @@
 # Usage: ci-screenshots.sh <Snapreel.app> <out-dir> [id-prefixes] [light|dark]
 # id-prefixes: space-separated; a screen is shot when its id starts with any of them (empty = all).
 # The simulator's appearance is set to the fourth argument (default light); the app follows it.
+# RECORD=1 records each screen as a video (<id>.mp4, H.264) for its wait time instead of taking a
+# screenshot: the flows the website shows (Debug/DebugFlows.swift).
 set -uo pipefail
+RECORD="${RECORD:-0}"
 
 APP="$1"
 OUT="${2:-screenshots}"
@@ -159,6 +162,17 @@ while IFS="$TAB" read -r ID WAIT TITLE FLAG || [ -n "${ID:-}" ]; do
   fi
   BEFORE=$(crash_count)
   rm -f "$CONTAINER/Documents/debug-ready.txt" "$CONTAINER/Documents/debug-trace.txt"
+  if [ "$RECORD" = "1" ]; then
+    # Recording starts before the launch, so nothing at the start of the flow is missed (the website's
+    # clip starts at the first frame after the launch splash; scripts/web-flows.py finds it).
+    xcrun simctl io "$DEVICE" recordVideo --codec=h264 --force "$OUT/$ID.mp4" > "$OUT/../record-$ID.log" 2>&1 &
+    RECORDER=$!
+    for _ in $(seq 1 100); do
+      grep -q "Recording started" "$OUT/../record-$ID.log" 2>/dev/null && break
+      sleep 0.1
+    done
+    sleep 0.5
+  fi
   xcrun simctl launch "$DEVICE" "$BUNDLE" -screen "$ID" > /dev/null 2>&1
   # Wait (up to 30 s) until the app reports the screen has appeared, then the screen's own
   # delay. A launch that never reports ready gets one more try before it is recorded.
@@ -167,9 +181,16 @@ while IFS="$TAB" read -r ID WAIT TITLE FLAG || [ -n "${ID:-}" ]; do
     xcrun simctl launch "$DEVICE" "$BUNDLE" -screen "$ID" > /dev/null 2>&1
     wait_ready "$ID" || echo "${ID}${TAB}${TITLE}${TAB}not ready after two launches" >> "$OUT/../not-ready.txt"
   fi
-  # Never shoot before the system's launch animation has finished.
-  sleep "$(python3 -c "print(max(1.2, float('$WAIT')))")"
-  xcrun simctl io "$DEVICE" screenshot "$OUT/$ID.png" > /dev/null 2>&1
+  if [ "$RECORD" = "1" ]; then
+    # The flow runs for its wait time; a second more holds its last state.
+    sleep "$(python3 -c "print(float('$WAIT') + 1)")"
+    kill -INT "$RECORDER" 2>/dev/null || true
+    wait "$RECORDER" 2>/dev/null || true
+  else
+    # Never shoot before the system's launch animation has finished.
+    sleep "$(python3 -c "print(max(1.2, float('$WAIT')))")"
+    xcrun simctl io "$DEVICE" screenshot "$OUT/$ID.png" > /dev/null 2>&1
+  fi
   sleep 0.5
   # Values the screen logged for CI (DebugTrace in the app), up to the screenshot.
   if [ -s "$CONTAINER/Documents/debug-trace.txt" ]; then

@@ -2,20 +2,50 @@
    Full-bleed illustrated scenes (Light: a sunny day; Dark: the same place at dusk) carry the
    headlines, with real iPhones standing in them. Everything below them is light, rounded and
    calm: white cards, pastel tiles and small red label pills. Colours come from the shared tokens
-   in app/globals.css (the app's Kit/Tokens.swift); red is the only accent. */
+   in app/globals.css (the app's Kit/Tokens.swift); red is the only accent.
+
+   Two scales keep it consistent: the corner radii are the app's own (Radius in Kit/Tokens.swift,
+   continuous corners where the browser can draw them) and every shadow comes from the layered
+   --mk-shadow-* tokens below. Don't hand-roll either in a component. */
 
 @layer components {
   .mk {
     --mk-gutter: 16px;
-    --mk-radius: 20px;
-    --mk-radius-lg: 28px;
     --mk-max: 1200px;
+
+    /* Corners, after the app's Radius: s 8, m 12, l 16, xl 24. Cards use l (as srCard does), big tiles,
+       panels and sheets use xl, icon squares m, chips s. */
+    --mk-r-s: 8px;
+    --mk-r-m: 12px;
+    --mk-r-l: 16px;
+    --mk-r-xl: 24px;
+
+    /* Shadows: a hairline, then two or three soft layers that grow wider and fainter, so a card lifts off
+       the page without a dark edge under it. sm: chips and quiet buttons; md: cards on the page;
+       lg: cards floating over a scene; panel: the dark panels. */
+    --mk-shadow-sm:
+      0 0 0 1px rgb(15 23 42 / 0.05), 0 1px 2px rgb(15 23 42 / 0.04), 0 2px 6px -2px rgb(15 23 42 / 0.05);
+    --mk-shadow-md:
+      0 0 0 1px rgb(15 23 42 / 0.04), 0 1px 2px rgb(15 23 42 / 0.03), 0 4px 10px -4px rgb(15 23 42 / 0.05),
+      0 16px 32px -12px rgb(15 23 42 / 0.06), 0 32px 64px -24px rgb(15 23 42 / 0.07);
+    --mk-shadow-lg:
+      0 0 0 1px rgb(15 23 42 / 0.03), 0 1px 2px rgb(15 23 42 / 0.04), 0 8px 16px -6px rgb(22 38 72 / 0.07),
+      0 24px 48px -16px rgb(22 38 72 / 0.11), 0 56px 96px -32px rgb(22 38 72 / 0.15);
+    --mk-shadow-panel:
+      0 1px 2px rgb(15 23 42 / 0.06), 0 12px 28px -12px rgb(15 23 42 / 0.18), 0 40px 80px -32px rgb(15 23 42 / 0.24);
+    /* The iPhone's shadow, in its own width (cqw), so it scales with the phone. */
+    --mk-phone-shadow:
+      0 0.3cqw 0.6cqw rgb(15 23 42 / 0.1), 0 2cqw 4cqw -1cqw rgb(15 23 42 / 0.1),
+      0 7cqw 14cqw -4cqw rgb(22 38 72 / 0.14), 0 18cqw 36cqw -10cqw rgb(22 38 72 / 0.2),
+      0 36cqw 64cqw -20cqw rgb(22 38 72 / 0.18);
+    --mk-ground: rgb(28 44 74 / 0.3);
+
     /* Text that sits on an illustrated sky. */
     --mk-sky-ink: #13141b;
     --mk-sky-ink-2: #262a38;
     /* The dark panel (stats bar, Pro card, footer). */
     --mk-panel: #13141b;
-    --mk-panel-line: rgb(255 255 255 / 0.1);
+    --mk-panel-line: rgb(255 255 255 / 0.08);
     /* Pastel tiles, after the reference's soft cards. */
     --mk-blue: #e7f1fc;
     --mk-peach: #fdeee5;
@@ -24,18 +54,30 @@
     --mk-butter: #fdf4da;
     --mk-rose: #fdecee;
     --mk-tile-ink: #13141b;
-    --mk-card-shadow: 0 1px 2px rgb(19 20 27 / 0.04), 0 18px 40px -18px rgb(19 20 27 / 0.22);
-    --mk-float-shadow: 0 2px 4px rgb(19 20 27 / 0.05), 0 24px 48px -16px rgb(24 40 70 / 0.32);
+    --mk-tile-line: rgb(15 23 42 / 0.04);
     font-family: var(--font-geist-sans), system-ui, sans-serif;
     background: var(--sr-canvas);
   }
 
   @media (prefers-color-scheme: dark) {
     .mk {
+      --mk-shadow-sm: 0 0 0 1px rgb(255 255 255 / 0.07), 0 1px 2px rgb(0 0 0 / 0.3);
+      --mk-shadow-md:
+        0 0 0 1px rgb(255 255 255 / 0.06), inset 0 1px 0 rgb(255 255 255 / 0.03), 0 1px 2px rgb(0 0 0 / 0.25),
+        0 8px 20px -8px rgb(0 0 0 / 0.35), 0 28px 56px -20px rgb(0 0 0 / 0.45);
+      --mk-shadow-lg:
+        0 0 0 1px rgb(255 255 255 / 0.07), inset 0 1px 0 rgb(255 255 255 / 0.04), 0 2px 4px rgb(0 0 0 / 0.25),
+        0 12px 28px -10px rgb(4 6 20 / 0.45), 0 40px 80px -28px rgb(4 6 20 / 0.6);
+      --mk-shadow-panel:
+        0 0 0 1px rgb(255 255 255 / 0.07), 0 12px 28px -12px rgb(0 0 0 / 0.5), 0 40px 80px -32px rgb(0 0 0 / 0.6);
+      --mk-phone-shadow:
+        0 0 0 0.25cqw rgb(255 255 255 / 0.05), 0 0.4cqw 0.8cqw rgb(0 0 0 / 0.3), 0 3cqw 6cqw -1cqw rgb(0 0 0 / 0.3),
+        0 10cqw 20cqw -5cqw rgb(4 6 20 / 0.42), 0 28cqw 52cqw -14cqw rgb(4 6 20 / 0.5);
+      --mk-ground: rgb(2 4 16 / 0.55);
       --mk-sky-ink: #ffffff;
       --mk-sky-ink-2: rgb(255 255 255 / 0.88);
       --mk-panel: #1c1e27;
-      --mk-panel-line: rgb(255 255 255 / 0.1);
+      --mk-panel-line: rgb(255 255 255 / 0.09);
       --mk-blue: #17212f;
       --mk-peach: #2a1f1b;
       --mk-mint: #16251d;
@@ -43,14 +85,32 @@
       --mk-butter: #29251a;
       --mk-rose: #2e1c22;
       --mk-tile-ink: #f4f4f6;
-      --mk-card-shadow: 0 0 0 1px rgb(255 255 255 / 0.06), 0 18px 40px -18px rgb(0 0 0 / 0.6);
-      --mk-float-shadow: 0 0 0 1px rgb(255 255 255 / 0.08), 0 24px 48px -16px rgb(0 0 0 / 0.65);
+      --mk-tile-line: rgb(255 255 255 / 0.05);
     }
   }
 
   @media (min-width: 768px) {
     .mk {
       --mk-gutter: 32px;
+    }
+  }
+
+  /* Continuous ("squircle") corners where the browser can draw them, as SwiftUI's .continuous. A
+     superellipse corner looks tighter than a round one of the same size, so the radii grow to match. */
+  @supports (corner-shape: superellipse(2)) {
+    .mk {
+      --mk-r-s: 10px;
+      --mk-r-m: 15px;
+      --mk-r-l: 20px;
+      --mk-r-xl: 30px;
+    }
+    .mk-card,
+    .mk-tile,
+    .mk-panel,
+    .mk-icon,
+    .mk-squircle,
+    .mk-appicon {
+      corner-shape: superellipse(1.6);
     }
   }
 
@@ -70,7 +130,7 @@
 
   /* ---------------------------------------------------------------- Pieces */
 
-  /* The small section label: a red pill, as the reference's blue ones. */
+  /* The small section label: a red pill. */
   .mk-label {
     display: inline-flex;
     align-items: center;
@@ -105,11 +165,15 @@
   .mk-button:active {
     transform: scale(0.98);
   }
-  /* Red pill with the arrow in a white circle, after the reference's "Try for free". */
+  /* Red pill with the arrow in a white circle. */
   .mk-button--red {
     background: var(--sr-red-deep);
     color: #fff;
     padding-right: 0.4rem;
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.16),
+      0 1px 2px rgb(120 10 20 / 0.18),
+      0 6px 14px -6px rgb(180 20 36 / 0.45);
   }
   .mk-button--red:hover {
     background: #bd1f2f;
@@ -126,15 +190,18 @@
   .mk-button--white {
     background: #fff;
     color: #13141b;
-    box-shadow: 0 1px 2px rgb(19 20 27 / 0.08), 0 8px 24px -10px rgb(19 20 27 / 0.3);
+    box-shadow:
+      0 0 0 1px rgb(15 23 42 / 0.05),
+      0 1px 2px rgb(15 23 42 / 0.06),
+      0 6px 16px -8px rgb(22 38 72 / 0.22);
   }
   .mk-button--white:hover {
-    background: #f4f4f6;
+    background: #f6f6f8;
   }
   .mk-button--quiet {
     background: var(--sr-surface);
     color: var(--sr-text);
-    box-shadow: inset 0 0 0 1px var(--sr-line);
+    box-shadow: var(--mk-shadow-sm);
   }
   .mk-button--quiet:hover {
     background: var(--sr-fill);
@@ -149,14 +216,38 @@
   }
 
   .mk-card {
-    border-radius: var(--mk-radius-lg);
+    border-radius: var(--mk-r-xl);
     background: var(--sr-surface);
-    box-shadow: var(--mk-card-shadow);
+    box-shadow: var(--mk-shadow-md);
+  }
+  /* A smaller card (lists, FAQ rows, the cards around the share-link phone): the app's card radius. */
+  .mk-card--s {
+    border-radius: var(--mk-r-l);
+  }
+  .mk-card--float {
+    box-shadow: var(--mk-shadow-lg);
+  }
+  /* Cards that are links lift a little on hover. */
+  .mk-lift {
+    transition:
+      transform 0.2s ease,
+      box-shadow 0.2s ease;
+  }
+  @media (hover: hover) {
+    .mk-lift:hover {
+      transform: translateY(-2px);
+      box-shadow: var(--mk-shadow-lg);
+    }
   }
 
   .mk-tile {
-    border-radius: var(--mk-radius-lg);
+    border-radius: var(--mk-r-xl);
     color: var(--mk-tile-ink);
+    box-shadow: inset 0 0 0 1px var(--mk-tile-line);
+  }
+  /* A tile inside a card with 12px padding (p-3): concentric corners, the card's radius less the padding. */
+  .mk-tile--inset {
+    border-radius: calc(var(--mk-r-xl) - 12px);
   }
   .mk-tile--blue {
     background: var(--mk-blue);
@@ -184,9 +275,19 @@
     place-items: center;
     width: 40px;
     height: 40px;
-    border-radius: 12px;
+    border-radius: var(--mk-r-m);
     background: var(--sr-red-soft);
     color: var(--sr-red-text);
+  }
+  .mk-icon--on-tile {
+    background: rgb(255 255 255 / 0.85);
+    box-shadow: 0 0 0 1px rgb(15 23 42 / 0.04), 0 1px 2px rgb(15 23 42 / 0.05);
+  }
+  @media (prefers-color-scheme: dark) {
+    .mk-icon--on-tile {
+      background: rgb(255 255 255 / 0.08);
+      box-shadow: 0 0 0 1px rgb(255 255 255 / 0.06);
+    }
   }
 
   .mk-focus:focus-visible,
@@ -207,6 +308,133 @@
     user-select: none;
   }
 
+  /* The app icon as the logo, in the icon's own shape (22.4% corners, continuous where supported). */
+  .mk-appicon {
+    display: block;
+    flex-shrink: 0;
+    border-radius: 23%;
+    box-shadow:
+      0 0 0 0.5px rgb(15 23 42 / 0.12),
+      0 1px 2px rgb(15 23 42 / 0.12);
+  }
+  @supports (corner-shape: superellipse(2)) {
+    .mk-appicon {
+      border-radius: 30%;
+    }
+  }
+  .mk-appicon--on-dark {
+    box-shadow:
+      0 0 0 0.5px rgb(255 255 255 / 0.18),
+      0 1px 2px rgb(0 0 0 / 0.3);
+  }
+  @media (prefers-color-scheme: dark) {
+    .mk-appicon {
+      box-shadow:
+        0 0 0 0.5px rgb(255 255 255 / 0.18),
+        0 1px 2px rgb(0 0 0 / 0.3);
+    }
+  }
+
+  /* ---------------------------------------------------------------- The iPhone
+
+     An iPhone 16 Pro, front on and upright: a rendered frame (titanium band, buttons, black bezel,
+     Dynamic Island; scripts/web-device-frame.py) laid over the app's screen, which fills the frame's
+     opening. Sizes are in % of the 1900 x 3782 frame, and the shadow in cqw (1% of the phone's width), so
+     the phone scales to any width. */
+  .mk-iphone {
+    position: relative;
+    container-type: inline-size;
+    width: 100%;
+    aspect-ratio: 1900 / 3782;
+    isolation: isolate;
+  }
+  /* The body, under the frame, carries the soft layered shadow in the body's own rounded shape. */
+  .mk-iphone-shadow {
+    position: absolute;
+    z-index: 0;
+    inset: 0.16% 1.58% 0.13% 1.37%;
+    border-radius: 17.9% / 8.8%;
+    box-shadow: var(--mk-phone-shadow);
+  }
+  .mk-iphone-screen {
+    position: absolute;
+    z-index: 1;
+    left: 5.105%;
+    top: 2.036%;
+    width: 89.684%;
+    height: 96.007%;
+    overflow: hidden;
+    border-radius: 15.26% / 7.16%;
+    background: var(--scr-l, #fff);
+  }
+  @media (prefers-color-scheme: dark) {
+    .mk-iphone-screen {
+      background: var(--scr-d, #000);
+    }
+  }
+  .mk-iphone-screen picture,
+  .mk-iphone-screen img,
+  .mk-iphone-screen video {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+  .mk-iphone-screen img,
+  .mk-iphone-screen video {
+    object-fit: cover;
+    object-position: top;
+    user-select: none;
+  }
+  /* A recorded flow over the still screen: it fades in once it plays, so the still never flickers. */
+  .mk-iphone-screen .mk-flow {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    transition: opacity 0.35s ease;
+  }
+  .mk-iphone-screen .mk-flow[data-playing] {
+    opacity: 1;
+  }
+  /* A faint reflection across the glass. */
+  .mk-iphone-glass {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: linear-gradient(118deg, rgb(255 255 255 / 0.12) 0%, rgb(255 255 255 / 0.04) 26%, transparent 40%);
+  }
+  .mk-iphone-frame {
+    position: absolute;
+    z-index: 2;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    user-select: none;
+  }
+  /* A phone rising out of the bottom of a tile: the tile (overflow: hidden) cuts off the bottom --crop
+     of the phone's height. The wrapper is the phone's width, so cqw here is the phone's width. */
+  .mk-peek {
+    --crop: 0.12;
+    container-type: inline-size;
+  }
+  .mk-peek > .mk-iphone {
+    margin-bottom: calc(-199.05cqw * var(--crop));
+  }
+
+  /* Standing in a scene: a soft contact shadow on the ground. */
+  .mk-iphone--ground::after {
+    content: "";
+    position: absolute;
+    z-index: -1;
+    left: 4%;
+    right: 4%;
+    bottom: -3.2cqw;
+    height: 9cqw;
+    border-radius: 50%;
+    background: radial-gradient(closest-side, var(--mk-ground), transparent);
+    filter: blur(1.2cqw);
+  }
+
   /* ---------------------------------------------------------------- Header (floating pill) */
 
   /* Zero-height and sticky, so the pill floats over each page's scene and follows the scroll. */
@@ -225,17 +453,22 @@
     margin: 12px auto 0;
     max-width: 1120px;
     border-radius: 999px;
-    padding: 0 0.5rem 0 1.1rem;
-    background: rgb(255 255 255 / 0.94);
+    padding: 0 0.5rem 0 0.75rem;
+    background: rgb(255 255 255 / 0.9);
     color: #13141b;
-    box-shadow: 0 1px 2px rgb(19 20 27 / 0.06), 0 10px 30px -10px rgb(30 50 90 / 0.3);
-    backdrop-filter: saturate(1.4) blur(14px);
+    box-shadow:
+      0 0 0 1px rgb(15 23 42 / 0.05),
+      0 1px 2px rgb(15 23 42 / 0.05),
+      0 8px 24px -10px rgb(22 38 72 / 0.22);
+    backdrop-filter: saturate(1.4) blur(16px);
   }
   @media (prefers-color-scheme: dark) {
     .mk-nav {
-      background: rgb(28 30 39 / 0.92);
+      background: rgb(28 30 39 / 0.88);
       color: #f4f4f6;
-      box-shadow: 0 0 0 1px rgb(255 255 255 / 0.08), 0 10px 30px -10px rgb(0 0 0 / 0.6);
+      box-shadow:
+        0 0 0 1px rgb(255 255 255 / 0.08),
+        0 8px 24px -10px rgb(0 0 0 / 0.55);
     }
   }
   .mk-nav-link {
@@ -248,7 +481,9 @@
     font-weight: 500;
     color: inherit;
     opacity: 0.82;
-    transition: opacity 0.15s ease, background-color 0.15s ease;
+    transition:
+      opacity 0.15s ease,
+      background-color 0.15s ease;
   }
   .mk-nav-link:hover,
   .mk-nav-link[aria-current="page"] {
@@ -266,7 +501,7 @@
   @media (max-width: 399px) {
     .mk-nav {
       gap: 0.25rem;
-      padding-left: 0.9rem;
+      padding-left: 0.6rem;
     }
     .mk-nav-link {
       padding: 0 0.5rem;
@@ -282,7 +517,7 @@
 
      A scene is a full-bleed section with an illustrated environment behind its content.
      Wide screens: the picture covers the section, anchored to the bottom (".mk-scene--cover"),
-     or spans the full width with sky colour filling the space above (".mk-scene--fill").
+     or spans the full width with sky colour filling the space above (".mk-scene--flow").
      Phones: the content sits on the sky colour and the picture (a centre crop) follows it.
      Custom properties on the section:
        --ar / --mar   aspect ratio of the wide and the phone picture
@@ -297,6 +532,7 @@
     position: relative;
     isolation: isolate;
     overflow: hidden;
+    container-type: inline-size;
     background: linear-gradient(to bottom, var(--sr-canvas) 0, var(--sky-now) 220px);
     color: var(--mk-sky-ink);
   }
@@ -348,6 +584,22 @@
     object-fit: cover;
     user-select: none;
   }
+  /* The moving layer (scene-motion.tsx): a canvas exactly over the picture, faded in once its first
+     frame, which equals the picture, is drawn. */
+  .mk-scene-motion {
+    position: absolute;
+    left: 0;
+    top: 0;
+    display: block;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.6s ease;
+  }
+  .mk-scene-motion[data-on] {
+    opacity: 1;
+  }
   .mk-scene-phone {
     position: absolute;
     z-index: 1;
@@ -380,13 +632,16 @@
   }
 
   /* Wide screens, cover mode (heroes, page banners): the section has a set height (--h) and the
-     picture covers it, anchored to the bottom; the phone is sized against the section. */
+     picture covers it, anchored to the bottom, with no fade: its top edge is the page's top edge.
+     The phone is placed in % of the picture (--px, --pb, --pw), so it stays where it stands in the
+     scene at any width. */
   @media (min-width: 1024px) {
     .mk-scene--cover {
-      --bw: max(100%, calc(var(--h) * var(--ar)));
       height: var(--h);
     }
     .mk-scene--cover .mk-scene-stage {
+      --bw: max(100cqw, calc(var(--h) * var(--ar)));
+      --bl: clamp(calc(100cqw - var(--bw)), calc(50cqw - var(--fx) * var(--bw)), 0px);
       position: static;
       aspect-ratio: auto;
       margin-top: 0;
@@ -397,31 +652,89 @@
       bottom: 0;
       aspect-ratio: var(--ar);
       width: var(--bw);
-      left: clamp(calc(100% - var(--bw)), calc(50% - var(--fx) * var(--bw)), 0px);
+      left: var(--bl);
       -webkit-mask-image: none;
       mask-image: none;
     }
     .mk-scene--cover .mk-scene-phone {
-      left: var(--px, 50%);
-      bottom: var(--pb, 4%);
-      width: auto;
-      height: var(--ph, 50%);
+      left: calc(var(--bl) + var(--px, 0.5) * var(--bw));
+      bottom: calc(var(--pb, 0.04) * var(--bw) / var(--ar));
+      width: min(calc(var(--pw, 0.2) * var(--bw)), var(--pw-max, 9999px));
     }
-    .mk-scene--cover .mk-scene-phone picture,
-    .mk-scene--cover .mk-scene-phone img {
-      display: block;
-      height: 100%;
-      width: auto;
+  }
+
+  /* The home hero. Phones: the headline on the sky, then the park with the iPhone standing in it.
+     Wide screens: the park covers the whole first screen with no fade over the trees, the headline
+     in the sky, and the iPhone standing in the middle of the path, its top in view. A soft, wide
+     wash of sky colour sits behind the words only.
+
+     The headline is two lines at every width, one sentence each. The two sentences set within 1% of
+     each other in Outfit (about 10.5 em each at this tracking), so the lines balance on their own; on
+     phones the size follows the width so the longer one just fits. Semibold, tight tracking with a
+     little room back between the words, and a close line height, so the two lines read as one block. */
+  .mk-hero-title {
+    font-size: min(3.75rem, calc((100cqw - 2 * var(--mk-gutter)) / 10.9));
+    font-weight: 600;
+    letter-spacing: -0.028em;
+    word-spacing: 0.02em;
+    line-height: 1.04;
+  }
+  .mk-hero-line {
+    display: block;
+    white-space: nowrap;
+  }
+  @media (min-width: 1024px) {
+    /* At least 1120 px, so the two-line headline, the buttons and the phone's top fit one above the
+       other; on very wide screens the whole picture, so nothing in it is cropped behind the words. */
+    .mk-hero {
+      --h: max(1120px, calc(100cqw / var(--ar)));
+    }
+    .mk-hero-title {
+      font-size: clamp(3.25rem, 4.6cqw, 5rem);
+      line-height: 1.02;
+    }
+    .mk-hero-copy::before {
+      content: "";
+      position: absolute;
+      z-index: -1;
+      inset: -18% -14% -22%;
+      border-radius: 50%;
+      background: radial-gradient(closest-side, color-mix(in oklab, var(--sky-now) 62%, transparent) 30%, transparent);
+      pointer-events: none;
+    }
+  }
+  /* ---------------------------------------------------------------- Share links: the phone and its cards
+
+     Wide screens: the iPhone stands in the middle of the meadow and the four cards sit around it,
+     overlapping its edges, as one composition. Phones: the iPhone, then the cards in a grid. */
+  .mk-share-comp {
+    position: relative;
+    z-index: 3;
+  }
+  @media (min-width: 1024px) {
+    .mk-share-comp {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+    }
+    .mk-share-comp > * {
+      pointer-events: auto;
+    }
+    .mk-share-card {
+      position: absolute;
+      width: 300px;
     }
   }
 
   /* ---------------------------------------------------------------- The dark panel */
 
   .mk-panel {
-    border-radius: var(--mk-radius-lg);
+    border-radius: var(--mk-r-xl);
     background: var(--mk-panel);
     color: #fff;
-    box-shadow: 0 0 0 1px var(--mk-panel-line), 0 30px 60px -30px rgb(19 20 27 / 0.6);
+    box-shadow:
+      inset 0 0 0 1px var(--mk-panel-line),
+      var(--mk-shadow-panel);
   }
 
   /* ---------------------------------------------------------------- FAQ */
@@ -475,7 +788,10 @@
     list-style: decimal;
   }
   .mk-prose li + li {
-    margin-top: 0.4rem;
+    margin-top: 0.5rem;
+  }
+  .mk-prose li {
+    padding-left: 0.25rem;
   }
   .mk-prose li::marker {
     color: var(--sr-red-text);

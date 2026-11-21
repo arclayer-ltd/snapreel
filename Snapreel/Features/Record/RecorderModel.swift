@@ -229,6 +229,9 @@ final class RecorderModel: ObservableObject {
             initialReviewPanel = preset.reviewPanel
             cameraState = preset.cameraStill == nil ? .starting : .running
             if let levels = preset.levels { meter.show(levels) }
+            #if DEBUG
+            DebugFlowHooks.recorder = self
+            #endif
         }
         if preset == nil, let review = ReviewCoordinator.shared.pendingReview(for: launch.id),
            let video = library.video(review.id) {

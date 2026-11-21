@@ -2,7 +2,7 @@ import Link from "next/link";
 import { LEGAL_ENTITY } from "@/lib/legal-entity";
 import { AppStoreBadge } from "./app-store-badge";
 import { SceneStage, sceneVars } from "./art";
-import { ArrowRight, LogoMark } from "./marks";
+import { AppIcon, ArrowRight } from "./marks";
 
 const columns = [
   {
@@ -66,8 +66,8 @@ export function SiteFooter() {
         <div className="mk-panel px-6 py-10 sm:px-10 sm:py-12">
           <div className="grid grid-cols-2 gap-x-6 gap-y-10 sm:grid-cols-[minmax(0,1.5fr)_repeat(3,minmax(0,1fr))]">
             <div className="col-span-2 sm:col-span-1">
-              <Link href="/" className="inline-flex items-center gap-2 rounded-full" aria-label="Snapreel home">
-                <LogoMark size={28} />
+              <Link href="/" className="inline-flex items-center gap-2.5 rounded-full" aria-label="Snapreel home">
+                <AppIcon size={36} className="mk-appicon--on-dark" />
                 <span className="mk-display text-xl font-bold tracking-[-0.03em] text-white">Snapreel</span>
               </Link>
               <p className="mt-3 max-w-xs text-sm leading-relaxed text-white/75">

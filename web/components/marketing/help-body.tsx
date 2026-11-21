@@ -35,7 +35,7 @@ export function HelpBody({ blocks }: { blocks: HelpBlock[] }) {
             );
           case "tip":
             return (
-              <div key={k} className="flex gap-3 rounded-2xl bg-red-soft px-4 py-3.5 text-[0.98rem] text-text">
+              <div key={k} className="mk-squircle flex gap-3 rounded-[var(--mk-r-m)] bg-red-soft px-4 py-3.5 text-[0.98rem] text-text">
                 <svg aria-hidden="true" viewBox="0 0 24 24" width="20" height="20" className="mt-0.5 shrink-0 text-red-text" fill="currentColor">
                   <path d="M12 2a7 7 0 0 0-4 12.74V17a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1v-2.26A7 7 0 0 0 12 2Zm-2 18h4a1 1 0 0 1 0 2h-4a1 1 0 0 1 0-2Z" />
                 </svg>

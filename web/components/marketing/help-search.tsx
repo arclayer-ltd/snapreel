@@ -26,7 +26,7 @@ export function HelpSearch({ items }: { items: Item[] }) {
       <label htmlFor={id} className="sr-only">
         Search help
       </label>
-      <div className="flex h-14 items-center gap-3 rounded-full bg-white pl-5 pr-2 text-sr-ink shadow-[0_2px_4px_rgb(19_20_27/0.06),0_16px_36px_-12px_rgb(30_50_90/0.4)]">
+      <div className="flex h-14 items-center gap-3 rounded-full bg-white pl-5 pr-2 text-sr-ink shadow-[var(--mk-shadow-lg)]">
         <svg aria-hidden="true" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
           <circle cx="11" cy="11" r="7" />
           <path d="m20 20-3.5-3.5" />
@@ -42,7 +42,7 @@ export function HelpSearch({ items }: { items: Item[] }) {
         />
       </div>
       {q.trim() ? (
-        <div className="mt-2 overflow-hidden rounded-3xl bg-surface text-text shadow-2xl ring-1 ring-line" role="region" aria-label="Search results" aria-live="polite">
+        <div className="mk-squircle mt-2 overflow-hidden rounded-[var(--mk-r-xl)] bg-surface text-text shadow-[var(--mk-shadow-lg)]" role="region" aria-label="Search results" aria-live="polite">
           {results.length ? (
             <ul>
               {results.map((r) => (

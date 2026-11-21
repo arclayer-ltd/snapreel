@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { AppStoreBadge } from "@/components/marketing/app-store-badge";
-import { Art, SceneStage, Spot, sceneVars, type SceneSlot } from "@/components/marketing/art";
+import { SceneStage, Spot, sceneVars, type SceneSlot } from "@/components/marketing/art";
+import { IPhone, PeekPhone } from "@/components/marketing/iphone";
 import { getArticle } from "@/components/marketing/content";
 import { ArrowRight, Check, Icon, type IconName } from "@/components/marketing/marks";
 import {
@@ -29,21 +30,24 @@ const facts = [
 
 const ways = [
   {
-    slot: "record-screen" as const,
+    screen: "flow-screen" as const,
+    flow: "screen" as const,
     icon: "screen" as IconName,
     tone: "mk-tile--blue",
     title: "Screen",
     text: "Show anything on your iPhone, with your voice over it. Snapreel keeps recording while you use other apps.",
   },
   {
-    slot: "record-camera" as const,
+    screen: "flow-camera" as const,
+    flow: "camera" as const,
     icon: "camera" as IconName,
     tone: "mk-tile--peach",
     title: "Camera",
     text: "Talk to the front or back camera, with your notes on screen so you never lose your place.",
   },
   {
-    slot: "record-voice" as const,
+    screen: "flow-voice" as const,
+    flow: "voice" as const,
     icon: "mic" as IconName,
     tone: "mk-tile--mint",
     title: "Voice",
@@ -164,41 +168,46 @@ export default function Home() {
       {/* ------------------------------------------------------------------ Hero */}
       <section
         aria-labelledby="hero-title"
-        className="mk-scene mk-scene--flow mk-scene--top"
+        className="mk-scene mk-scene--cover mk-scene--top mk-hero"
         style={sceneVars("scene-hero", {
-          "--tuck": "96px",
-          "--tuck-d": "calc(17vw - 20px)",
-          "--pw": "19%",
-          "--pb": "3.5%",
-          "--pw-m": "45%",
-          "--pb-m": "3%",
+          "--fx": 0.49,
+          "--px": 0.49,
+          "--pb": 0.03,
+          "--pw": 0.19,
+          "--pw-max": "560px",
+          "--tuck": "84px",
+          "--pw-m": "52%",
+          "--pb-m": "2.5%",
         })}
       >
-        <div className="mk-scene-content mx-auto max-w-[920px] px-[var(--mk-gutter)] pt-28 text-center sm:pt-32 lg:pt-36">
-          <h1 id="hero-title" className="mk-title text-[2.625rem] sm:text-[3.5rem] lg:text-[4.25rem]">
-            Record it on your iPhone. They watch it anywhere.
-          </h1>
-          <p className="mx-auto mt-5 max-w-2xl text-lg leading-relaxed text-[var(--mk-sky-ink-2)] sm:text-xl">
-            Snapreel records your screen, camera or voice. Stop, tap Copy link, and anyone can watch in their browser,
-            with no app or account on their side.
-          </p>
-          <div className="mt-7 flex flex-wrap items-center justify-center gap-3">
-            <AppStoreBadge />
-            <Link href="/pricing" className="mk-button mk-button--white">
-              See what&rsquo;s free
-              <ArrowRight size={18} />
-            </Link>
+        <div className="mk-scene-content mx-auto max-w-[1240px] px-[var(--mk-gutter)] pt-28 text-center sm:pt-32 lg:pt-[118px]">
+          <div className="mk-hero-copy relative mx-auto max-w-[920px] lg:max-w-none">
+            <h1 id="hero-title" className="mk-title mk-hero-title">
+              <span className="mk-hero-line">Record it on your iPhone.</span>{" "}
+              <span className="mk-hero-line">They watch it anywhere.</span>
+            </h1>
+            <p className="mx-auto mt-5 max-w-2xl text-lg leading-relaxed text-[var(--mk-sky-ink-2)] sm:text-xl">
+              Snapreel records your screen, camera or voice. Stop, tap Copy link, and anyone can watch in their
+              browser, with no app or account on their side.
+            </p>
+            <div className="mt-7 flex flex-wrap items-center justify-center gap-3">
+              <AppStoreBadge />
+              <Link href="/pricing" className="mk-button mk-button--white">
+                See what&rsquo;s free
+                <ArrowRight size={18} />
+              </Link>
+            </div>
           </div>
         </div>
-        <SceneStage slot="scene-hero" priority sizes="100vw">
-          <Art slot="phone-hero" priority sizes="(min-width: 1024px) 19vw, 45vw" />
+        <SceneStage slot="scene-hero" priority sizes="(min-width: 1024px) max(100vw, 1480px), 100vw">
+          <IPhone screen="flow-share" flow="share" priority sizes="(min-width: 1024px) max(312px, 20vw), 52vw" />
         </SceneStage>
       </section>
 
       {/* ------------------------------------------------------------------ Stats bar */}
       <div className="relative z-10 -mt-10 px-[var(--mk-gutter)] lg:-mt-16">
-        <div className="mk-panel mx-auto grid max-w-[1080px] grid-cols-1 items-center gap-6 px-6 py-7 sm:px-10 sm:py-8 lg:grid-cols-[minmax(0,1.1fr)_repeat(3,minmax(0,1fr))] lg:gap-8">
-          <p className="mk-display text-[1.6rem] font-bold leading-tight tracking-[-0.02em]">
+        <div className="mk-panel mx-auto grid max-w-[1080px] grid-cols-1 items-center gap-6 px-6 py-7 sm:px-10 sm:py-8 lg:grid-cols-[auto_repeat(3,minmax(0,1fr))] lg:gap-10">
+          <p className="mk-display whitespace-nowrap text-[1.3125rem] font-bold leading-tight tracking-[-0.02em] min-[400px]:text-[1.5rem] lg:text-[1.625rem]">
             Free on your iPhone, forever.
           </p>
           <ul className="contents">
@@ -225,17 +234,21 @@ export default function Home() {
           />
           <ul className="mt-10 grid grid-cols-1 gap-4 md:grid-cols-3">
             {ways.map((w) => (
-              <li key={w.slot} className={`mk-tile ${w.tone} flex flex-col overflow-hidden`}>
+              <li key={w.screen} className={`mk-tile ${w.tone} flex flex-col overflow-hidden`}>
                 <div className="px-6 pt-6 sm:px-7 sm:pt-7">
-                  <span className="mk-icon !bg-white/80 dark:!bg-white/10">
+                  <span className="mk-icon mk-icon--on-tile">
                     <Icon name={w.icon} />
                   </span>
                   <h3 className="mk-display mt-4 text-2xl font-bold">{w.title}</h3>
                   <p className="mt-1.5 leading-relaxed text-text-2">{w.text}</p>
                 </div>
-                <div className="mx-auto -mb-[32%] mt-6 w-[72%] max-w-[260px]">
-                  <Art slot={w.slot} sizes="(min-width: 768px) 260px, 72vw" />
-                </div>
+                <PeekPhone
+                  screen={w.screen}
+                  flow={w.flow}
+                  crop={0.06}
+                  sizes="(min-width: 768px) 250px, 66vw"
+                  className="mx-auto mt-auto w-[68%] max-w-[250px] pt-8"
+                />
               </li>
             ))}
           </ul>
@@ -248,12 +261,14 @@ export default function Home() {
         aria-labelledby="features-title"
         className="mk-scene mk-scene--flow mt-20 scroll-mt-24 sm:mt-28"
         style={sceneVars("scene-features", {
-          "--px": "44%",
-          "--pw": "17%",
-          "--pb": "9%",
-          "--px-m": "46%",
-          "--pw-m": "44%",
-          "--pb-m": "8%",
+          "--px": "50%",
+          "--pw": "min(21.5%, 320px)",
+          "--pb": "5.5%",
+          "--tuck-d": "0px",
+          "--tuck": "-150px",
+          "--px-m": "50%",
+          "--pw-m": "min(54%, 240px)",
+          "--pb-m": "6%",
         })}
       >
         <div className="mk-scene-content px-[var(--mk-gutter)] pt-16 sm:pt-24">
@@ -268,18 +283,20 @@ export default function Home() {
         </div>
         <div className="relative">
           <SceneStage slot="scene-features" sizes="100vw">
-            <Art slot="phone-features" sizes="(min-width: 1024px) 17vw, 44vw" />
+            <IPhone screen="flow-comments" flow="comments" ground sizes="(min-width: 1024px) 320px, 54vw" />
           </SceneStage>
-          <ul className="relative z-10 grid grid-cols-1 gap-3 bg-canvas px-[var(--mk-gutter)] pt-6 sm:grid-cols-2 lg:absolute lg:inset-0 lg:block lg:bg-transparent lg:p-0">
+          {/* Wide screens: the cards sit around the phone (320 px wide at most, centred), overlapping its
+              edges. --pe is the phone's half width. */}
+          <ul className="mk-share-comp grid grid-cols-1 gap-3 bg-canvas px-[var(--mk-gutter)] pt-6 sm:grid-cols-2 lg:block lg:bg-transparent lg:p-0 lg:[--pe:min(10.75cqw,160px)]">
             {linkFeatures.map((f, i) => (
               <li
                 key={f.title}
-                className={`mk-card flex items-start gap-3.5 p-4 sm:p-5 lg:absolute lg:w-[300px] lg:!shadow-[var(--mk-float-shadow)] ${
+                className={`mk-card mk-card--s mk-card--float mk-share-card flex items-start gap-3.5 p-4 sm:p-5 ${
                   [
-                    "lg:left-[max(var(--mk-gutter),calc(50%-560px))] lg:top-[3%]",
-                    "lg:left-[max(var(--mk-gutter),calc(50%-520px))] lg:top-[22%]",
-                    "lg:right-[max(var(--mk-gutter),calc(50%-560px))] lg:top-[8%]",
-                    "lg:right-[max(var(--mk-gutter),calc(50%-600px))] lg:top-[27%]",
+                    "lg:right-[calc(50%+var(--pe)-48px)] lg:top-[16%]",
+                    "lg:right-[calc(50%+var(--pe)-28px)] lg:top-[45%]",
+                    "lg:left-[calc(50%+var(--pe)-40px)] lg:top-[24%]",
+                    "lg:left-[calc(50%+var(--pe)-60px)] lg:top-[53%]",
                   ][i]
                 }`}
               >
@@ -315,15 +332,13 @@ export default function Home() {
             <div className="flex flex-col gap-4">
               <div className="mk-tile mk-tile--lilac overflow-hidden">
                 <div className="px-6 pt-6">
-                  <span className="mk-icon !bg-white/80 dark:!bg-white/10">
+                  <span className="mk-icon mk-icon--on-tile">
                     <Icon name="folder" />
                   </span>
                   <h3 className="mt-4 text-lg font-semibold leading-snug">Library, folders and tags</h3>
                   <p className="mt-1 text-[0.9375rem] leading-relaxed text-text-2">Find any recording with folders, tags and search.</p>
                 </div>
-                <div className="mx-auto -mb-[30%] mt-5 w-[70%] max-w-[240px]">
-                  <Art slot="files" sizes="(min-width: 640px) 240px, 70vw" />
-                </div>
+                <PeekPhone screen="library" crop={0.36} sizes="(min-width: 640px) 240px, 72vw" className="mx-auto mt-7 w-[74%] max-w-[240px]" />
               </div>
               {privateTiles.slice(0, 1).map((t) => (
                 <PrivateTile key={t.title} {...t} />
@@ -341,8 +356,8 @@ export default function Home() {
       {/* ------------------------------------------------------------------ Pro */}
       <section id="pro" aria-labelledby="pro-title" className="mt-20 scroll-mt-24 sm:mt-28">
         <Container>
-          <div className="mk-card grid grid-cols-1 gap-8 overflow-hidden p-6 sm:p-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:p-12">
-            <div className="self-center">
+          <div className="mk-card grid grid-cols-1 gap-8 overflow-hidden p-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+            <div className="self-center px-3 pb-2 pt-5 sm:p-8 lg:py-10 lg:pl-10 lg:pr-2">
               <p className="mk-label">Snapreel Pro</p>
               <h2 id="pro-title" className="mk-title mt-4 text-[2.25rem] sm:text-[3rem]">
                 Links that look like yours.
@@ -367,13 +382,9 @@ export default function Home() {
                 </Link>
               </div>
             </div>
-            <div className="mk-tile mk-tile--rose relative -mx-2 -mb-8 flex items-end justify-center gap-2 overflow-hidden px-4 pt-10 sm:-mx-4 sm:-mb-12 lg:-my-6 lg:-mr-6 lg:min-h-[520px]">
-              <div className="mb-[-14%] w-[46%] max-w-[230px] -rotate-2">
-                <Art slot="insights" sizes="(min-width: 1024px) 230px, 44vw" />
-              </div>
-              <div className="mb-[-4%] w-[46%] max-w-[230px] rotate-2">
-                <Art slot="pro" sizes="(min-width: 1024px) 230px, 44vw" />
-              </div>
+            <div className="mk-tile mk-tile--rose mk-tile--inset relative flex items-end justify-center gap-[5%] overflow-hidden px-4 pt-10 sm:pt-12 lg:min-h-[540px]">
+              <PeekPhone screen="insights" crop={0.34} sizes="(min-width: 1024px) 240px, 42vw" className="w-[44%] max-w-[240px]" />
+              <PeekPhone screen="paywall" crop={0.2} sizes="(min-width: 1024px) 240px, 42vw" className="w-[44%] max-w-[240px]" />
             </div>
           </div>
         </Container>
@@ -399,7 +410,7 @@ export default function Home() {
                   key={href}
                   href={href}
                   className={`inline-flex min-h-10 items-center rounded-full px-4 text-sm font-semibold ${
-                    i === 0 ? "bg-sr-ink text-white dark:bg-white dark:text-sr-ink" : "bg-surface text-text shadow-[var(--mk-card-shadow)] hover:bg-fill"
+                    i === 0 ? "bg-sr-ink text-white dark:bg-white dark:text-sr-ink" : "bg-surface text-text shadow-[var(--mk-shadow-sm)] hover:bg-fill"
                   }`}
                 >
                   {label}
@@ -413,7 +424,7 @@ export default function Home() {
               const a = getArticle(g.id);
               if (!a) return null;
               return (
-                <Link key={g.id} href={`/help/${a.id}`} className="mk-card group flex flex-col overflow-hidden">
+                <Link key={g.id} href={`/help/${a.id}`} className="mk-card mk-lift group flex flex-col overflow-hidden">
                   <Spot slot={g.spot} sizes="(min-width: 1024px) 600px, 100vw" className="aspect-[16/9] w-full" />
                   <span className="flex flex-1 flex-col p-6 sm:p-8">
                     <span className="w-fit rounded-full bg-red-soft px-2.5 py-1 text-xs font-semibold text-red-text">{g.tag}</span>
@@ -433,8 +444,8 @@ export default function Home() {
                 if (!a) return null;
                 return (
                   <li key={g.id}>
-                    <Link href={`/help/${a.id}`} className="mk-card group flex h-full items-stretch gap-4 overflow-hidden p-3 pr-5">
-                      <Spot slot={g.spot} sizes="140px" className="w-[32%] max-w-[150px] shrink-0 rounded-[18px]" />
+                    <Link href={`/help/${a.id}`} className="mk-card mk-lift group flex h-full items-stretch gap-4 overflow-hidden p-3 pr-5">
+                      <Spot slot={g.spot} sizes="140px" className="mk-squircle w-[32%] max-w-[150px] shrink-0 rounded-[calc(var(--mk-r-xl)-12px)]" />
                       <span className="flex min-w-0 flex-col justify-center py-2">
                         <span className="text-xs font-semibold uppercase tracking-[0.08em] text-red-text">{g.tag}</span>
                         <span className="mk-display mt-1 block text-lg font-bold leading-snug">{a.title}</span>
@@ -480,7 +491,7 @@ export default function Home() {
 function PrivateTile({ icon, tone, title, text }: { icon: IconName; tone: string; title: string; text: string }) {
   return (
     <div className={`mk-tile ${tone} p-6`}>
-      <span className="mk-icon !bg-white/80 dark:!bg-white/10">
+      <span className="mk-icon mk-icon--on-tile">
         <Icon name={icon} />
       </span>
       <h3 className="mt-4 text-lg font-semibold leading-snug">{title}</h3>

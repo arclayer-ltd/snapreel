@@ -31,7 +31,7 @@ export function NotFoundContent() {
               </Link>
             </div>
           </div>
-          <Spot slot="spot-watch" sizes="(min-width: 640px) 360px, 100vw" className="aspect-[4/5] rounded-[22px] sm:aspect-auto sm:h-full sm:min-h-[380px]" />
+          <Spot slot="spot-watch" sizes="(min-width: 640px) 360px, 100vw" className="mk-squircle aspect-[4/5] rounded-[calc(var(--mk-r-xl)-12px)] sm:aspect-auto sm:h-full sm:min-h-[380px]" />
         </div>
       </Container>
     </>
