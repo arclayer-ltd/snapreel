@@ -30,6 +30,16 @@ An app screen only ever appears inside that iPhone, and a Light page only shows 
 in Dark. `scripts/web-screens.py` exports the stills (AVIF and WebP, 400 and 800 px) to
 `web/public/marketing/screens/` with `screens-manifest.ts`, and makes the logo and favicons from the app icon.
 
+The CI simulator is a notch-era iPhone (375 x 812 pt), where content and sheets start right under a 44 pt
+status bar; inside the 16 Pro frame the Dynamic Island would sit on them. `scripts/web_island.py` moves every
+screen's content (and every flow video's) 12 pt down, as on a real Dynamic Island iPhone, keeping the status
+bar where it is. `web-screens.py` and `web-flows.py` both apply it.
+
+Pieces of the app lifted out beside a phone (the "Your phone. Your files." panel) are cut from the same
+screenshots by `scripts/web-lifts.py` into `web/public/marketing/lifts/` with `lifts-manifest.ts`, so they are
+exactly the app's, in Light and Dark. The Copy link scene's lifted comments show the commenter's initial,
+as the app does (a viewer comments with a name only).
+
 ## Recorded flows
 
 Where a phone has a `flow`, it plays a recording of the real app over its still: the hero (a camera
@@ -44,6 +54,12 @@ viewers' comments) and the three recorder tiles (screen steps, camera countdown 
 3. `python scripts/web-flows.py <downloaded artifact>` trims each from when its screen appeared, makes it
    600 px H.264 with a crossfade back to its first frame (a seamless loop), and writes a still per mode to
    `art/web/screens/`; then `python scripts/web-screens.py` exports the stills.
+
+The simulator has no camera, so in camera mode the app shows a still photo
+(`Snapreel/Debug/fixture-camera-portrait.jpg`) and the preview never moves. `web-flows.py` makes the camera
+flow live: `flows/camera-live.mp4` is a 6 s talking clip of the same woman made from that photo (Higgsfield
+Grok Video 1.5, 480p, 15 credits), and each frame's overlay (timer, buttons, the countdown's dim and 3-2-1) is
+recovered against the still and laid over the clip, which plays forward and back so it never jumps.
 
 On the page (`flow-video.tsx`) a flow plays muted and inline only while it is on screen, fades in over its
 still, and never plays with reduced motion.
@@ -71,42 +87,78 @@ headline, was painted out with `scripts/web-hero-erase-kite.py` (originals in gi
 
 ## Motion
 
-The nature in the home hero, the Copy link scene, the footer and the inner-page banner moves: clouds drift,
-birds fly, trees and flowers sway in gusts that cross the scene from the left, the kite sways and its tail
-ripples, the pond shimmers, butterflies flutter between flowers, and at dusk the lamps, the lantern and the
-bike's headlight glow and flicker (with a few fireflies and twinkling stars). The pictures above stay the
-source. `web/components/marketing/scene-motion.tsx` lays a Three.js canvas exactly over a scene's picture,
-under the phone, the cards and the text; `scene-motion-engine.ts` is the 2.5D stage (an orthographic camera
-and textured planes, no 3D model).
+The nature in the home hero, the Copy link scene, the rooftop (pricing page and "Three ways to record"), the
+footer and the inner-page banner moves like a park on a breezy day: clouds sail across the sky, birds fly,
+trees sway and their leaves flutter, flowers bob, the kite sways and its tail ripples, the pond ripples,
+the balloon wanders, butterflies flutter between flowers, and at dusk the lamps, the lantern, the bike's
+headlight and the string lights glow and flicker (with a few fireflies and twinkling stars). The pictures
+above stay the source. `web/components/marketing/scene-motion.tsx` lays a Three.js canvas exactly over a
+scene's picture, under the phone, the cards and the text; `scene-motion-engine.ts` is the 2.5D stage (an
+orthographic camera and textured planes, no 3D model).
 
 - The base is the picture the page already shows (`img.currentSrc`). Where something that moves was painted
   in, a clean plate shows instead and the element is drawn again as a sprite cut from the same art, at the
   same place, so the canvas's first frame equals the picture and its fade-in can't be seen. Everything
   starts at rest and eases in.
-- Wind is a displacement shader on the picture, driven by a sway weight mask: crowns move most at their
-  tips, flower beds less, and the weight falls to zero towards anything solid (trunks, characters, benches,
-  lamps, buildings, the hero's foreground flower bed), so no character or building edge ever moves.
-- Clouds and birds are in a sky layer that tree crowns hide. Clouds stay around where they were painted
-  (one cut by the picture's edge only leans out towards it). The two painted birds glide off; after that,
+- Trees and flowers are **pieces**, each with its own pivot, pace and phase. A tree's crown, with its
+  branches, turns as one rigid piece about a point low on its trunk (so its top moves most and the foot of
+  the trunk hardly at all); the tree line is split into clumps that each sway about their own foot, smaller
+  and quicker the smaller they are; every flower is a stem that bends from the soil, so its head bobs,
+  a little out of step with its neighbours. The engine works out each piece's angle every frame: it leans
+  with a gust that travels left to right (reaching one tree after the other) and rocks at its own pace. The
+  shader draws the picture turned back by its piece's angle; where two pieces touch they blend. Nothing
+  waves or ripples inside a crown. On top, leaves flutter: a small, quick shake in leaf-clump-sized patches,
+  only in a band along the crowns' edges, stronger in a gust.
+- A piece's hold on a pixel falls to zero towards anything that must not move, over more than the
+  distance that pixel can move (2.5 times it next to a character or an authored object, 1.2 times next to
+  a lamp post or a bench), so nothing still is ever reached. Only the pale skyline far behind the tree
+  line gives way by a few pixels where a tree's edge sways across it.
+- The home hero's round flower bed is the scene's foreground cut-out, drawn in front of the phone. It gets
+  a second, transparent canvas over it (made by `scene-motion.tsx` inside `.mk-scene-fg`), drawn by the same
+  engine with the same pieces in the same frame, so the tulips in front of the phone sway and the layer
+  under the phone always agrees with them. It takes the cut-out picture's place in one go once its first
+  frame, equal to the picture, is drawn.
+- Clouds and birds are in a sky layer that tree crowns hide. Every cloud sails with the wind, left to
+  right, the bigger ones faster, and comes in again from the left once it is out of sight. So each cloud
+  sprite is made whole: where a tree hid part of it, it is carried on in rounded lobes; where the
+  picture's edge cut it, it is closed with its own mirror image. Travelling clouds keep to the scene's
+  `cloudBand`, clear of everything that is not sky or tree. The two painted birds glide off; after that,
   flocks of two to five, drawn in code with flapping wing frames, cross every 20 to 60 seconds along the
   scene's lanes, which keep clear of the headline.
+- The pond is covered whole: ripples wobble its reflections sideways, the surface shimmers and glints run
+  along the ripples in short dashes.
 - The kite's body is a cut-out; its two ribbons are drawn in code along the painted centre lines and
-  ripple as a travelling wave. Lamps only exist in the Dusk data.
+  ripple as a travelling wave. The balloon is a cut-out that wanders slowly around where it was painted.
+  Lamps and the string lights' bulbs only exist in the Dusk data; a bulb sways with the branch it hangs in.
 - Motion is layered sines with periods that don't divide into each other plus random events, seeded per
   load, so nothing visibly repeats for minutes.
 
-`art/web/motion.json` holds the authored regions per scene, in fractions of the source picture: tree crowns
-(`poly`, with the `anchor` where the trunk holds them), flower beds, boxes around characters and objects
-that must not move, boxes around the painted clouds, birds, kite and butterflies, the pond, lamp points and
-bird lanes. `scripts/web-motion.py` turns them into `web/public/marketing/motion/{scene}-{theme}-`
-`mask.webp` (R sway weight, G water, B sky layer: hidden, open or cut out), `plate.webp` (the clean plate:
-a smooth sky fitted around each cut-out, as the kite eraser does, or inpainted grass) and `atlas.webp` (the
-cut-outs), about 100 KB per scene and theme, plus `web/components/marketing/motion-manifest.ts`. It also
-writes review pictures to `review/motion/`: `{scene}-masks.jpg` (sway red, water blue, cut-outs magenta,
-solid things outlined yellow, authored boxes white), `{scene}-{theme}-plate.jpg` (the art with everything
-cut out) and the atlases. After changing a region, look at those: nothing red may touch a character, a
-face, a phone or a building edge. The script prints the largest sway weight on still pixels (must be 0)
-and how far the rest frame is from the picture.
+`art/web/motion.json` holds the authored regions per scene, in fractions of the source picture: single
+trees (`poly` around the crown, `pivot` low on the trunk, `sway` in source pixels at the crown's far end),
+stretches of tree line (a `poly` with no pivot; `split` sets how fine the clumps are), flower beds (boxes;
+`soil` or `stem` says where the stems start), boxes around characters and objects that must not move,
+boxes around the painted clouds, birds, kite, balloon and butterflies, the pond, lamp points, boxes around
+string lights and bird lanes. `scripts/web-motion.py` turns them into, in `web/public/marketing/motion/`:
+
+- `{scene}-seg.webp` (one for both themes): which piece a pixel belongs to, its neighbouring piece, how
+  much of the neighbour it takes, and the leaf flutter. The pieces themselves (pivot, angle, stem, pace)
+  are in the manifest. Flower heads are found by colour, and a head counts whole when any part of it is
+  near leaves (a big tulip's middle is far from its leaves; counted only along its rim it stayed still).
+  Leaves with no flower get a piece per `cell`.
+- `{scene}-{theme}-mask.webp`: R how much of its piece's sway a pixel takes, G water, B the sky layer
+  (hidden, open or cut out).
+- `{scene}-{theme}-plate.webp`: the clean plate (a smooth sky fitted around each cut-out, as the kite
+  eraser does, or inpainted grass).
+- `{scene}-{theme}-atlas.webp`: the cut-outs.
+
+That is about 250 KB per scene and theme, none of it in the first paint, plus
+`web/components/marketing/motion-manifest.ts`. The script also writes review pictures to `review/motion/`:
+`{scene}-masks.jpg` (every piece in its own colour with a dot at its pivot, flutter whitened, water blue,
+cut-outs magenta, still things outlined yellow), `{scene}-{theme}-plate.jpg` (the art with everything cut
+out) and the atlases. After changing a region, look at those: no colour may touch a character, a face, a
+phone or a building edge, and every tree and flower should have one. The script prints the largest weight
+on still pixels (must be 0) and how far the rest frame is from the picture. Given the same art and
+`motion.json` it writes the same files.
 
 On the page the layer costs nothing up front. Three.js (its own chunk) and the scene's data load only after
 the page has loaded and gone idle, and only for a scene near the viewport, so the picture stays the first

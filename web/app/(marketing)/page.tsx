@@ -1,8 +1,12 @@
 import type { Metadata } from "next";
+import type { CSSProperties } from "react";
 import Link from "next/link";
 import { AppStoreBadge } from "@/components/marketing/app-store-badge";
 import { SceneStage, Spot, sceneVars, type SceneSlot } from "@/components/marketing/art";
 import { IPhone, PeekPhone } from "@/components/marketing/iphone";
+import { lifts, type LiftName } from "@/components/marketing/lifts-manifest";
+import { Reveal } from "@/components/marketing/reveal";
+import { ShareCallouts, ShareList } from "@/components/marketing/share-callouts";
 import { getArticle } from "@/components/marketing/content";
 import { ArrowRight, Check, Icon, type IconName } from "@/components/marketing/marks";
 import {
@@ -28,72 +32,28 @@ const facts = [
   { value: "25", label: "share links free, before you need Pro" },
 ];
 
+/* Three ways to record: three whole iPhones standing on the terrace, each playing its recorded flow. */
 const ways = [
-  {
-    screen: "flow-screen" as const,
-    flow: "screen" as const,
-    icon: "screen" as IconName,
-    tone: "mk-tile--blue",
-    title: "Screen",
-    text: "Show anything on your iPhone, with your voice over it. Snapreel keeps recording while you use other apps.",
-  },
-  {
-    screen: "flow-camera" as const,
-    flow: "camera" as const,
-    icon: "camera" as IconName,
-    tone: "mk-tile--peach",
-    title: "Camera",
-    text: "Talk to the front or back camera, with your notes on screen so you never lose your place.",
-  },
-  {
-    screen: "flow-voice" as const,
-    flow: "voice" as const,
-    icon: "mic" as IconName,
-    tone: "mk-tile--mint",
-    title: "Voice",
-    text: "Just your voice, with a live waveform. Lock your iPhone and it keeps going.",
-  },
+  { screen: "flow-screen" as const, flow: "screen" as const, icon: "screen" as IconName, title: "Screen", text: "Your screen, with your voice over it." },
+  { screen: "flow-camera" as const, flow: "camera" as const, icon: "camera" as IconName, title: "Camera", text: "Front or back, with your notes on screen." },
+  { screen: "flow-voice" as const, flow: "voice" as const, icon: "mic" as IconName, title: "Voice", text: "Lock your iPhone and it keeps going." },
 ];
 
-/* The floating cards around the phone in the features scene. */
-const linkFeatures: { icon: IconName; title: string; text: string; pro?: boolean }[] = [
-  { icon: "link", title: "Ready the moment you stop", text: "Tap Copy link and paste it anywhere. The video uploads while people open it." },
-  { icon: "browser", title: "Plays in any browser", text: "On a phone, a tablet or a laptop. Previews show in Messages, Slack and WhatsApp." },
-  { icon: "chat", title: "Comments at the second", text: "Viewers comment or react at the exact moment they mean. You get an alert." },
-  { icon: "chart", title: "See who watched", text: "Views and unique viewers on every link. With Pro: who, how far, and where." },
+/* Your phone. Your files: pieces of the app lifted out of the Library phone's screen (scripts/web-lifts.py),
+   placed in % of the phone's box: x the left edge, y the middle, w the width; from: where they slide in from. */
+const liftPieces: { name: LiftName; x: number; y: number; w: number; from: number; behind?: boolean; alt: string }[] = [
+  { name: "row-checkout", x: 40, y: 43, w: 108, from: -30, behind: true, alt: "" },
+  { name: "saved", x: -52, y: 14, w: 62, from: 40, alt: "Saved on this iPhone" },
+  { name: "tabs", x: 46, y: 28, w: 96, from: -40, alt: "Notes, Transcript and Comments" },
+  { name: "row-feedback", x: -66, y: 64, w: 122, from: 36, alt: "A recording in the library: Feedback on the onboarding copy, in the Clients folder" },
+  { name: "actions", x: 30, y: 86, w: 112, from: -36, alt: "Edit title, Save to Photos and Watch later" },
 ];
 
-const privateTiles: { icon: IconName; tone: string; title: string; text: string }[] = [
-  {
-    icon: "person",
-    tone: "mk-tile--blue",
-    title: "No account to record",
-    text: "Open the app and press record. You sign in only when you make your first link.",
-  },
-  {
-    icon: "text",
-    tone: "mk-tile--mint",
-    title: "Transcripts made on your iPhone",
-    text: "Read a recording, search it, and jump to the moment you need.",
-  },
-  {
-    icon: "stop",
-    tone: "mk-tile--butter",
-    title: "Stop sharing deletes the copy",
-    text: "Turn a link off and the uploaded video is deleted. The recording stays on your iPhone.",
-  },
-  {
-    icon: "photo",
-    tone: "mk-tile--peach",
-    title: "Save to Photos or Files",
-    text: "It's your video. Keep a copy in Photos, or send the file with any app.",
-  },
-  {
-    icon: "lock",
-    tone: "mk-tile--rose",
-    title: "Free on your iPhone, forever",
-    text: "No trial and no catch. Pro only changes what your share links can do.",
-  },
+const privatePoints: { icon: IconName; title: string; text: string }[] = [
+  { icon: "lock", title: "On your iPhone", text: "Nothing uploads until you tap Copy link." },
+  { icon: "stop", title: "Stop sharing", text: "Deletes the uploaded copy." },
+  { icon: "person", title: "No account", text: "Open the app and press record." },
+  { icon: "photo", title: "Save anywhere", text: "Photos, Files or any app." },
 ];
 
 const proList = [
@@ -224,35 +184,57 @@ export default function Home() {
       </div>
 
       {/* ------------------------------------------------------------------ Three ways */}
-      <section id="record" aria-labelledby="record-title" className="mt-20 scroll-mt-24 sm:mt-28">
-        <Container>
+      <section
+        id="record"
+        aria-labelledby="record-title"
+        className="mk-scene mk-scene--flow mt-20 scroll-mt-24 sm:mt-28"
+        style={sceneVars("scene-pricing", {
+          "--px": "50%",
+          "--pw": "min(47%, 720px)",
+          "--pb": "6%",
+          "--tuck": "-24px",
+          "--tuck-d": "-40px",
+          "--px-m": "50%",
+          "--pw-m": "92%",
+          "--pb-m": "5%",
+        })}
+      >
+        <div className="mk-scene-content px-[var(--mk-gutter)] pt-16 sm:pt-24">
           <SectionHeading
+            center
             id="record-title"
             label="Record"
             title="Three ways to record. One red button."
-            intro="Pick Screen, Camera or Voice, tap record, and Snapreel counts you in. When you stop, you can watch it back, give it a title and send it."
+            intro="Pick Screen, Camera or Voice and tap record. Snapreel counts you in, and you can watch it back the moment you stop."
+            className="[&_p:last-child]:text-[var(--mk-sky-ink-2)]"
           />
-          <ul className="mt-10 grid grid-cols-1 gap-4 md:grid-cols-3">
-            {ways.map((w) => (
-              <li key={w.screen} className={`mk-tile ${w.tone} flex flex-col overflow-hidden`}>
-                <div className="px-6 pt-6 sm:px-7 sm:pt-7">
-                  <span className="mk-icon mk-icon--on-tile">
-                    <Icon name={w.icon} />
-                  </span>
-                  <h3 className="mk-display mt-4 text-2xl font-bold">{w.title}</h3>
-                  <p className="mt-1.5 leading-relaxed text-text-2">{w.text}</p>
-                </div>
-                <PeekPhone
-                  screen={w.screen}
-                  flow={w.flow}
-                  crop={0.06}
-                  sizes="(min-width: 768px) 250px, 66vw"
-                  className="mx-auto mt-auto w-[68%] max-w-[250px] pt-8"
-                />
-              </li>
-            ))}
-          </ul>
-        </Container>
+        </div>
+        <div className="relative">
+          <SceneStage slot="scene-pricing" sizes="100vw">
+            <Reveal className="mk-ways-row">
+              <ul>
+                {ways.map((w, i) => (
+                  <li
+                    key={w.flow}
+                    className={`mk-way ${i === 1 ? "mk-way--main" : ""}`}
+                    style={{ "--d": `${i * 140}ms` } as CSSProperties}
+                  >
+                    <p className="mk-way-tag">
+                      <span className="mk-icon">
+                        <Icon name={w.icon} size={18} />
+                      </span>
+                      <span>
+                        {w.title}
+                        <small>{w.text}</small>
+                      </span>
+                    </p>
+                    <IPhone screen={w.screen} flow={w.flow} ground sizes="(min-width: 1024px) 220px, 30vw" className="w-full" />
+                  </li>
+                ))}
+              </ul>
+            </Reveal>
+          </SceneStage>
+        </div>
       </section>
 
       {/* ------------------------------------------------------------------ Share links (scene) */}
@@ -284,71 +266,68 @@ export default function Home() {
         <div className="relative">
           <SceneStage slot="scene-features" sizes="100vw">
             <IPhone screen="flow-comments" flow="comments" ground sizes="(min-width: 1024px) 320px, 54vw" />
+            <ShareCallouts />
           </SceneStage>
-          {/* Wide screens: the cards sit around the phone (320 px wide at most, centred), overlapping its
-              edges. --pe is the phone's half width. */}
-          <ul className="mk-share-comp grid grid-cols-1 gap-3 bg-canvas px-[var(--mk-gutter)] pt-6 sm:grid-cols-2 lg:block lg:bg-transparent lg:p-0 lg:[--pe:min(10.75cqw,160px)]">
-            {linkFeatures.map((f, i) => (
-              <li
-                key={f.title}
-                className={`mk-card mk-card--s mk-card--float mk-share-card flex items-start gap-3.5 p-4 sm:p-5 ${
-                  [
-                    "lg:right-[calc(50%+var(--pe)-48px)] lg:top-[16%]",
-                    "lg:right-[calc(50%+var(--pe)-28px)] lg:top-[45%]",
-                    "lg:left-[calc(50%+var(--pe)-40px)] lg:top-[24%]",
-                    "lg:left-[calc(50%+var(--pe)-60px)] lg:top-[53%]",
-                  ][i]
-                }`}
-              >
-                <span className="mk-icon">
-                  <Icon name={f.icon} />
-                </span>
-                <span className="min-w-0">
-                  <span className="block font-semibold leading-snug">{f.title}</span>
-                  <span className="mt-1 block text-sm leading-snug text-text-2">{f.text}</span>
-                </span>
-              </li>
-            ))}
-          </ul>
+          <ShareList />
         </div>
       </section>
 
       {/* ------------------------------------------------------------------ Private by default */}
       <section id="private" aria-labelledby="private-title" className="mt-20 scroll-mt-24 sm:mt-28">
-        <Container className="grid grid-cols-1 gap-10 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)] lg:gap-14">
-          <div className="lg:sticky lg:top-28 lg:self-start">
-            <SectionHeading
-              id="private-title"
-              label="Private by default"
-              title="Your phone. Your files."
-              intro="Everything you record stays on your iPhone. Nothing is uploaded until you tap Copy link, and Stop sharing deletes the uploaded copy."
-            />
-            <Link href="/privacy" className="mk-button mk-button--quiet mt-7">
-              Read the privacy policy
-              <ArrowRight size={18} />
-            </Link>
-          </div>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <div className="flex flex-col gap-4">
-              <div className="mk-tile mk-tile--lilac overflow-hidden">
-                <div className="px-6 pt-6">
-                  <span className="mk-icon mk-icon--on-tile">
-                    <Icon name="folder" />
-                  </span>
-                  <h3 className="mt-4 text-lg font-semibold leading-snug">Library, folders and tags</h3>
-                  <p className="mt-1 text-[0.9375rem] leading-relaxed text-text-2">Find any recording with folders, tags and search.</p>
-                </div>
-                <PeekPhone screen="library" crop={0.36} sizes="(min-width: 640px) 240px, 72vw" className="mx-auto mt-7 w-[74%] max-w-[240px]" />
+        <Container>
+          <div className="mk-private grid grid-cols-1 items-center gap-12 px-6 py-12 sm:px-10 sm:py-14 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)] lg:gap-6 lg:py-16 lg:pl-14 lg:pr-8">
+            <div>
+              <p className="mk-label">Private by default</p>
+              <h2 id="private-title" className="mk-title mt-4 text-[2.25rem] text-white sm:text-[3rem]">
+                Your phone.
+                <br />
+                Your files.
+              </h2>
+              <p className="mt-4 max-w-md text-lg leading-relaxed text-white/75">
+                Everything you record stays on your iPhone, until you choose to share it.
+              </p>
+              <ul className="mt-8 grid grid-cols-1 gap-3 min-[480px]:grid-cols-2">
+                {privatePoints.map((t) => (
+                  <li key={t.title} className="flex items-start gap-3 rounded-[var(--mk-r-l)] bg-white/[0.06] p-4 ring-1 ring-white/[0.08]">
+                    <span className="mk-icon !bg-white/10 !text-white">
+                      <Icon name={t.icon} />
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block font-semibold leading-snug">{t.title}</span>
+                      <span className="mt-0.5 block text-sm leading-snug text-white/65">{t.text}</span>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              <Link href="/privacy" className="mk-button mk-button--white mt-8">
+                Read the privacy policy
+                <ArrowRight size={18} />
+              </Link>
+            </div>
+            <Reveal className="mk-lifts py-4 lg:py-8">
+              <div className="mk-private-stage">
+                {liftPieces.map((p, i) => (
+                  <div
+                    key={p.name}
+                    className={`mk-lift-piece ${p.behind ? "mk-lift-piece--behind" : ""}`}
+                    style={{ "--x": p.x, "--y": p.y, "--w": p.w, "--from": p.from, "--d": `${150 + i * 110}ms` } as CSSProperties}
+                  >
+                    <picture>
+                      <source media="(prefers-color-scheme: dark)" srcSet={`/marketing/lifts/${p.name}-dark.webp`} />
+                      <img
+                        src={`/marketing/lifts/${p.name}-light.webp`}
+                        width={Math.round(lifts[p.name].w * 2)}
+                        height={Math.round(lifts[p.name].h * 2)}
+                        alt={p.alt}
+                        loading="lazy"
+                        decoding="async"
+                      />
+                    </picture>
+                  </div>
+                ))}
+                <IPhone screen="library" sizes="(min-width: 1024px) 300px, 46vw" />
               </div>
-              {privateTiles.slice(0, 1).map((t) => (
-                <PrivateTile key={t.title} {...t} />
-              ))}
-            </div>
-            <div className="flex flex-col gap-4">
-              {privateTiles.slice(1).map((t) => (
-                <PrivateTile key={t.title} {...t} />
-              ))}
-            </div>
+            </Reveal>
           </div>
         </Container>
       </section>
@@ -485,17 +464,5 @@ export default function Home() {
         </Container>
       </section>
     </>
-  );
-}
-
-function PrivateTile({ icon, tone, title, text }: { icon: IconName; tone: string; title: string; text: string }) {
-  return (
-    <div className={`mk-tile ${tone} p-6`}>
-      <span className="mk-icon mk-icon--on-tile">
-        <Icon name={icon} />
-      </span>
-      <h3 className="mt-4 text-lg font-semibold leading-snug">{title}</h3>
-      <p className="mt-1 text-[0.9375rem] leading-relaxed text-text-2">{text}</p>
-    </div>
   );
 }

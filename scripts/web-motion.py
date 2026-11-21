@@ -5,15 +5,22 @@ The scenes stay the pictures web-compose.py exports. This script makes what the 
 bring them to life, per scene and per theme (Light and Dusk), from the regions authored in
 art/web/motion.json:
 
-  {scene}-{theme}-mask.webp    half-size, lossless. R: wind sway weight (tree crowns, bushes, flowers).
+  {scene}-{theme}-mask.webp    half-size, lossless. R: how much of its piece's sway a pixel takes (1 inside
+                               a crown or a flower, falling to 0 towards anything that must not move).
                                G: water. B: 0 where a tree or anything solid hides the sky layer (clouds
                                and birds pass behind it), 128 elsewhere, 255 where a painted element was
                                cut out and the clean plate shows instead.
+  {scene}-seg.webp             half-size, lossless, the same for both themes. Which swaying piece a pixel
+                               belongs to: R the piece, G its neighbour (0: none), B's high four bits how
+                               much of the neighbour's movement it takes (0..15 = 0..1/2), B's low four
+                               bits the leaf flutter (crown edges only). The pieces themselves (a tree, a
+                               clump of the tree line, a flower: pivot, angle, stem, pace) go in the manifest.
   {scene}-{theme}-plate.webp   the clean plate: the sky (a smooth model fitted around each cut-out, as
                                web-hero-erase-kite.py does) or inpainted grass behind what was cut out.
                                Grey everywhere else, so it stays small.
-  {scene}-{theme}-atlas.webp   the cut-outs with alpha: clouds, the two painted birds, the kite and its
-                               tail, the butterflies.
+  {scene}-{theme}-atlas.webp   the cut-outs with alpha: clouds (made whole where a tree or the picture's
+                               edge cut them), the two painted birds, the kite and its tail, the balloon,
+                               the butterflies.
 
 plus web/components/marketing/motion-manifest.ts, and review pictures in art/web/review/motion/:
 {scene}-masks.jpg (the masks tinted over the art), {scene}-{theme}-plate.jpg (the art with everything
@@ -47,11 +54,9 @@ REVIEW = ROOT / CFG["review"]
 MASK_SCALE = 0.5
 PLATE_SCALE = 0.5
 CLOUD_SCALE = 0.6  # clouds are soft; everything else is cut at full size
-# The shader moves a pixel of weight 1 by at most this many source pixels. The sway weight falls to zero
-# towards anything solid over four times this distance, so a character's or a building's edge never moves.
-MAX_SHIFT = 14
+# The sway weight is zero within this many source pixels of anything that must not move, and rises over
+# four times the distance the pixel can move, so a character's or a building's edge never moves.
 GATE_MARGIN = 5
-GATE_FALLOFF = 4 * MAX_SHIFT
 
 
 # ----------------------------------------------------------------------------------------- helpers
@@ -66,10 +71,14 @@ def ellipse(r):
 
 
 def dilate(mask, r):
+    if r >= 8:  # a wide disc is far quicker as a distance
+        return cv2.distanceTransform((~mask.astype(bool)).astype(np.uint8), cv2.DIST_L2, 5) <= r
     return cv2.dilate(mask.astype(np.uint8), ellipse(r)).astype(bool)
 
 
 def erode(mask, r):
+    if r >= 8:
+        return cv2.distanceTransform(mask.astype(np.uint8), cv2.DIST_L2, 5) > r
     return cv2.erode(mask.astype(np.uint8), ellipse(r)).astype(bool)
 
 
@@ -173,73 +182,286 @@ def bleed(rgb, alpha):
 # ----------------------------------------------------------------------------------------- structure
 
 
+def plant_colours(light):
+    """Leaf green, lavender, and the colours of flower heads (red, yellow, white)."""
+    r, g, b = light[..., 0], light[..., 1], light[..., 2]
+    green = (g > r + 8) & (g > b + 25)
+    purple = (b > g + 25) & (r > g + 5) & (b > 110)
+    red = (r > 165) & (g < 115) & (b < 120)
+    yellow = (r > 195) & (g > 135) & (b < 120)
+    white = np.minimum(np.minimum(r, g), b) > 218
+    return green, purple, red | yellow, white
+
+
+class Segments:
+    """The things that sway, each a piece with its own pivot: a tree, a clump of the tree line, a flower.
+    `label` says which piece a pixel belongs to (0: none)."""
+
+    def __init__(self, w, h):
+        self.label = np.zeros((h, w), np.uint16)
+        self.items = []
+
+    def add(self, region, pivot, sway, reach, freq, bend=0.0, flutter=0.0, blur=8.0, kind="tree", at=None):
+        """`sway`: how far (source pixels) the point `reach` away from the pivot moves in a full gust.
+        `bend` > 0: a stem of that length that bends from the pivot up, instead of a rigid piece.
+        `at`: the window of the picture `region` is given in (default: the whole picture)."""
+        if not region.any():
+            return
+        self.items.append({"pivot": pivot, "amp": sway / max(reach, 1.0), "reach": reach, "freq": freq, "bend": bend, "flutter": flutter, "blur": blur, "kind": kind})
+        (self.label if at is None else self.label[at])[region] = len(self.items)
+
+
 def structure(scene, slot, light, w, h):
-    """Sway weight, water and the solid/"free" maps, from the Light picture and the authored regions."""
+    """What sways and how, the water and the solid/"free" maps, from the Light picture and the authored
+    regions. The maps for the page are made at half size (hw x hh)."""
     foliage, sky, free = classify(light)
+    green, purple, heads, white = plant_colours(light)
     horizon = scene["horizon"]
     above = np.zeros((h, w), bool)
     above[: int(horizon * h)] = True
+    hw, hh = round(w * MASK_SCALE), round(h * MASK_SCALE)
 
-    # Authored things that never move, plus the hero's foreground cut-out (it is a static picture in front
-    # of the phone, so the canvas under it must stay still too).
-    fixed = np.zeros((h, w), bool)
+    # Authored boxes around characters and objects that never move. Inside a box, whatever is not a plant
+    # is still (found by colour, so the trees and the grass between two people can move); thin ink lines
+    # inside foliage don't count.
+    plantish = foliage | green | purple
+    boxes = np.zeros((h, w), bool)
     for box in scene.get("exclude", []):
         x0, y0, x1, y1 = px_box(box, w, h)
-        fixed[y0:y1, x0:x1] = True
-    if slot.get("foreground"):
-        x0, y0, x1, y1 = px_box(slot["foreground"], w, h)
-        fixed[y0:y1, x0:x1] = True
+        boxes[y0:y1, x0:x1] = True
+    fixed = big_parts(opened(boxes & ~plantish & ~(sky & above), 4), 500)
+    # ...and there only the sky's own blue is open sky: a white sleeve or a lamp's globe hides the clouds.
+    free = free & ~(boxes & ~sky) & ~dilate(fixed, 2)
 
+    hsv = cv2.cvtColor(light.astype(np.uint8), cv2.COLOR_RGB2HSV)
+    hue, sat, val = hsv[..., 0].astype(np.int32) * 2, hsv[..., 1], hsv[..., 2]
+    trunk = (hue >= 8) & (hue <= 40) & (sat >= 70) & (val >= 45) & (val <= 205)
+
+    lum = light @ np.array([0.299, 0.587, 0.114], np.float32)
+    rough = cv2.GaussianBlur(np.abs(lum - cv2.GaussianBlur(lum, (0, 0), 4)), (0, 0), 10)
+    drawn = cv2.morphologyEx((rough > 9).astype(np.uint8), cv2.MORPH_CLOSE, ellipse(14)).astype(bool)
+
+    segs = Segments(w, h)
     trees = scene.get("trees", [])
     in_tree = np.zeros((h, w), bool)
-    tree_w = np.zeros((h, w), np.float32)
-    yy, xx = np.mgrid[0:h, 0:w].astype(np.float32)
     for t in trees:
-        m = poly_mask(t["poly"], w, h)
-        in_tree |= m
-        soft = cv2.GaussianBlur(m.astype(np.float32), (0, 0), 14)
-        if "anchor" in t:
-            ax, ay = t["anchor"][0] * w, t["anchor"][1] * h
-            pts = np.array(t["poly"]) * [w, h]
-            reach = 0.75 * np.max(np.hypot(pts[:, 0] - ax, pts[:, 1] - ay))
-            soft = soft * np.clip(np.hypot(xx - ax, yy - ay) / reach, 0, 1)
-        tree_w = np.maximum(tree_w, soft * t.get("amp", 1))
-
-    # Around the trees, whatever is neither foliage nor sky is solid: trunks, characters, lamp posts,
-    # buildings. Opening drops the leaves' ink lines and thin twigs.
+        in_tree |= poly_mask(t["poly"], w, h)
     near_tree = dilate(in_tree, 40)
-    solid = near_tree & ~foliage & ~(free & above)
-    solid = big_parts(opened(solid, 5), 260)
 
-    near_leaf = cv2.GaussianBlur(dilate(foliage & near_tree, 9).astype(np.float32), (0, 0), 6)
-    weight = tree_w * near_leaf
+    # -- the tree line: split into clumps, each swaying about its foot
+    for t in trees:
+        if "pivot" in t:
+            continue
+        m = poly_mask(t["poly"], w, h)
+        # Trees are drawn with leaves and shading; a lawn or a far hill, though just as green, is flat.
+        leaf = opened(foliage & drawn & m & ~fixed, 2)
+        if not leaf.any():
+            continue
+        small = cv2.resize(leaf.astype(np.uint8), (hw, hh), interpolation=cv2.INTER_AREA) > 0
+        depth = cv2.GaussianBlur(cv2.distanceTransform(small.astype(np.uint8), cv2.DIST_L2, 5), (0, 0), t.get("grain", 0.004) * hw)
+        sep = max(3, int(t.get("split", 0.02) * hw))
+        peaks = (depth == ndimage.maximum_filter(depth, size=2 * sep + 1)) & (depth > 2.5) & small
+        n, plab = cv2.connectedComponents(peaks.astype(np.uint8))
+        n -= 1
+        if n <= 0:
+            continue
+        cents = np.array(ndimage.center_of_mass(peaks, plab, range(1, n + 1)))
+        seeds = np.zeros((hh, hw), np.int32)
+        seeds[cents[:, 0].round().astype(int), cents[:, 1].round().astype(int)] = np.arange(1, n + 1)
+        idx = ndimage.distance_transform_edt(seeds == 0, return_distances=False, return_indices=True)
+        own = cv2.resize(seeds[idx[0], idx[1]].astype(np.float32), (w, h), interpolation=cv2.INTER_NEAREST).astype(np.int32)
+        region_all = dilate(leaf, 6) & dilate(m, 6)
+        found = ndimage.find_objects(own * leaf, max_label=n)
+        for k in range(1, n + 1):
+            sl = found[k - 1]
+            if sl is None:
+                continue
+            mine = (own[sl] == k) & leaf[sl]
+            ys, xs = np.nonzero(mine)
+            if len(xs) < 300:
+                continue
+            ys, xs = ys + sl[0].start, xs + sl[1].start
+            top, foot = float(np.percentile(ys, 1)), float(np.percentile(ys, 97))
+            tall = max(40.0, foot - top)
+            low = ys > foot - 0.25 * tall
+            pivot = (float(np.median(xs[low])), foot + 0.12 * tall)
+            reach = 1.12 * tall
+            sway = t.get("sway", float(np.clip(7.0 + 0.05 * tall, 8.0, 20.0)))
+            pad = (slice(max(0, sl[0].start - 12), sl[0].stop + 12), slice(max(0, sl[1].start - 12), sl[1].stop + 12))
+            segs.add(region_all[pad] & (own[pad] == k), pivot, sway, reach, float(np.clip(0.52 - tall / 1400, 0.27, 0.48)), flutter=float(np.clip(tall / 420, 0.25, 0.8)), blur=5.0, kind="clump", at=pad)
 
-    beds = np.zeros((h, w), np.float32)
-    green = (light[..., 1] > light[..., 0] + 8) & (light[..., 1] > light[..., 2] + 25)
-    near_green = cv2.GaussianBlur(dilate(green, 8).astype(np.float32), (0, 0), 5)
+    # -- single trees: the whole crown, with its branches, turns about a point low on the trunk
+    for t in trees:
+        if "pivot" not in t:
+            continue
+        m = poly_mask(t["poly"], w, h)
+        pivot = (t["pivot"][0] * w, t["pivot"][1] * h)
+        ys, xs = np.nonzero(m & foliage)
+        reach = float(np.percentile(np.hypot(xs - pivot[0], ys - pivot[1]), 99)) if len(xs) else 1.0
+        segs.add(m, pivot, t.get("sway", 15.0), reach, t.get("freq", 0.2), flutter=t.get("flutter", 1.0), blur=t.get("blur", 9.0))
+
+    # -- flower beds, bushes and reeds: every flower is a stem that bends from the soil
+    plant_any = np.zeros((h, w), bool)
     for b in scene.get("beds", []):
-        m = np.zeros((h, w), np.float32)
         x0, y0, x1, y1 = px_box(b["box"], w, h)
-        m[y0:y1, x0:x1] = 1
-        beds = np.maximum(beds, cv2.GaussianBlur(m, (0, 0), 12) * b.get("amp", 0.3))
-    weight = np.maximum(weight, beds * near_green)
+        # Work in the bed's own window (the box and a margin), not the whole picture.
+        sub = (slice(max(0, y0 - 40), min(h, y1 + 40)), slice(max(0, x0 - 40), min(w, x1 + 40)))
+        oy, ox = sub[0].start, sub[1].start
+        inbox = np.zeros((sub[0].stop - oy, sub[1].stop - ox), bool)
+        inbox[y0 - oy : y1 - oy, x0 - ox : x1 - ox] = True
+        # Flower heads count inside the box; their leaves may reach a little out of it, so a bed never
+        # ends in a straight line.
+        leafy = green[sub] | purple[sub]
+        # A head counts whole when any of it is near leaves: a big tulip's middle is far from its leaves,
+        # and a head only counted along its rim stays still. (Big red or yellow shapes are not heads.)
+        cand = (heads[sub] | (white[sub] & dilate(green[sub], 22))) & inbox & ~boxes[sub]
+        n, lab, stats, _ = cv2.connectedComponentsWithStats(cand.astype(np.uint8), connectivity=8)
+        keep = np.zeros(n, bool)
+        keep[np.unique(lab[cand & dilate(leafy, 30)])] = True
+        keep[0] = False
+        keep &= stats[:, cv2.CC_STAT_AREA] <= 60000
+        bloom = keep[lab] | (cand & dilate(leafy, 30))
+        plant = big_parts((leafy | bloom) & ~fixed[sub], 40)
+        if not plant.any():
+            continue
+        plant_any[sub] |= plant
+        cell = b.get("cell", 0.018) * w
+        seeds, tops = [], []  # in the window's own pixels; a flower reaches no higher than its head
+        n, lab, stats, cents = cv2.connectedComponentsWithStats(opened(bloom & plant, 2).astype(np.uint8), connectivity=8)
+        # The biggest heads first; a small one right next to a taken one sways with it.
+        for k in sorted(range(1, n), key=lambda k: -stats[k, cv2.CC_STAT_AREA]):
+            if 60 <= stats[k, cv2.CC_STAT_AREA] <= 60000 and all(np.hypot(cents[k][0] - sx, cents[k][1] - sy) > 0.75 * cell for sx, sy in seeds):
+                seeds.append((float(cents[k][0]), float(cents[k][1])))
+                tops.append(stats[k, cv2.CC_STAT_TOP] - 12)
+        # Leaves with no flower above them ('fill': bushes, reeds, a bed inside a rim): a seed every `cell`.
+        if b.get("fill"):
+            taken = np.ones(inbox.shape, np.uint8)
+            for sx, sy in seeds:
+                taken[int(sy), int(sx)] = 0
+            far = cv2.distanceTransform(taken, cv2.DIST_L2, 5) if seeds else np.full(inbox.shape, 1e6, np.float32)
+            rng = np.random.default_rng(int(x0 * 7 + y0 * 13))
+            for gy in np.arange(y0 - oy + cell / 2, y1 - oy, cell):
+                for gx in np.arange(x0 - ox + cell / 2, x1 - ox, cell):
+                    px, py = int(gx + rng.uniform(-0.3, 0.3) * cell), int(gy + rng.uniform(-0.3, 0.3) * cell)
+                    if 0 <= px < inbox.shape[1] and 0 <= py < inbox.shape[0] and inbox[py, px] and plant[py, px] and far[py, px] > 0.7 * cell:
+                        seeds.append((float(px), float(py)))
+                        tops.append(py - 0.6 * cell)
+        if not seeds:
+            continue
+        mark = np.zeros(inbox.shape, np.int32)
+        for k, (sx, sy) in enumerate(seeds):
+            mark[int(sy), int(sx)] = k + 1
+        # A flower owns the plant pixels nearest to it, counting a step down its stem as less than half a
+        # step sideways, and no farther than a cell and a bit: the lawn around a bed stays still.
+        near, idx = ndimage.distance_transform_edt(mark == 0, sampling=(0.45, 1.0), return_indices=True)
+        own = np.where(near < 1.15 * cell, mark[idx[0], idx[1]], 0)
+        # A margin round each plant, so a head leaning out of its own outline is not cut off at it.
+        own[~(dilate(plant, 10) & ~fixed[sub])] = 0
+        rows = np.arange(inbox.shape[0])[:, None]
+        own[rows < np.array([1e9] + tops)[own]] = 0
+        for k, (sx, sy) in enumerate(seeds):
+            sx, sy = sx + ox, sy + oy
+            stem = (b["soil"] * h - sy) if "soil" in b else b.get("stem", 0.035) * h
+            stem = float(np.clip(stem, 0.012 * h, 0.1 * h))
+            sway = float(np.clip(stem * b.get("sway", 0.075), 2.5, b.get("maxSway", 10.0)))
+            freq = float(np.clip(0.72 * (90.0 / stem) ** 0.3, 0.5, 1.0))
+            segs.add(own == k + 1, (sx, sy + stem), sway, stem, freq, bend=stem, flutter=0.0, blur=5.0, kind="flower", at=sub)
 
-    # Fall to zero towards anything that must not move.
+    # Around the trees, whatever is neither foliage, branch nor sky is solid: lamp posts, benches, walls,
+    # anything dark or strongly coloured. Opening drops the leaves' ink lines and thin twigs. The pale
+    # skyline far behind the tree line is not: a tree's edge has to be able to move across it.
+    pale = (val > 150) & (sat < 90)
+    solid = near_tree & ~foliage & ~trunk & ~(free & above) & ~plant_any & ~(pale & above)
+    solid = big_parts(opened(solid, 5), 260)
     still = solid | fixed
-    gate = np.clip((cv2.distanceTransform((~still).astype(np.uint8), cv2.DIST_L2, 5) - GATE_MARGIN) / GATE_FALLOFF, 0, 1)
-    weight = np.minimum(cv2.GaussianBlur(weight, (0, 0), 3), gate)
+
+    # ------------------------------------------------------------------ half-size maps for the page
+    label = cv2.resize(segs.label, (hw, hh), interpolation=cv2.INTER_NEAREST)
+    n = len(segs.items)
+    if n > 255:
+        count = {k: sum(i["kind"] == k for i in segs.items) for k in ("tree", "clump", "flower")}
+        raise SystemExit(f"{n} swaying pieces {count}: more than fit in a byte; raise 'split' or 'cell' in motion.json")
+    # Soft membership, so neighbours blend into each other instead of tearing: the two strongest per pixel.
+    m1 = np.zeros((hh, hw), np.float32)
+    m2 = np.zeros((hh, hw), np.float32)
+    i1 = np.zeros((hh, hw), np.uint8)
+    i2 = np.zeros((hh, hw), np.uint8)
+    reachmax = np.zeros((hh, hw), np.float32)  # how far a pixel can be moved, in source pixels
+    hy, hx = np.mgrid[0:hh, 0:hw].astype(np.float32)
+    for k, sl in enumerate(ndimage.find_objects(label, max_label=n)):
+        if sl is None:
+            continue
+        item = segs.items[k]
+        pad = int(3 * item["blur"] / 2) + 2
+        sl = (slice(max(0, sl[0].start - pad), min(hh, sl[0].stop + pad)), slice(max(0, sl[1].start - pad), min(hw, sl[1].stop + pad)))
+        mem = cv2.GaussianBlur((label[sl] == k + 1).astype(np.float32), (0, 0), item["blur"] / 2)
+        a, b, ia, ib = m1[sl], m2[sl], i1[sl], i2[sl]
+        first = mem > a
+        second = ~first & (mem > b)
+        b[first], ib[first] = a[first], ia[first]
+        a[first], ia[first] = mem[first], k + 1
+        b[second], ib[second] = mem[second], k + 1
+        dx, dy = hx[sl] * 2 - item["pivot"][0], hy[sl] * 2 - item["pivot"][1]
+        if item["bend"]:
+            moved = item["amp"] * item["bend"] * np.clip(-dy / item["bend"], 0, 1.25) ** 1.3 * 1.25
+        else:
+            moved = item["amp"] * np.hypot(dx, dy)
+        reachmax[sl] = np.maximum(reachmax[sl], np.where(mem > 0.02, moved + 3.0 * item["flutter"], 0))
+    i2[m2 < 0.02] = 0
+    member = np.clip(m1 + np.where(i2 > 0, m2, 0), 0, 1)
+    mix = np.where(i2 > 0, m2 / np.maximum(m1 + m2, 1e-6), 0)
+
+    # Fall to zero towards anything that must not move: over 2.5 times the distance a pixel can move next
+    # to a character or an authored object, and over 1.2 times that distance next to what merely stands
+    # beside a tree (a lamp post, a bench), so a pixel never moves as far as the still thing is away.
+    half = lambda m: cv2.resize(m.astype(np.uint8), (hw, hh), interpolation=cv2.INTER_AREA) > 0
+    still_h = half(still)
+    away = lambda m: cv2.distanceTransform((~half(m)).astype(np.uint8), cv2.DIST_L2, 5) * 2 - GATE_MARGIN
+    can = cv2.GaussianBlur(reachmax, (0, 0), 4)
+    gate = np.clip(np.minimum(away(fixed) / (2.5 * can + 4), away(solid) / (1.2 * can + 2)), 0, 1)
+    weight = np.minimum(member, gate)
     weight[weight < 0.02] = 0
+
+    # Leaf flutter: only in a band along the crowns' outer edges (and the edges of their leaf clumps).
+    scale = np.array([0.0] + [i["flutter"] for i in segs.items], np.float32)[i1]
+    leaf_h = cv2.resize((foliage & (segs.label > 0)).astype(np.uint8), (hw, hh), interpolation=cv2.INTER_AREA) > 0
+    crown = cv2.morphologyEx(leaf_h.astype(np.uint8), cv2.MORPH_CLOSE, ellipse(6))
+    inside = cv2.distanceTransform(crown, cv2.DIST_L2, 5)
+    flutter = np.clip(1 - (inside - 2) / 20, 0, 1) * scale * (weight > 0)
+    flutter = cv2.GaussianBlur(flutter.astype(np.float32), (0, 0), 2)
 
     water = np.zeros((h, w), np.float32)
     if "water" in scene:
         r, g, b = light[..., 0], light[..., 1], light[..., 2]
-        blue = (b > r + 20) & (b > g - 5)
-        # The pond is told by its colour, so a hand, a phone, reeds or stones in front of it stay out.
-        m = opened(poly_mask(scene["water"], w, h) & blue, 3)
-        still_w = dilate(m, 12) & ~m
-        water = np.clip((cv2.distanceTransform((~still_w).astype(np.uint8), cv2.DIST_L2, 5) - 3) / 24, 0, 1) * m
+        # The pond is told by its colour (blue water, green reflections, lily pads), so a sleeve, a hand,
+        # a phone or a stone in front of it stay out.
+        pond = poly_mask(scene["water"], w, h)
+        wet = ((b > r - 5) | (g > r + 10)) & (val > 60)
+        m = ndimage.binary_fill_holes(opened(pond & wet, 3)) & pond
+        water = np.clip(cv2.distanceTransform(m.astype(np.uint8), cv2.DIST_L2, 5) / 14, 0, 1)
 
-    return {"near_tree": near_tree, "foliage": foliage, "sky": sky, "free": free, "above": above, "solid": solid, "fixed": fixed, "weight": weight, "water": water}
+    kinds = {}
+    for item in segs.items:
+        kinds[item["kind"]] = kinds.get(item["kind"], 0) + 1
+    rows = [[round(i["pivot"][0]), round(i["pivot"][1]), round(i["amp"] * 1e4), round(i["bend"]), round(i["freq"] * 100)] for i in segs.items]
+    return {
+        "near_tree": near_tree,
+        "foliage": foliage,
+        "sky": sky,
+        "free": free,
+        "above": above,
+        "solid": solid,
+        "fixed": fixed,
+        "still_h": still_h,
+        "weight": weight,
+        "water": water,
+        "i1": i1,
+        "i2": i2,
+        "mix": mix,
+        "flutter": flutter,
+        "segs": rows,
+        "kinds": kinds,
+    }
 
 
 # ----------------------------------------------------------------------------------------- cut-outs
@@ -361,7 +583,8 @@ def cut_theme(scene, st, img, theme, w, h):
         leafy = (g > b * 1.6 + 10) | ((np.maximum(np.maximum(r, g), b) < 75) & (g >= b - 4))
         # Nor anything dark and warm (a lamp's cap, a branch): the dusk sky and its clouds are never both.
         warm = (r > b + 10) & (np.maximum(np.maximum(r, g), b) < 140)
-        free = erode(free, 1) & ~dilate((leafy & st["near_tree"]) | warm, 3)
+        fruit = (r > 185) & (g > 150) & (b < 110) & st["near_tree"]  # lemons catch the last light
+        free = erode(free, 1) & ~dilate((leafy & st["near_tree"]) | warm | fruit, 3)
     hidden = st["above"] & ~free  # what stands in front of the sky layer
     cand = erode(st["sky"], 5) & st["above"]
     atlas = Atlas()
@@ -386,7 +609,7 @@ def cut_theme(scene, st, img, theme, w, h):
 
     # Other elements inside a cloud's box must not end up in the cloud.
     taken = np.zeros((h, w), bool)
-    for box in scene.get("birds", []) + ([scene["kite"]["box"]] if "kite" in scene else []):
+    for box in scene.get("birds", []) + scene.get("bulbs", []) + [scene[k]["box"] for k in ("kite", "balloon") if k in scene]:
         x0, y0, x1, y1 = px_box(box, w, h)
         taken[y0:y1, x0:x1] = True
 
@@ -433,6 +656,19 @@ def cut_theme(scene, st, img, theme, w, h):
             kite[name] = {"r": [x0 + tx0, y0 + ty0, tx1 - tx0, ty1 - ty0], "i": atlas.add(rgb[ty0:ty1, tx0:tx1], a[ty0:ty1, tx0:tx1])}
         data["kite"] = kite
 
+    # -- the hot-air balloon (with its basket)
+    if "balloon" in scene:
+        box = px_box(scene["balloon"]["box"], w, h)
+        x0, y0, x1, y1 = box
+        model, sigma = fit_sky(img, cand & ~taken, box, w, h, scene["horizon"])
+        alpha, sky = matte(img, model, sigma, box, soft=30.0)
+        alpha = alpha * dilate(big_parts(dilate(alpha > 0.3, 6), 400), 3)
+        rgb = unmix(img[y0:y1, x0:x1], sky, alpha)
+        paint_out(box, sky, dilate(alpha > 0.02, 5))
+        put_back(box, rgb, alpha)
+        tx0, ty0, tx1, ty1 = trim(alpha)
+        data["balloon"] = {"r": [x0 + tx0, y0 + ty0, tx1 - tx0, ty1 - ty0], "i": atlas.add(rgb[ty0:ty1, tx0:tx1], alpha[ty0:ty1, tx0:tx1])}
+
     # -- the two painted birds
     for bbox in scene.get("birds", []):
         box = px_box(bbox, w, h)
@@ -477,24 +713,47 @@ def cut_theme(scene, st, img, theme, w, h):
         rgb = unmix(sub, sky, alpha)
         paint_out(box, sky, dilate(alpha > 0.02, 5) & open_sky)
         put_back(box, rgb, alpha)
-        # Carry the cloud on a little behind the trees in front of it, so drifting never opens a gap: the
-        # nearest cloud colour, thinning out over 60 px. If the drift brings that part into the open, it
-        # reads as a soft edge of the same cloud.
-        behind = hidden[y0:y1, x0:x1]
-        solid = alpha > 0.5
-        reach, near = ndimage.distance_transform_edt(~solid, return_indices=True)
-        grow = behind & (reach < 60)
+        # Make the cloud whole, so it can drift right across the sky. Behind the trees in front of it, it
+        # is carried on in rounded lobes (the cloud's own shape grown into what the tree hides, never
+        # below its flat base)...
+        reach = int(np.clip(0.45 * (y1 - y0), 50, 140))
+        gx0, gy0, gx1, gy1 = max(0, x0 - reach), max(0, y0 - reach), min(w, x1 + reach), min(h, y1 + reach)
+        inner = (slice(y0 - gy0, y1 - gy0), slice(x0 - gx0, x1 - gx0))
+        wide_a = np.zeros((gy1 - gy0, gx1 - gx0), np.float32)
+        wide_c = np.zeros((gy1 - gy0, gx1 - gx0, 3), np.float32)
+        wide_a[inner], wide_c[inner] = alpha, rgb
+        behind = hidden[gy0:gy1, gx0:gx1]
+        solid = wide_a > 0.5
+        rows = solid.sum(1)
+        base = int(np.nonzero(rows > 0.3 * rows.max())[0].max())
+        # What a tree hides is cloud if it lies under the cloud's top (a cloud's base is flat), in a hollow
+        # of its outline, or just past its hidden end.
+        under = np.maximum.accumulate(solid, axis=0)
+        ends = cv2.dilate(solid.astype(np.uint8), np.ones((1, 61), np.uint8)).astype(bool)
+        grow = behind & (under | erode(dilate(solid, reach), reach) | ends) & ~solid
+        grow[base + 1 :] = False
         if grow.any():
             # Colour from well inside the cloud, where nothing of the tree's edge is mixed in.
-            core = erode(alpha > 0.9, 5)
-            if core.any():
-                near = ndimage.distance_transform_edt(~core, return_distances=False, return_indices=True)
-            carried = cv2.GaussianBlur(rgb[near[0], near[1]], (0, 0), 5)
-            alpha = np.where(grow, np.clip(1 - reach / 60, 0, 1) ** 1.5, alpha).astype(np.float32)
-            rgb = np.where(grow[..., None], carried, rgb).astype(np.float32)
-        tx0, ty0, tx1, ty1 = trim(alpha)
-        pin = -1 if x0 + tx0 <= 4 else 1 if x0 + tx1 >= w - 4 else 0  # cut by the picture's edge: only drift towards it
-        data["clouds"].append({"r": [x0 + tx0, y0 + ty0, tx1 - tx0, ty1 - ty0], "i": atlas.add(rgb[ty0:ty1, tx0:tx1], alpha[ty0:ty1, tx0:tx1], CLOUD_SCALE), "pin": pin})
+            core = erode(wide_a > 0.9, 5)
+            near = ndimage.distance_transform_edt(~(core if core.any() else solid), return_distances=False, return_indices=True)
+            carried = cv2.GaussianBlur(wide_c[near[0], near[1]], (0, 0), 5)
+            shape = cv2.GaussianBlur((solid | grow).astype(np.float32), (0, 0), 9) > 0.5  # round the lobes
+            grown = cv2.GaussianBlur((shape & (behind | solid)).astype(np.float32), (0, 0), 1.5)
+            fill = behind & (grown > wide_a)
+            wide_a = np.where(fill, grown, wide_a).astype(np.float32)
+            wide_c = np.where(fill[..., None], carried, wide_c).astype(np.float32)
+        tx0, ty0, tx1, ty1 = trim(wide_a)
+        rgb, alpha = wide_c[ty0:ty1, tx0:tx1], wide_a[ty0:ty1, tx0:tx1]
+        rx, rw = gx0 + tx0, tx1 - tx0
+        # ...and where the picture's edge cut it, it is closed with its own mirror image (outside the
+        # picture until it drifts in).
+        if rx <= 4:
+            rgb, alpha = np.concatenate([rgb[:, ::-1], rgb], 1), np.concatenate([alpha[:, ::-1], alpha], 1)
+            rx, rw = rx - rw, 2 * rw
+        elif rx + rw >= w - 4:
+            rgb, alpha = np.concatenate([rgb, rgb[:, ::-1]], 1), np.concatenate([alpha, alpha[:, ::-1]], 1)
+            rw = 2 * rw
+        data["clouds"].append({"r": [rx, gy0 + ty0, rw, ty1 - ty0], "i": atlas.add(rgb, alpha, CLOUD_SCALE)})
 
     # -- butterflies (on grass: GrabCut finds them, inpainting fills the grass behind)
     for b in scene.get("butterflies", []):
@@ -539,6 +798,21 @@ def cut_theme(scene, st, img, theme, w, h):
                 entry["pool"] = [round(px * w), round(py * h), round(rx * w), round(ry * w)]
             lamps.append(entry)
         data["lamps"] = lamps
+        # String lights: every bulb in the authored boxes, with the swaying piece it hangs in.
+        bulbs = []
+        for bbox in scene.get("bulbs", []):
+            x0, y0, x1, y1 = px_box(bbox, w, h)
+            sub = img[y0:y1, x0:x1]
+            lit = (lum[y0:y1, x0:x1] > 205) & (sub[..., 0] >= sub[..., 2])
+            n, labels, stats, cents = cv2.connectedComponentsWithStats(opened(lit, 2).astype(np.uint8), connectivity=8)
+            for k in range(1, n):
+                if stats[k, cv2.CC_STAT_AREA] < 150:
+                    continue
+                bx, by = float(cents[k][0] + x0), float(cents[k][1] + y0)
+                hy, hx = min(st["i1"].shape[0] - 1, int(by * MASK_SCALE)), min(st["i1"].shape[1] - 1, int(bx * MASK_SCALE))
+                bulbs.append([round(bx, 1), round(by, 1), round(float(np.sqrt(stats[k, cv2.CC_STAT_AREA] / np.pi)), 1), int(st["i1"][hy, hx]), round(float(st["weight"][hy, hx]), 2)])
+        if bulbs:
+            data["bulbs"] = sorted(bulbs)
         # Stars: small bright specks in the open sky.
         bright = (lum - cv2.medianBlur(lum.astype(np.uint8), 31) > 45) & free & ~dilate(removal, 20)
         bright[int(0.24 * h) :] = False  # lower down the specks are windows in the skyline
@@ -570,21 +844,31 @@ def save_webp(arr, path, **kw):
 
 
 def overlay(light, st, removal, scene, w, h, path):
+    """The review picture: every swaying piece in its own colour (strength = its weight) with its pivot,
+    leaf flutter white, water blue, cut-outs magenta, still things outlined yellow."""
     out = light.copy()
+    up = lambda m, how=cv2.INTER_LINEAR: cv2.resize(m, (w, h), interpolation=how)
 
     def tint(mask, colour, amount):
         a = (mask * amount)[..., None]
-        out[:] = out * (1 - a) + np.array(colour, np.float32) * a
+        out[:] = out * (1 - a) + np.asarray(colour, np.float32) * a
 
-    tint(st["weight"], (255, 0, 0), 0.75)
-    tint(st["water"], (0, 60, 255), 0.75)
+    rng = np.random.default_rng(3)
+    palette = np.concatenate([[[0, 0, 0]], rng.uniform(60, 255, (len(st["segs"]), 3)) * [1, 0.45, 0.8] + [0, 0, 0]]).astype(np.float32)
+    piece = palette[up(st["i1"], cv2.INTER_NEAREST)]
+    a = (up(st["weight"]) * 0.72)[..., None]
+    out[:] = out * (1 - a) + piece * a
+    tint(up(st["flutter"]), (255, 255, 255), 0.45)
+    tint(st["water"], (0, 60, 255), 0.7)
     tint(removal.astype(np.float32), (255, 0, 255), 0.6)
-    edge = st["solid"] ^ erode(st["solid"], 2)
-    out[edge] = (255, 235, 0)
-    edge = st["fixed"] ^ erode(st["fixed"], 3)
-    out[edge] = (255, 255, 255)
+    still = up(st["still_h"].astype(np.uint8), cv2.INTER_NEAREST) > 0
+    out[still ^ erode(still, 2)] = (255, 235, 0)
+    out = out.clip(0, 255).astype(np.uint8)
+    for x, y, amp, bend, freq in st["segs"]:
+        cv2.circle(out, (int(x), int(y)), 9 if not bend else 5, (255, 255, 255), -1)
+        cv2.circle(out, (int(x), int(y)), 9 if not bend else 5, (0, 0, 0), 2)
     small = cv2.resize(out, (1800, round(h * 1800 / w)), interpolation=cv2.INTER_AREA)
-    Image.fromarray(small.clip(0, 255).astype(np.uint8)).save(path, quality=84)
+    Image.fromarray(small).save(path, quality=84)
 
 
 def build(name):
@@ -593,19 +877,29 @@ def build(name):
     light = load(slot["light"])
     h, w = light.shape[:2]
     st = structure(scene, slot, light, w, h)
-    still = st["solid"] | st["fixed"]
-    print(f"{name}: {w}x{h}  sway on {100 * (st['weight'] > 0).mean():.1f}% of the picture, max weight on still pixels {st['weight'][still].max() if still.any() else 0:.3f}")
+    msize = (round(w * MASK_SCALE), round(h * MASK_SCALE))
+    psize = (round(w * PLATE_SCALE), round(h * PLATE_SCALE))
+    kinds = ", ".join(f"{v} {k}s" for k, v in sorted(st["kinds"].items()))
+    print(
+        f"{name}: {w}x{h}  {len(st['segs'])} swaying pieces ({kinds}) on {100 * (st['weight'] > 0).mean():.1f}% of the picture, water on {100 * (st['water'] > 0).mean():.2f}%,"
+        f" max weight on still pixels {st['weight'][st['still_h']].max() if st['still_h'].any() else 0:.3f}"
+    )
+    # Which piece, its neighbour, how much of the neighbour, and the flutter: one lossless picture.
+    seg = np.stack([st["i1"], st["i2"], (np.round(st["mix"] * 30).astype(np.uint8) << 4) | np.round(st["flutter"].clip(0, 1) * 15).astype(np.uint8)], -1)
+    size_s = save_webp(seg, OUT / f"{name}-seg.webp", lossless=True, quality=100, method=4)
+    print(f"  seg {size_s / 1024:.0f} KB")
     entry = {
         "size": [w, h],
         "mobile": slot.get("mobile"),
-        "maxShift": MAX_SHIFT,
+        "fg": slot.get("foreground"),
+        "seg": f"/marketing/motion/{name}-seg.webp",
+        "segs": st["segs"],
+        "cloudBand": scene.get("cloudBand", [0.03, 0.4]),
         "lanes": scene.get("lanes", []),
         "lanesMobile": scene.get("lanesMobile", scene.get("lanes", [])),
         "birdExit": scene.get("birdExit", [1, -0.2]),
         "water": "water" in scene,
     }
-    msize = (round(w * MASK_SCALE), round(h * MASK_SCALE))
-    psize = (round(w * PLATE_SCALE), round(h * PLATE_SCALE))
     for theme in ("light", "dark"):
         img = light if theme == "light" else load(slot["dark"])
         data, atlas, removal, plate, plate_on, hidden = cut_theme(scene, st, img, theme, w, h)
@@ -614,11 +908,11 @@ def build(name):
         blue = np.full((h, w), 128, np.float32)
         blue[hidden] = 0
         blue[removal] = 255
-        mask = np.stack([np.round(st["weight"] * 31) * (255 / 31), st["water"] * 255, blue], -1)
-        mask = cv2.resize(mask, msize, interpolation=cv2.INTER_AREA).round().astype(np.uint8)
-        mask[..., 0] = (np.round(mask[..., 0] / 255 * 31) * (255 / 31)).astype(np.uint8)  # 32 levels compress far better
-        mask[..., 1] = (np.round(mask[..., 1] / 255 * 15) * 17).astype(np.uint8)
-        size_m = save_webp(mask, OUT / f"{name}-{theme}-mask.webp", lossless=True, quality=100, method=6)
+        blue = cv2.resize(blue, msize, interpolation=cv2.INTER_AREA).round()
+        water = cv2.resize(st["water"], msize, interpolation=cv2.INTER_AREA)
+        # 32 and 16 levels compress far better
+        mask = np.stack([np.round(st["weight"] * 31) * (255 / 31), np.round(water * 15) * 17, blue], -1).astype(np.uint8)
+        size_m = save_webp(mask, OUT / f"{name}-{theme}-mask.webp", lossless=True, quality=100, method=4)
 
         flat = np.where(dilate(plate_on, 8)[..., None], plate, 128.0)
         flat = cv2.resize(flat, psize, interpolation=cv2.INTER_AREA).round().astype(np.uint8)
@@ -636,11 +930,13 @@ def build(name):
         if "kite" in data:
             place(data["kite"]["body"])
             place(data["kite"]["tail"])
+        if "balloon" in data:
+            place(data["balloon"])
         data.update(mask=f"/marketing/motion/{name}-{theme}-mask.webp", plate=f"/marketing/motion/{name}-{theme}-plate.webp", atlas=f"/marketing/motion/{name}-{theme}-atlas.webp", atlasSize=[sheet.shape[1], sheet.shape[0]])
         entry[theme] = data
         print(
             f"  {theme}: mask {size_m / 1024:.0f} KB, plate {size_p / 1024:.0f} KB, atlas {size_a / 1024:.0f} KB ({sheet.shape[1]}x{sheet.shape[0]}) = {(size_m + size_p + size_a) / 1024:.0f} KB;"
-            f" {len(data['clouds'])} clouds, {len(data['birds'])} birds; rest frame vs picture: mean {fit[0]:.3f}, p99.9 {fit[1]:.1f}, max {fit[2]:.0f} (of 255)"
+            f" {len(data['clouds'])} clouds, {len(data['birds'])} birds{', ' + str(len(data['bulbs'])) + ' bulbs' if 'bulbs' in data else ''}; rest frame vs picture: mean {fit[0]:.3f}, p99.9 {fit[1]:.1f}, max {fit[2]:.0f} (of 255)"
         )
 
         # Review pictures.

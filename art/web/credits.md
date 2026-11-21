@@ -45,3 +45,12 @@ Uploads and `media_confirm` cost nothing.
 **Total: 16.50 credits of the 60 allowed.** Every image was kept; no retries were needed.
 
 Cut-outs came straight from the model's transparent background, so `remove_background` and `rembg` were not needed.
+
+## Round 5 (owner's second review, 21 Nov 2026)
+
+| What | Model | Job IDs | Credits | Kept |
+|---|---|---|---|---|
+| Two made-up commenters' faces, two variants each, for the lifted comments | GPT Image 2.6, 1:1 | 84e4e189, a4929c12, e1354b3a, f7e3774d | 3.00 | no: the owner then chose letter avatars, as in the app |
+| Camera mode live preview: 6 s talking clip from `fixture-camera-portrait.jpg` (`flows/camera-live.mp4`) | Grok Video 1.5, 480p, 9:16 | af690827-23a6-4ff0-860a-70b48741f0aa | 15.00 | yes |
+
+**Round 5 total: 18.00 credits.**
