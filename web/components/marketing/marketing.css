@@ -592,27 +592,29 @@
     object-fit: cover;
     user-select: none;
   }
-  /* The moving layer (scene-motion.tsx): a canvas exactly over the picture, faded in once its first
-     frame, which equals the picture, is drawn. */
-  .mk-scene-motion {
+  /* The scene's video loop (scene-video.tsx): exactly over the picture, faded in once it plays. Its
+     first frame is the picture, so the fade can't be seen; it fades out again to swap files. */
+  .mk-scene-video {
     position: absolute;
     left: 0;
     top: 0;
     display: block;
     width: 100%;
     height: 100%;
+    object-fit: cover;
     pointer-events: none;
     opacity: 0;
     transition: opacity 0.6s ease;
   }
-  .mk-scene-motion[data-on] {
+  .mk-scene-video[data-on] {
     opacity: 1;
   }
-  /* The foreground cut-out's own canvas (the hero's flower bed, in front of the phone): placed over the
-     bed's box by the engine. It takes the cut-out picture's place in one go, with no fade, or the phone
-     would show through the flowers for a moment. */
-  .mk-scene-motion--fg {
-    transition: none;
+  /* The foreground cut-out redrawn from the video (the hero's front flower bed, in front of the phone):
+     a canvas over the cut-out's box, placed by scene-video.tsx. Once it has faded in, the cut-out
+     picture under it is hidden. */
+  .mk-scene-video--fg {
+    width: auto;
+    height: auto;
   }
   .mk-scene-fg[data-live] > picture {
     visibility: hidden;

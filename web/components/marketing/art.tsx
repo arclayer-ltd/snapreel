@@ -3,8 +3,8 @@
    them are drawn by iphone.tsx. */
 import type { CSSProperties, ReactNode } from "react";
 import { art, type ArtSlot } from "./art-manifest";
-import { motion } from "./motion-manifest";
-import { SceneMotion } from "./scene-motion";
+import { SceneVideo, type SceneVideoData } from "./scene-video";
+import { sceneVideos } from "./video-manifest";
 
 type Set = { avif: [number, string][]; webp: [number, string][] };
 type Crop = { width: number; height: number; light: Set; dark?: Set };
@@ -83,6 +83,11 @@ function sceneEntry(slot: SceneSlot) {
   return art[slot] as unknown as SceneEntry;
 }
 
+/** The scene's animated loop (scripts/web-scene-video.py), if it has one. */
+function sceneVideo(slot: SceneSlot): SceneVideoData | null {
+  return slot in sceneVideos ? (sceneVideos[slot as keyof typeof sceneVideos] as SceneVideoData) : null;
+}
+
 /** CSS custom properties a scene section needs: aspect ratios and the sky colours. */
 export function sceneVars(slot: SceneSlot, extra: Record<string, string | number> = {}): CSSProperties {
   const e = sceneEntry(slot);
@@ -99,8 +104,8 @@ export function sceneVars(slot: SceneSlot, extra: Record<string, string | number
 /**
  * The picture layers of a scene: the environment, an optional phone (or anything else) that
  * stands in it, and the scene's foreground cut-out in front of that. Positioned by the
- * .mk-scene CSS in marketing.css. Scenes with motion data (scripts/web-motion.py) get a canvas
- * over the environment that brings its nature to life (scene-motion.tsx).
+ * .mk-scene CSS in marketing.css. Scenes with a video loop (scripts/web-scene-video.py) get it over the
+ * environment once the page is idle (scene-video.tsx); the picture stays the first paint and the fallback.
  */
 export function SceneStage({
   slot,
@@ -116,11 +121,12 @@ export function SceneStage({
   children?: ReactNode;
 }) {
   const e = sceneEntry(slot);
+  const video = sceneVideo(slot);
   return (
     <div className="mk-scene-stage">
       <div className="mk-scene-art">
         <ScenePicture crops={{ wide: e.wide, mobile: e.mobile }} alt={alt ?? e.alt} sizes={sizes} priority={priority} />
-        {slot in motion ? <SceneMotion slot={slot as keyof typeof motion} fg={!!motion[slot as keyof typeof motion].fg} /> : null}
+        {video ? <SceneVideo data={video} /> : null}
       </div>
       {children ? <div className="mk-scene-phone">{children}</div> : null}
       {e.fg ? (
@@ -132,13 +138,16 @@ export function SceneStage({
   );
 }
 
-/** A small illustration cropped from a scene (guide cards). Decorative: the card's title says it all. */
+/** A small illustration cropped from a scene (guide cards), moving like its scene. Decorative: the card's
+    title says it all. */
 export function Spot({ slot, sizes, className = "" }: { slot: SceneSlot; sizes: string; className?: string }) {
   const e = sceneEntry(slot);
+  const video = sceneVideo(slot);
   return (
     <div className={`relative overflow-hidden ${className}`}>
       <div className="absolute inset-0 [&_img]:h-full [&_img]:w-full [&_img]:object-cover">
         <ScenePicture crops={{ wide: e.wide }} alt="" sizes={sizes} priority={false} />
+        {video ? <SceneVideo data={video} /> : null}
       </div>
     </div>
   );
