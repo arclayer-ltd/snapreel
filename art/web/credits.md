@@ -54,3 +54,39 @@ Cut-outs came straight from the model's transparent background, so `remove_backg
 | Camera mode live preview: 6 s talking clip from `fixture-camera-portrait.jpg` (`flows/camera-live.mp4`) | Grok Video 1.5, 480p, 9:16 | af690827-23a6-4ff0-860a-70b48741f0aa | 15.00 | yes |
 
 **Round 5 total: 18.00 credits.**
+
+## Round 8: AI video loops instead of the code animation (23 Nov 2026)
+
+The owner judged the Three.js sway layer a failure (trees "under water", lamps moving with the trees, boring
+clouds) and asked for AI-generated motion, cheaply. Limit: about 250 Higgsfield credits, existing credits only.
+Balance before: 2,194.84. kie.ai had 4 credits, so it was not used.
+
+**Model test (hero Light only), each with the picture as both first and last frame:**
+
+| Model | Settings | Job ID | Credits | Verdict |
+|---|---|---|---|---|
+| Outpaint (to widen the 3:2 hero to 16:9) | 16:9 | 11c998a6-cc14-449c-a82b-fb3d20f7308b | 2 | not used: it repainted the scene; the hero is stretched to 16:9 instead and squeezed back |
+| Kling 3.0 Omni Frames (`kling_o3_flf`) | pro 1080p, 8 s | a00ce6fc-5c38-4207-bfc7-77f91d8d7b7e | 10 | rock steady but almost nothing moves (one waving hand) |
+| Hailuo 02 (`minimax_hailuo`, variant `minimax`) | 1080p, 6 s | 7bccf6a7-2c68-452e-a927-ace02b84fd48 | 10 | camera shakes by about 3 px, adds butterflies, people move too much |
+| **MiniMax H3** (`minimax_h3`) | 2K, 8 s | cd97d372-3d42-4504-b398-8fbb4bf605cb | 16 | **chosen**: 2560 px, under 1 px drift, trees and flowers sway as whole branches and stems, lamps and buildings rigid, people keep their faces; kept as the hero Light loop |
+
+Hailuo 2.3 can't take a last frame. Seedance 2.5 costs 35 credits for 5 s at 720p (80 at 1080p), too dear for ten
+clips; Seedance 2.0 fast is 20 for 8 s at 1080p.
+
+**The loops (MiniMax H3, 2K, 8 s, start = end = the scene picture; 16:9, the footer and banner 21:9):**
+
+| Scene | Job ID | Credits |
+|---|---|---|
+| Hero, Light | cd97d372-3d42-4504-b398-8fbb4bf605cb (the test) | (16) |
+| Hero, Dusk | edc145e9-3dfe-403d-aae4-a3249facf9ac | 16 |
+| Features (Copy link), Light | 888c50d7-f2c9-4ddf-87ed-314d56ac1ed3 (first try 74f18d62 was wrongly flagged and refunded) | 16 |
+| Features, Dusk | c4650cb9-160f-4674-a59f-a0be4cb84b42 | 16 |
+| Pricing / rooftop, Light | 3213e46f-d5b6-4733-8c37-5b3c70d80fae | 16 |
+| Pricing / rooftop, Dusk | 0142e4f5-d4f7-4e56-915a-6fcec589628e | 16 |
+| Footer, Light | 2c2f1264-a971-4804-bd3a-9b1fa872ac1a | 16 |
+| Footer, Dusk | 93285610-6fb8-4ec4-927b-7e73298d73f1 | 16 |
+| Inner pages, Light | 7a55609e-db26-4127-8370-c7d48b426348 | 16 |
+| Inner pages, Dusk | 081dc773-abe4-41d0-af88-5b64cf7f6b1e | 16 |
+
+**Round 8 total: 182 credits** (38 for the tests and the outpaint, 144 for the nine other loops). The spots are
+cut from the same loops, so they cost nothing. The prompts are in `video-prompts.md`.
