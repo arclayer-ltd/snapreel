@@ -114,16 +114,31 @@ orthographic camera and textured planes, no 3D model).
   thin parts and ink outline as far as they are joined to it. The flower heads of a bed that reaches into
   the box are told apart from it: a head is a small island of flower colour (red, yellow, orange, white,
   pink) that stands clear of the character, so the flowers beside and behind a character sway like any
-  other bed. A flower drawn right across a leg stays with the leg.
-- A still object with flowers drawn across it (the rock in Copy link, the wall on the inner pages, the
-  hero bench's seat above its daisies) gets a `behind` polygon in `motion.json`, kept clear of the
+  other bed. A flower drawn right across a leg stays with the leg. The skyline and the pale sky behind a
+  character are not the character either: what is pale or sky-coloured above the horizon and joined to
+  the open blue sky, without crossing an ink outline, is skyline (a cream sleeve or a white shirt is
+  closed in by its outline), so a tree's crown behind a character sways like the other trees. A lamp
+  post's box is listed under `whole` and keeps to the old rule: its pale globe has no ink round it. What
+  one can see through (the bicycle's basket and wheels on the inner pages, with the trees showing through
+  them) is listed under `held` and is still through and through, the green in it too.
+- The characters and authored objects, grown 2 px over their ink outline, are also marked in the seg
+  picture's alpha as held, and the shader obeys that before anything else: a held pixel always shows
+  itself, and a pixel the wind would fill from a held one shows itself at rest instead. So a crown or a
+  flower can sway right beside an arm or a leg and slides behind it; nothing of the character is ever
+  taken along, whatever the weights say.
+- A still object in front of plants (the hero bench's seat, over the bed behind it) gets a `front`
+  polygon: it is held as above but left out of the gate below, so the daisies and tulips behind the bench
+  sway right up to the seat's edge and behind it, and the edge stays crisp.
+- A still object with flowers drawn across it (the rock in Copy link, the wall on the inner pages) gets a
+  `behind` polygon in `motion.json`, kept clear of the
   character. Inside it the object is a still layer behind the flowers, handled like the skyline below: it
   never moves, the flower heads and stems across it are ordinary pieces with full weight, and the plate
   carries the rock or wall on under them (from the object's own nearest pixels), so a head that sways
   aside uncovers painted rock. The gate then only holds towards the character itself.
 - A piece's hold on a pixel falls to zero towards anything that must not move, over more than the
-  distance that pixel can move (2.5 times it next to a character or an authored object, 1.2 times next to
-  a lamp post or a bench), so nothing still is ever reached and no outline smears.
+  distance that pixel can move (1.5 times it next to a character or an authored object, 1.2 times next to
+  a lamp post or a bench), so the movement eases to rest beside a still thing instead of being cut off at
+  it, nothing still is ever reached and no outline smears.
 - The skyline and the sky behind the trees never move either. They are found by colour above the horizon
   (pale or sky-coloured; a roof garden on a tower, with the tower's wall under it, belongs to the skyline
   and not to the tree line) and marked in the mask's alpha. The trees are drawn as a layer in front: the
@@ -155,11 +170,13 @@ orthographic camera and textured planes, no 3D model).
 trees (`poly` around the crown, `pivot` low on the trunk, `sway` in source pixels at the crown's far end),
 stretches of tree line (a `poly` with no pivot; `split` sets how fine the clumps are), flower beds (boxes;
 `soil` or `stem` says where the stems start), boxes around characters and objects that must not move,
-`behind` polygons on still objects that flowers are drawn across, boxes around the painted clouds, birds,
+`behind` polygons on still objects that flowers are drawn across, `front` polygons on still objects that
+stand in front of plants, boxes around the painted clouds, birds,
 kite, balloon and butterflies, the pond, lamp points, boxes around string lights and bird lanes. `scripts/web-motion.py` turns them into, in `web/public/marketing/motion/`:
 
 - `{scene}-seg.webp` (one for both themes): which piece a pixel belongs to, its neighbouring piece, how
-  much of the neighbour it takes, and the leaf flutter. The pieces themselves (pivot, angle, stem, pace)
+  much of the neighbour it takes, and the leaf flutter; its alpha marks what is held outright (128: the
+  characters and authored objects with their outline). The pieces themselves (pivot, angle, stem, pace)
   are in the manifest. Flower heads are found by colour, and a head counts whole when any part of it is
   near leaves (a big tulip's middle is far from its leaves; counted only along its rim it stayed still).
   Leaves with no flower get a piece per `cell`.
@@ -171,7 +188,7 @@ kite, balloon and butterflies, the pond, lamp points, boxes around string lights
   carried on under the flowers drawn across it.
 - `{scene}-{theme}-atlas.webp`: the cut-outs.
 
-That is about 200 KB per scene and theme (2.07 MB in 35 files for all five scenes), none of it in the first
+That is about 200 KB per scene and theme (2.12 MB in 35 files for all five scenes), none of it in the first
 paint, plus
 `web/components/marketing/motion-manifest.ts`. The script also writes review pictures to `review/motion/`:
 `{scene}-masks.jpg` (every piece in its own colour with a dot at its pivot, flutter whitened, water blue,
