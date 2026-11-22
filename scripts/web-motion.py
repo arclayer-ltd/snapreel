@@ -9,25 +9,39 @@ art/web/motion.json:
                                a crown or a flower, falling to 0 towards anything that must not move).
                                G: water. B: 0 where a tree or anything solid hides the sky layer (clouds
                                and birds pass behind it), 128 elsewhere, 255 where a painted element was
-                               cut out and the clean plate shows instead.
+                               cut out and the clean plate shows instead. Alpha: 255 in front, 128 on the
+                               still layers behind what sways, which never move: the skyline and the sky
+                               behind the trees, and a rock or wall behind the flowers drawn across it.
   {scene}-seg.webp             half-size, lossless, the same for both themes. Which swaying piece a pixel
                                belongs to: R the piece, G its neighbour (0: none), B's high four bits how
                                much of the neighbour's movement it takes (0..15 = 0..1/2), B's low four
                                bits the leaf flutter (crown edges only). The pieces themselves (a tree, a
                                clump of the tree line, a flower: pivot, angle, stem, pace) go in the manifest.
   {scene}-{theme}-plate.webp   the clean plate: the sky (a smooth model fitted around each cut-out, as
-                               web-hero-erase-kite.py does) or inpainted grass behind what was cut out.
-                               Grey everywhere else, so it stays small.
+                               web-hero-erase-kite.py does) or inpainted grass behind what was cut out,
+                               and the skyline carried on under the leaves in front of it as far as they
+                               can sway (what a leaf uncovers), likewise the rock or wall under the flowers
+                               drawn across it. Grey everywhere else, so it stays small.
   {scene}-{theme}-atlas.webp   the cut-outs with alpha: clouds (made whole where a tree or the picture's
                                edge cut them), the two painted birds, the kite and its tail, the balloon,
                                the butterflies.
 
 plus web/components/marketing/motion-manifest.ts, and review pictures in art/web/review/motion/:
-{scene}-masks.jpg (the masks tinted over the art), {scene}-{theme}-plate.jpg (the art with everything
-cut out) and {scene}-{theme}-atlas.jpg.
+{scene}-masks.jpg (the masks tinted over the art, with the characters and the skyline hatched),
+{scene}-{theme}-plate.jpg (the art with everything cut out and the skyline carried on under the tree
+edges) and {scene}-{theme}-atlas.jpg.
 
 Structure (what sways, what is solid) is read from the Light picture and used for both themes: the two
 are the same drawing, aligned to the pixel. Cut-outs are made per theme.
+
+Two things never move. Characters and authored objects (the `exclude` boxes): inside a box whatever is
+not plant-coloured is the character, except the flower heads of a bed that reaches into the box, which
+are small islands of flower colour standing clear of the character; a piece's hold falls to zero towards
+the character over more than the distance it can move. And the skyline with the sky behind the trees:
+found by colour above the horizon (a roof garden counts as skyline, not as a tree), marked in the mask's
+alpha and never warped; a crown's edge sways across it. A rock, a wall or a bench seat with flowers drawn
+across it (the `behind` polygons) is such a still layer too, behind those flowers, so they sway in front
+of it; the gate then only holds towards the character itself.
 
     python scripts/web-motion.py                 # every scene
     python scripts/web-motion.py scene-footer    # some
@@ -57,6 +71,13 @@ CLOUD_SCALE = 0.6  # clouds are soft; everything else is cut at full size
 # The sway weight is zero within this many source pixels of anything that must not move, and rises over
 # four times the distance the pixel can move, so a character's or a building's edge never moves.
 GATE_MARGIN = 5
+# How far (source pixels) a tree's edge can sway across the skyline behind it: the clean plate carries the
+# skyline on this far under the leaves, for the sliver a leaf uncovers.
+BACK_REACH = 32
+# Skyline showing for this many source pixels up a column ends the tree line there (a gap between leaves is smaller).
+SKY_GAP = 22
+# How far (source pixels) the plate carries a rock or a wall on under the flowers drawn across it.
+OBJECT_REACH = 20
 
 
 # ----------------------------------------------------------------------------------------- helpers
@@ -183,14 +204,16 @@ def bleed(rgb, alpha):
 
 
 def plant_colours(light):
-    """Leaf green, lavender, and the colours of flower heads (red, yellow, white)."""
+    """Leaf green, lavender, and the colours of flower heads (red, yellow and orange; white; pink)."""
     r, g, b = light[..., 0], light[..., 1], light[..., 2]
     green = (g > r + 8) & (g > b + 25)
     purple = (b > g + 25) & (r > g + 5) & (b > 110)
     red = (r > 165) & (g < 115) & (b < 120)
-    yellow = (r > 195) & (g > 135) & (b < 120)
+    yellow = (r > 195) & (g > 135) & (b < 120) & (r > g + 6)  # not sunlit lawn, which is greener than it is red
     white = np.minimum(np.minimum(r, g), b) > 218
-    return green, purple, red | yellow, white
+    pink = (r > 190) & (b > 120) & (g < r - 45) & (g < b + 30)
+    orange = (r > 200) & (g > 90) & (g < 170) & (b < 110)
+    return green, purple, red | yellow | orange, white, pink
 
 
 class Segments:
@@ -215,21 +238,78 @@ def structure(scene, slot, light, w, h):
     """What sways and how, the water and the solid/"free" maps, from the Light picture and the authored
     regions. The maps for the page are made at half size (hw x hh)."""
     foliage, sky, free = classify(light)
-    green, purple, heads, white = plant_colours(light)
+    green, purple, heads, white, pink = plant_colours(light)
     horizon = scene["horizon"]
     above = np.zeros((h, w), bool)
     above[: int(horizon * h)] = True
     hw, hh = round(w * MASK_SCALE), round(h * MASK_SCALE)
 
-    # Authored boxes around characters and objects that never move. Inside a box, whatever is not a plant
-    # is still (found by colour, so the trees and the grass between two people can move); thin ink lines
-    # inside foliage don't count.
+    # Authored boxes around characters and objects that never move. Inside a box, whatever is not
+    # plant-coloured is first taken as still (so the trees and the grass between two people can move;
+    # thin ink lines inside foliage don't count)...
     plantish = foliage | green | purple
     boxes = np.zeros((h, w), bool)
     for box in scene.get("exclude", []):
         x0, y0, x1, y1 = px_box(box, w, h)
         boxes[y0:y1, x0:x1] = True
-    fixed = big_parts(opened(boxes & ~plantish & ~(sky & above), 4), 500)
+    inked = boxes & ~plantish & ~(sky & above)
+    fixed = big_parts(opened(inked, 4), 500)
+    # ...then the flower heads of a bed that reaches into a box are told from the character: a head is a
+    # small island of flower colour that stands clear of everything else that is still (the character's
+    # body, a bench, a rock, the paving). Anything joined to the character stays with the character: a
+    # sock, a shoe, a red lace, and also a flower drawn right across a leg.
+    beds_at = np.zeros((h, w), bool)
+    for b in scene.get("beds", []):
+        x0, y0, x1, y1 = px_box(b["box"], w, h)
+        beds_at[y0:y1, x0:x1] = True
+    insect = np.zeros((h, w), bool)  # a butterfly on a flower is cut out, not swayed
+    for b in scene.get("butterflies", []):
+        x0, y0, x1, y1 = px_box(b["box"], w, h, pad=6)
+        insect[y0:y1, x0:x1] = True
+    flowery = heads | white | pink
+    head_max = scene.get("headMax", 0.0005) * w * w  # the largest head, as a share of the picture's width squared
+    n, lab, stats, _ = cv2.connectedComponentsWithStats(fixed.astype(np.uint8), connectivity=8)
+    area = stats[:, cv2.CC_STAT_AREA].astype(np.float64)
+    share = lambda m: np.bincount(lab[m], minlength=n) / np.maximum(area, 1)
+    maybe = (area <= head_max) & (share(flowery & fixed) >= 0.4) & (share(beds_at & fixed) >= 0.6) & (share(insect & fixed) < 0.2)
+    maybe[0] = False
+    body = fixed & ~maybe[lab]
+    touching = np.zeros(n, bool)
+    touching[np.unique(lab[dilate(body, 5) & fixed])] = True
+    bloom_in_box = (maybe & ~touching)[lab]
+    fixed = fixed & ~bloom_in_box
+    # The character's thin parts (fingers, a strap, a lace, the ink outline) are too thin to be found
+    # above; they belong to it as far as they are joined to it.
+    near = inked & dilate(fixed, 12) & ~dilate(bloom_in_box, 3)
+    n, lab = cv2.connectedComponents(near.astype(np.uint8), connectivity=8)
+    joined = np.zeros(n, bool)
+    joined[np.unique(lab[fixed])] = True
+    joined[0] = False
+    fixed = fixed | joined[lab]
+
+    # Still objects with flowers drawn across them (a rock, a wall, the bench's seat: the authored
+    # `behind` polygons, which keep clear of the character). There the object is a still layer BEHIND the
+    # flowers, like the skyline behind the trees: it never moves, but it does not hold the flowers in
+    # front of it still either. Inside a polygon the flower heads (small pieces of flower colour, with
+    # their ink outline) and everything green are in front; the rest is the object.
+    behind = np.zeros((h, w), bool)
+    if scene.get("behind"):
+        region = np.zeros((h, w), bool)
+        bare = np.zeros((h, w), bool)  # {"poly": ..., "heads": false}: nothing on it is a flower
+        for entry in scene["behind"]:
+            m = poly_mask(entry["poly"] if isinstance(entry, dict) else entry, w, h)
+            region |= m
+            if isinstance(entry, dict) and not entry.get("heads", True):
+                bare |= m
+        n, lab, stats, _ = cv2.connectedComponentsWithStats(opened(flowery & ~plantish, 1).astype(np.uint8), connectivity=8)
+        small = (stats[:, cv2.CC_STAT_AREA] >= 20) & (stats[:, cv2.CC_STAT_AREA] <= head_max)
+        # A head lies on the object; a piece of the object itself that happens to be small and red (the
+        # end of a bench slat between two legs) reaches out of the polygon.
+        small &= np.bincount(lab[region], minlength=n) >= 0.6 * stats[:, cv2.CC_STAT_AREA]
+        small[0] = False
+        in_front = dilate(((small[lab] & ~bare) | plantish) & dilate(region, 6), 4)
+        behind = big_parts(region & ~plantish & ~in_front, 200)
+        fixed = fixed & ~region
     # ...and there only the sky's own blue is open sky: a white sleeve or a lamp's globe hides the clouds.
     free = free & ~(boxes & ~sky) & ~dilate(fixed, 2)
 
@@ -248,13 +328,31 @@ def structure(scene, slot, light, w, h):
         in_tree |= poly_mask(t["poly"], w, h)
     near_tree = dilate(in_tree, 40)
 
+    # The skyline and the sky above the horizon (pale, or sky-coloured), and what stands on the skyline:
+    # going up from the ground, the tree line ends where the skyline shows for more than a leaf gap, so a
+    # roof garden on a tower (as green as a tree, but with the tower's wall under it) is not a tree.
+    pale = (val > 150) & (sat < 90)
+    skyline = big_parts(opened((pale | free) & above & ~foliage & ~trunk & ~fixed, 2), 600)
+    # ...and it is one with the open sky higher up: a pale blossom tree or pale paving among the trees is not.
+    n, lab = cv2.connectedComponents(skyline.astype(np.uint8), connectivity=8)
+    open_sky = np.zeros(n, bool)
+    open_sky[np.unique(lab[: int(0.6 * horizon * h)])] = True
+    open_sky[0] = False
+    skyline = open_sky[lab]
+    gap = cv2.erode(skyline.astype(np.uint8), np.ones((SKY_GAP, 1), np.uint8), anchor=(0, 0)).astype(bool)  # it and the pixels under it
+    gap &= np.maximum.accumulate((foliage & above)[::-1], axis=0)[::-1]  # pale paving under the trees is no skyline
+    beyond = np.maximum.accumulate(gap[::-1], axis=0)[::-1]  # at or above such a gap
+    for t in trees:
+        if "pivot" in t:  # a single crown may hang over open sky
+            beyond &= ~poly_mask(t["poly"], w, h)
+
     # -- the tree line: split into clumps, each swaying about its foot
     for t in trees:
         if "pivot" in t:
             continue
         m = poly_mask(t["poly"], w, h)
         # Trees are drawn with leaves and shading; a lawn or a far hill, though just as green, is flat.
-        leaf = opened(foliage & drawn & m & ~fixed, 2)
+        leaf = opened(foliage & drawn & m & ~fixed & ~beyond, 2)
         if not leaf.any():
             continue
         small = cv2.resize(leaf.astype(np.uint8), (hw, hh), interpolation=cv2.INTER_AREA) > 0
@@ -314,7 +412,7 @@ def structure(scene, slot, light, w, h):
         leafy = green[sub] | purple[sub]
         # A head counts whole when any of it is near leaves: a big tulip's middle is far from its leaves,
         # and a head only counted along its rim stays still. (Big red or yellow shapes are not heads.)
-        cand = (heads[sub] | (white[sub] & dilate(green[sub], 22))) & inbox & ~boxes[sub]
+        cand = (heads[sub] | pink[sub] | (white[sub] & dilate(green[sub], 22))) & inbox & ~fixed[sub] & ~insect[sub]
         n, lab, stats, _ = cv2.connectedComponentsWithStats(cand.astype(np.uint8), connectivity=8)
         keep = np.zeros(n, bool)
         keep[np.unique(lab[cand & dilate(leafy, 30)])] = True
@@ -327,10 +425,10 @@ def structure(scene, slot, light, w, h):
         plant_any[sub] |= plant
         cell = b.get("cell", 0.018) * w
         seeds, tops = [], []  # in the window's own pixels; a flower reaches no higher than its head
-        n, lab, stats, cents = cv2.connectedComponentsWithStats(opened(bloom & plant, 2).astype(np.uint8), connectivity=8)
+        n, lab, stats, cents = cv2.connectedComponentsWithStats(opened(bloom & plant, 2 if b.get("head", 30) >= 60 else 1).astype(np.uint8), connectivity=8)
         # The biggest heads first; a small one right next to a taken one sways with it.
         for k in sorted(range(1, n), key=lambda k: -stats[k, cv2.CC_STAT_AREA]):
-            if 60 <= stats[k, cv2.CC_STAT_AREA] <= 60000 and all(np.hypot(cents[k][0] - sx, cents[k][1] - sy) > 0.75 * cell for sx, sy in seeds):
+            if b.get("head", 30) <= stats[k, cv2.CC_STAT_AREA] <= 60000 and all(np.hypot(cents[k][0] - sx, cents[k][1] - sy) > 0.75 * cell for sx, sy in seeds):
                 seeds.append((float(cents[k][0]), float(cents[k][1])))
                 tops.append(stats[k, cv2.CC_STAT_TOP] - 12)
         # Leaves with no flower above them ('fill': bushes, reeds, a bed inside a rim): a seed every `cell`.
@@ -370,11 +468,23 @@ def structure(scene, slot, light, w, h):
     # Around the trees, whatever is neither foliage, branch nor sky is solid: lamp posts, benches, walls,
     # anything dark or strongly coloured. Opening drops the leaves' ink lines and thin twigs. The pale
     # skyline far behind the tree line is not: a tree's edge has to be able to move across it.
-    pale = (val > 150) & (sat < 90)
     solid = near_tree & ~foliage & ~trunk & ~(free & above) & ~plant_any & ~(pale & above)
     solid = big_parts(opened(solid, 5), 260)
     still = solid | fixed
 
+    # What lies behind the trees: the skyline and the sky. It never moves; a crown's edge sways across it
+    # (the page draws the moved picture only where it lands on something in front, see `back` below).
+    # Pale or sky-coloured, above the horizon, within reach of a tree; specks of light inside a crown are
+    # not it, and a roof garden or a dark window with skyline all round it is.
+    treeish = np.array([False] + [i["kind"] != "flower" for i in segs.items])[segs.label]
+    zone = dilate(treeish, BACK_REACH + 8) & above
+    back = big_parts(opened((skyline | beyond) & zone & ~dilate(still, 2) & ~plant_any, 2), 600)
+    n, lab, stats, _ = cv2.connectedComponentsWithStats((zone & ~back).astype(np.uint8), connectivity=4)
+    island = stats[:, cv2.CC_STAT_AREA] <= 0.0004 * w * w
+    island[np.unique(lab[dilate(~zone, 1) & zone])] = False  # joined to the trees or the ground beyond
+    island[np.unique(lab[dilate(still, 3) & zone])] = False
+    island[0] = False
+    back = back | island[lab]
     # ------------------------------------------------------------------ half-size maps for the page
     label = cv2.resize(segs.label, (hw, hh), interpolation=cv2.INTER_NEAREST)
     n = len(segs.items)
@@ -418,6 +528,7 @@ def structure(scene, slot, light, w, h):
     still_h = half(still)
     away = lambda m: cv2.distanceTransform((~half(m)).astype(np.uint8), cv2.DIST_L2, 5) * 2 - GATE_MARGIN
     can = cv2.GaussianBlur(reachmax, (0, 0), 4)
+    reach = cv2.dilate(reachmax, ellipse(3)) * np.array([0.0] + [i["kind"] != "flower" for i in segs.items], np.float32)[i1]
     gate = np.clip(np.minimum(away(fixed) / (2.5 * can + 4), away(solid) / (1.2 * can + 2)), 0, 1)
     weight = np.minimum(member, gate)
     weight[weight < 0.02] = 0
@@ -452,6 +563,9 @@ def structure(scene, slot, light, w, h):
         "above": above,
         "solid": solid,
         "fixed": fixed,
+        "back": back,
+        "behind": behind,
+        "can": reach,
         "still_h": still_h,
         "weight": weight,
         "water": water,
@@ -830,9 +944,46 @@ def cut_theme(scene, st, img, theme, w, h):
         data["stars"] = [s for _, s in sorted(stars, reverse=True)[:10]]
         data["fireflies"] = [list(px_box(b, w, h)) for b in scene.get("fireflies", [])]
 
+    # -- the skyline and the sky behind the trees, carried on under the leaves in front of them: what a
+    # leaf uncovers when it sways aside, so only as far in as the leaves there can move. Buildings are
+    # upright, so each pixel takes the nearest clean pixel of the skyline counting a step up or down as a
+    # third of a step sideways. (A sliver a few pixels wide: soft is fine, and far smaller to send.)
+    back = st["back"]
+    carried_on = np.zeros((h, w), bool)
+    clean = erode(back, 2) & ~removal  # not the blended pixels along a leaf's edge
+    reach = 1.15 * cv2.resize(st["can"], (w, h), interpolation=cv2.INTER_LINEAR) + 8
+    reach[reach < 9] = 0  # nothing moves there
+    under = (cv2.distanceTransform((~back).astype(np.uint8), cv2.DIST_L2, 5) <= np.minimum(reach, BACK_REACH + 10)) & ~clean & ~removal
+    if clean.any() and under.any():
+        ys, xs = np.nonzero(under)
+        y0, y1, x0, x1 = max(0, ys.min() - 4 * BACK_REACH), min(h, ys.max() + 4 * BACK_REACH), max(0, xs.min() - 2 * BACK_REACH), min(w, xs.max() + 2 * BACK_REACH)
+        win = (slice(y0, y1), slice(x0, x1))
+        idx = ndimage.distance_transform_edt(~clean[win], sampling=(0.33, 1.0), return_distances=False, return_indices=True)
+        carried = cv2.GaussianBlur(plate[win][idx[0], idx[1]], (0, 0), sigmaX=3, sigmaY=0.6)
+        # ...and on the skyline's own side a soft rim, which only the blended pixels of an edge ever show.
+        rim = dilate(under, 10) & clean
+        soft = cv2.GaussianBlur(plate[win], (0, 0), 4)
+        plate[win][under[win]] = carried[under[win]]
+        plate[win][rim[win]] = soft[rim[win]]
+        carried_on = under | rim
+
+    # -- and the rock, wall or bench behind the flowers drawn across it, carried on under them from the
+    # object's own nearest pixels: what a flower head uncovers when it sways aside.
+    obj = st["behind"]
+    if obj.any():
+        clean = erode(obj, 2)
+        under = dilate(obj, OBJECT_REACH) & ~clean & ~removal
+        ys, xs = np.nonzero(under)
+        y0, y1, x0, x1 = max(0, ys.min() - 60), min(h, ys.max() + 60), max(0, xs.min() - 60), min(w, xs.max() + 60)
+        win = (slice(y0, y1), slice(x0, x1))
+        idx = ndimage.distance_transform_edt(~clean[win], return_distances=False, return_indices=True)
+        carried = cv2.GaussianBlur(plate[win][idx[0], idx[1]], (0, 0), 2.5)
+        plate[win][under[win]] = carried[under[win]]
+        carried_on |= under
+
     err = np.abs(check - img)
     data["_fit"] = (float(err.mean()), float(np.percentile(err, 99.9)), float(err.max()))
-    return data, atlas, removal, plate, plate_on, hidden
+    return data, atlas, removal, plate, plate_on, carried_on, hidden
 
 
 # ----------------------------------------------------------------------------------------- output
@@ -843,9 +994,12 @@ def save_webp(arr, path, **kw):
     return path.stat().st_size
 
 
-def overlay(light, st, removal, scene, w, h, path):
+def overlay(light, st, removal, scene, w, h, path, width=1800):
     """The review picture: every swaying piece in its own colour (strength = its weight) with its pivot,
-    leaf flutter white, water blue, cut-outs magenta, still things outlined yellow."""
+    leaf flutter white, water blue, cut-outs magenta; the characters and authored objects (never moved)
+    hatched cyan; the still layers behind what sways (the skyline and sky behind the trees, a rock or wall
+    behind the flowers drawn across it: never moved either) hatched orange; the other still things (lamp
+    posts, benches by a tree) outlined yellow."""
     out = light.copy()
     up = lambda m, how=cv2.INTER_LINEAR: cv2.resize(m, (w, h), interpolation=how)
 
@@ -863,11 +1017,15 @@ def overlay(light, st, removal, scene, w, h, path):
     tint(removal.astype(np.float32), (255, 0, 255), 0.6)
     still = up(st["still_h"].astype(np.uint8), cv2.INTER_NEAREST) > 0
     out[still ^ erode(still, 2)] = (255, 235, 0)
+    yy, xx = np.mgrid[0:h, 0:w]
+    for mask, colour, lean in ((st["fixed"], (0, 225, 255), 1), (st["back"] | st["behind"], (255, 140, 0), -1)):
+        tint((mask & ((xx + lean * yy) % 14 < 5)).astype(np.float32), colour, 0.55)
+        out[mask ^ erode(mask, 2)] = colour
     out = out.clip(0, 255).astype(np.uint8)
     for x, y, amp, bend, freq in st["segs"]:
         cv2.circle(out, (int(x), int(y)), 9 if not bend else 5, (255, 255, 255), -1)
         cv2.circle(out, (int(x), int(y)), 9 if not bend else 5, (0, 0, 0), 2)
-    small = cv2.resize(out, (1800, round(h * 1800 / w)), interpolation=cv2.INTER_AREA)
+    small = out if width >= w else cv2.resize(out, (width, round(h * width / w)), interpolation=cv2.INTER_AREA)
     Image.fromarray(small).save(path, quality=84)
 
 
@@ -902,7 +1060,7 @@ def build(name):
     }
     for theme in ("light", "dark"):
         img = light if theme == "light" else load(slot["dark"])
-        data, atlas, removal, plate, plate_on, hidden = cut_theme(scene, st, img, theme, w, h)
+        data, atlas, removal, plate, plate_on, carried_on, hidden = cut_theme(scene, st, img, theme, w, h)
         fit = data.pop("_fit")
 
         blue = np.full((h, w), 128, np.float32)
@@ -911,12 +1069,17 @@ def build(name):
         blue = cv2.resize(blue, msize, interpolation=cv2.INTER_AREA).round()
         water = cv2.resize(st["water"], msize, interpolation=cv2.INTER_AREA)
         # 32 and 16 levels compress far better
-        mask = np.stack([np.round(st["weight"] * 31) * (255 / 31), np.round(water * 15) * 17, blue], -1).astype(np.uint8)
+        # Alpha: 255 in front, 128 the skyline and sky behind the trees (never 0, so no decoder drops the colours).
+        behind = cv2.resize((st["back"] | st["behind"]).astype(np.float32), msize, interpolation=cv2.INTER_AREA)
+        mask = np.stack([np.round(st["weight"] * 31) * (255 / 31), np.round(water * 15) * 17, blue, 255 - np.round(behind * 4) * (127 / 4)], -1).astype(np.uint8)
         size_m = save_webp(mask, OUT / f"{name}-{theme}-mask.webp", lossless=True, quality=100, method=4)
 
-        flat = np.where(dilate(plate_on, 8)[..., None], plate, 128.0)
+        # Only the plate's used parts matter; the rest is filled smoothly from them (no hard edge to pay for).
+        # Grey wherever the plate is not used, so it stays small. Around a cut-out it keeps a margin of the
+        # picture; the carried-on skyline is its own margin.
+        flat = np.where((dilate(plate_on, 8) | carried_on)[..., None], plate, 128.0)
         flat = cv2.resize(flat, psize, interpolation=cv2.INTER_AREA).round().astype(np.uint8)
-        size_p = save_webp(flat, OUT / f"{name}-{theme}-plate.webp", quality=90, method=6)
+        size_p = save_webp(flat, OUT / f"{name}-{theme}-plate.webp", quality=84, method=6)
 
         sheet, rects = atlas.pack()
         size_a = save_webp(sheet, OUT / f"{name}-{theme}-atlas.webp", quality=88, alpha_quality=92, method=6, exact=True)
@@ -942,7 +1105,7 @@ def build(name):
         # Review pictures.
         if theme == "light":
             overlay(light, st, removal, scene, w, h, REVIEW / f"{name}-masks.jpg")
-        clean = np.where(removal[..., None], plate, img)
+        clean = np.where((removal | carried_on)[..., None], plate, img)
         Image.fromarray(cv2.resize(clean, (1800, round(h * 1800 / w)), interpolation=cv2.INTER_AREA).clip(0, 255).astype(np.uint8)).save(REVIEW / f"{name}-{theme}-plate.jpg", quality=84)
         a = sheet[..., 3:4] / 255.0
         yy, xx = np.mgrid[0 : sheet.shape[0], 0 : sheet.shape[1]]

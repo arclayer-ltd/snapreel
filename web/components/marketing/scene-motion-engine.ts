@@ -7,6 +7,11 @@
    as a sprite cut from the same art, so the first frame equals the still picture. Everything starts at
    rest and eases in. Data comes from scripts/web-motion.py (motion-manifest.ts and /marketing/motion/*).
 
+   The skyline and the sky behind the trees never move: the trees are drawn as a layer in front of them
+   (the mask's alpha says which is which), and the plate carries the skyline on under the leaves for the
+   sliver a leaf uncovers. Characters and authored objects never move either: no piece has any hold on
+   them or within reach of them.
+
    Trees and flowers are pieces: each tree crown (with its branches) turns as one rigid piece about a
    point low on its trunk, each flower bends from the soil. The pieces' angles are worked out here, a gust
    reaching one after the other, and the picture is drawn turned back by them. On top, leaves flutter in
@@ -194,9 +199,14 @@ const BASE_FRAGMENT = /* glsl */ `
   uniform float uWater;
   uniform vec3 uGlint;
   varying vec2 vSrc;
+  // 1 on the skyline and the sky behind the trees (the mask's alpha: 1 in front, about a half behind).
+  float behind(vec4 mask) {
+    return smoothstep(0.25, 0.75, (1.0 - mask.a) * 2.0);
+  }
   void main() {
     vec4 here = texture2D(uMask, vSrc);
-    vec2 at = vSrc + windAt(vSrc);
+    vec2 wind = windAt(vSrc);
+    vec2 at = vSrc + wind;
     float glint = 0.0;
     float shade = 0.0;
     if (uWater > 0.0 && here.g > 0.0) {
@@ -221,6 +231,17 @@ const BASE_FRAGMENT = /* glsl */ `
     vec3 base = texture2D(uBase, (at - uCrop.xy) / uCrop.zw).rgb;
     vec3 plate = texture2D(uPlate, at).rgb;
     vec3 colour = mix(base, plate, smoothstep(0.6, 0.9, there.b));
+    // The trees are a layer in front of the skyline, which never moves. Where the wind would bring a
+    // piece of the skyline here, show what is behind this very spot instead: the picture itself where
+    // the skyline shows at rest, the plate's carried-on skyline where a leaf has swayed aside.
+    float back = behind(there);
+    vec2 moved = wind * uSize;
+    if (back > 0.0 && dot(moved, moved) > 0.0) {
+      vec3 own = texture2D(uBase, (vSrc - uCrop.xy) / uCrop.zw).rgb;
+      vec3 under = texture2D(uPlate, vSrc).rgb;
+      vec3 rest = mix(under, own, behind(here) * (1.0 - smoothstep(0.6, 0.9, here.b)));
+      colour = mix(colour, rest, back * smoothstep(0.0, 0.25, dot(moved, moved)));
+    }
     gl_FragColor = vec4(colour * (1.0 + shade) + uGlint * glint, 1.0);
   }
 `;
