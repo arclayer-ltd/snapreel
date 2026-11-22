@@ -5,7 +5,7 @@
 //   node scripts/web-review.mjs http://localhost:3000 / /pricing  # some pages
 //   node scripts/web-review.mjs --shot <url> <out.png> <width> <height>   # one viewport, e.g. the OG image
 //
-// Drives headless Microsoft Edge (or Chrome) over the DevTools protocol, so the width is exact
+// Drives headless Chrome over the DevTools protocol, so the width is exact
 // (a plain --window-size is clamped to 500 px in headless mode) and prefers-color-scheme is
 // emulated. Writes art/web/review/{page}-{width}-{scheme}.jpg (REVIEW_OUT=<dir> writes there instead), plus
 // {page}-{width}-{scheme}-fold.jpg, the first screen only, and prints any horizontal overflow.
@@ -23,8 +23,8 @@ const SIZES = [
   { width: 390, height: 844 },
   { width: 1440, height: 900 },
 ];
+// Chrome only, always headless (the owner asked for Chrome and no browser windows on screen).
 const BROWSERS = [
-  "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
   "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
   "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
   "/usr/bin/google-chrome",
@@ -35,7 +35,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function launch() {
   const exe = BROWSERS.find((b) => existsSync(b));
-  if (!exe) throw new Error("no Edge or Chrome found");
+  if (!exe) throw new Error("no Chrome found");
   const profile = mkdtempSync(join(tmpdir(), "sr-review-"));
   const port = 9300 + Math.floor(Math.random() * 500);
   const proc = spawn(exe, [

@@ -10,7 +10,8 @@
    The skyline and the sky behind the trees never move: the trees are drawn as a layer in front of them
    (the mask's alpha says which is which), and the plate carries the skyline on under the leaves for the
    sliver a leaf uncovers. Characters and authored objects never move either: no piece has any hold on
-   them or within reach of them.
+   them or within reach of them, and on top of that the seg picture's alpha marks them (with their ink
+   outline) as held: the base shader never moves a held pixel and never draws from one.
 
    Trees and flowers are pieces: each tree crown (with its branches) turns as one rigid piece about a
    point low on its trunk, each flower bends from the soil. The pieces' angles are worked out here, a gust
@@ -206,6 +207,10 @@ const BASE_FRAGMENT = /* glsl */ `
   void main() {
     vec4 here = texture2D(uMask, vSrc);
     vec2 wind = windAt(vSrc);
+    // The characters and authored objects are held outright (the seg picture's alpha): such a pixel
+    // always shows itself, and a pixel the wind would fill from one shows itself at rest instead, so a
+    // crown or a flower slides behind an arm or the bench and never takes anything of it along.
+    if (texture2D(uSeg, vSrc).a < 0.75 || texture2D(uSeg, vSrc + wind).a < 0.75) wind = vec2(0.0);
     vec2 at = vSrc + wind;
     float glint = 0.0;
     float shade = 0.0;

@@ -15,8 +15,11 @@ art/web/motion.json:
   {scene}-seg.webp             half-size, lossless, the same for both themes. Which swaying piece a pixel
                                belongs to: R the piece, G its neighbour (0: none), B's high four bits how
                                much of the neighbour's movement it takes (0..15 = 0..1/2), B's low four
-                               bits the leaf flutter (crown edges only). The pieces themselves (a tree, a
-                               clump of the tree line, a flower: pivot, angle, stem, pace) go in the manifest.
+                               bits the leaf flutter (crown edges only). Alpha: 128 on the characters and
+                               authored objects with their ink outline, which the page holds still outright
+                               (a held pixel shows itself, and nothing is drawn from one), 255 elsewhere.
+                               The pieces themselves (a tree, a clump of the tree line, a flower: pivot,
+                               angle, stem, pace) go in the manifest.
   {scene}-{theme}-plate.webp   the clean plate: the sky (a smooth model fitted around each cut-out, as
                                web-hero-erase-kite.py does) or inpainted grass behind what was cut out,
                                and the skyline carried on under the leaves in front of it as far as they
@@ -41,7 +44,12 @@ the character over more than the distance it can move. And the skyline with the 
 found by colour above the horizon (a roof garden counts as skyline, not as a tree), marked in the mask's
 alpha and never warped; a crown's edge sways across it. A rock, a wall or a bench seat with flowers drawn
 across it (the `behind` polygons) is such a still layer too, behind those flowers, so they sway in front
-of it; the gate then only holds towards the character itself.
+of it; the gate then only holds towards the character itself. The skyline behind a character inside its
+box is skyline as well (it is joined to the open sky; the character is closed in by its ink outline), so
+a crown behind a character sways. The characters and authored objects are also marked in the seg
+picture's alpha, and the page never moves such a pixel nor draws from one, whatever the weights say; an
+object in front of plants (the `front` polygons: the bench's seat) is held that way alone, with no gate,
+so the bed behind it sways right up to its edge.
 
     python scripts/web-motion.py                 # every scene
     python scripts/web-motion.py scene-footer    # some
@@ -70,7 +78,7 @@ PLATE_SCALE = 0.5
 CLOUD_SCALE = 0.6  # clouds are soft; everything else is cut at full size
 # The sway weight is zero within this many source pixels of anything that must not move, and rises over
 # four times the distance the pixel can move, so a character's or a building's edge never moves.
-GATE_MARGIN = 5
+GATE_MARGIN = 3
 # How far (source pixels) a tree's edge can sway across the skyline behind it: the clean plate carries the
 # skyline on this far under the leaves, for the sliver a leaf uncovers.
 BACK_REACH = 32
@@ -252,7 +260,25 @@ def structure(scene, slot, light, w, h):
     for box in scene.get("exclude", []):
         x0, y0, x1, y1 = px_box(box, w, h)
         boxes[y0:y1, x0:x1] = True
-    inked = boxes & ~plantish & ~(sky & above)
+    # The skyline and the pale sky behind a character are not the character: whatever is pale or
+    # sky-coloured above the horizon and joined to the open blue sky higher up, without crossing an ink
+    # outline, is skyline. (A cream sleeve or a white shirt is closed in by its outline.) So a tree's
+    # crown behind a character is held only by the character itself.
+    hsv = cv2.cvtColor(light.astype(np.uint8), cv2.COLOR_RGB2HSV)
+    hue, sat, val = hsv[..., 0].astype(np.int32) * 2, hsv[..., 1], hsv[..., 2]
+    trunk = (hue >= 8) & (hue <= 40) & (sat >= 70) & (val >= 45) & (val <= 205)
+    pale = (val > 150) & (sat < 90)
+    airy = (pale | free) & above & ~foliage & ~trunk
+    n, lab = cv2.connectedComponents(opened(airy, 3).astype(np.uint8), connectivity=4)
+    top = np.zeros((h, w), bool)
+    top[: int(0.6 * horizon * h)] = True
+    joined = np.bincount(lab[top & sky], minlength=n) >= 400
+    joined[0] = False
+    open_air = dilate(joined[lab], 3) & airy
+    for box in scene.get("whole", []):  # a lamp's pale globe has no ink round it: its box stays whole
+        x0, y0, x1, y1 = px_box(box, w, h)
+        open_air[y0:y1, x0:x1] = False
+    inked = boxes & ~plantish & ~(sky & above) & ~open_air
     fixed = big_parts(opened(inked, 4), 500)
     # ...then the flower heads of a bed that reaches into a box are told from the character: a head is a
     # small island of flower colour that stands clear of everything else that is still (the character's
@@ -278,6 +304,10 @@ def structure(scene, slot, light, w, h):
     touching[np.unique(lab[dilate(body, 5) & fixed])] = True
     bloom_in_box = (maybe & ~touching)[lab]
     fixed = fixed & ~bloom_in_box
+    # Things one can see through (a bicycle's basket, its spokes) are still whole, the green in them too:
+    # the authored `held` polygons.
+    for poly in scene.get("held", []):
+        fixed |= poly_mask(poly, w, h)
     # The character's thin parts (fingers, a strap, a lace, the ink outline) are too thin to be found
     # above; they belong to it as far as they are joined to it.
     near = inked & dilate(fixed, 12) & ~dilate(bloom_in_box, 3)
@@ -310,12 +340,14 @@ def structure(scene, slot, light, w, h):
         in_front = dilate(((small[lab] & ~bare) | plantish) & dilate(region, 6), 4)
         behind = big_parts(region & ~plantish & ~in_front, 200)
         fixed = fixed & ~region
+    # Still objects IN FRONT of plants (the bench's seat over the bed behind it: the authored `front`
+    # polygons). They belong to what never moves and are held like a character (see `hold` below), but
+    # they do not slow the plants behind them down: those sway right up to the object's edge and behind it.
+    no_gate = np.zeros((h, w), bool)
+    for poly in scene.get("front", []):
+        no_gate |= poly_mask(poly, w, h)
     # ...and there only the sky's own blue is open sky: a white sleeve or a lamp's globe hides the clouds.
     free = free & ~(boxes & ~sky) & ~dilate(fixed, 2)
-
-    hsv = cv2.cvtColor(light.astype(np.uint8), cv2.COLOR_RGB2HSV)
-    hue, sat, val = hsv[..., 0].astype(np.int32) * 2, hsv[..., 1], hsv[..., 2]
-    trunk = (hue >= 8) & (hue <= 40) & (sat >= 70) & (val >= 45) & (val <= 205)
 
     lum = light @ np.array([0.299, 0.587, 0.114], np.float32)
     rough = cv2.GaussianBlur(np.abs(lum - cv2.GaussianBlur(lum, (0, 0), 4)), (0, 0), 10)
@@ -331,7 +363,6 @@ def structure(scene, slot, light, w, h):
     # The skyline and the sky above the horizon (pale, or sky-coloured), and what stands on the skyline:
     # going up from the ground, the tree line ends where the skyline shows for more than a leaf gap, so a
     # roof garden on a tower (as green as a tree, but with the tower's wall under it) is not a tree.
-    pale = (val > 150) & (sat < 90)
     skyline = big_parts(opened((pale | free) & above & ~foliage & ~trunk & ~fixed, 2), 600)
     # ...and it is one with the open sky higher up: a pale blossom tree or pale paving among the trees is not.
     n, lab = cv2.connectedComponents(skyline.astype(np.uint8), connectivity=8)
@@ -521,15 +552,20 @@ def structure(scene, slot, light, w, h):
     member = np.clip(m1 + np.where(i2 > 0, m2, 0), 0, 1)
     mix = np.where(i2 > 0, m2 / np.maximum(m1 + m2, 1e-6), 0)
 
-    # Fall to zero towards anything that must not move: over 2.5 times the distance a pixel can move next
+    # Fall to zero towards anything that must not move: over 1.5 times the distance a pixel can move next
     # to a character or an authored object, and over 1.2 times that distance next to what merely stands
-    # beside a tree (a lamp post, a bench), so a pixel never moves as far as the still thing is away.
+    # beside a tree (a lamp post, a bench), so a pixel never moves as far as the still thing is away. (The
+    # page also holds the characters outright, see `hold`: this ramp is what makes a crown or a flower
+    # ease to rest beside an arm or a leg instead of being cut off at it.)
     half = lambda m: cv2.resize(m.astype(np.uint8), (hw, hh), interpolation=cv2.INTER_AREA) > 0
-    still_h = half(still)
+    still_h = half(still & ~no_gate)
     away = lambda m: cv2.distanceTransform((~half(m)).astype(np.uint8), cv2.DIST_L2, 5) * 2 - GATE_MARGIN
     can = cv2.GaussianBlur(reachmax, (0, 0), 4)
     reach = cv2.dilate(reachmax, ellipse(3)) * np.array([0.0] + [i["kind"] != "flower" for i in segs.items], np.float32)[i1]
-    gate = np.clip(np.minimum(away(fixed) / (2.5 * can + 4), away(solid) / (1.2 * can + 2)), 0, 1)
+    gate = np.clip(np.minimum(away(fixed & ~no_gate) / (1.5 * can + 3), away(solid & ~no_gate) / (1.2 * can + 2)), 0, 1)
+    # What the page holds outright: the characters and authored objects, grown over their ink outline.
+    # A held pixel always shows itself, and nothing is ever drawn from one.
+    hold = half(dilate(fixed, 2))
     weight = np.minimum(member, gate)
     weight[weight < 0.02] = 0
 
@@ -563,6 +599,7 @@ def structure(scene, slot, light, w, h):
         "above": above,
         "solid": solid,
         "fixed": fixed,
+        "hold": hold,
         "back": back,
         "behind": behind,
         "can": reach,
@@ -1043,7 +1080,8 @@ def build(name):
         f" max weight on still pixels {st['weight'][st['still_h']].max() if st['still_h'].any() else 0:.3f}"
     )
     # Which piece, its neighbour, how much of the neighbour, and the flutter: one lossless picture.
-    seg = np.stack([st["i1"], st["i2"], (np.round(st["mix"] * 30).astype(np.uint8) << 4) | np.round(st["flutter"].clip(0, 1) * 15).astype(np.uint8)], -1)
+    # Alpha: 128 where the page holds the picture still outright (characters, authored objects), else 255.
+    seg = np.stack([st["i1"], st["i2"], (np.round(st["mix"] * 30).astype(np.uint8) << 4) | np.round(st["flutter"].clip(0, 1) * 15).astype(np.uint8), np.where(st["hold"], 128, 255).astype(np.uint8)], -1)
     size_s = save_webp(seg, OUT / f"{name}-seg.webp", lossless=True, quality=100, method=4)
     print(f"  seg {size_s / 1024:.0f} KB")
     entry = {
