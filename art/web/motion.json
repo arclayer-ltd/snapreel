@@ -1,5 +1,5 @@
 {
-  "$comment": "Authored regions for scripts/web-motion.py: what moves in each illustrated scene. Everything is in fractions of the source image (x right, y down); the sources, phone crops and foreground boxes come from screens.json. trees: with a 'pivot' (a point low on the trunk, may lie outside the picture) one tree whose crown ('poly', drawn generously around it) turns about that point as one piece, its farthest leaves moving 'sway' source pixels in a full gust; without a pivot a stretch of tree line that the script splits into clumps ('split': least distance between two clumps), each swaying about its own foot. beds: boxes of flowers, bushes and reeds; every flower head (found by colour) is a stem that bends from the soil, taking the leaves within about a 'cell' of it; with 'fill' the leaves that have no flower get a stem per cell too (bushes, reeds, a bed inside a rim) ('soil': the soil line's y, or 'stem': the stem length; 'sway': head movement as a share of the stem, at most 'maxSway' source pixels). exclude: boxes around characters and objects that must never move; inside a box only what is plant-coloured may move, and only the sky's blue lets clouds through. clouds / birds / kite / balloon / butterflies: boxes around elements painted in the art; they are cut out as sprites and painted out of the base. cloudBand: the heights (top, bottom) travelling clouds keep to, clear of everything that is not sky or tree. water: a polygon around the pond. lamps (Dusk only): glow points. bulbs (Dusk only): boxes around string lights; every bulb in them is found by its light. lanes: quadratic paths (start, control, end) that new flocks of birds fly along; lanesMobile is used for the phone crop.",
+  "$comment": "Authored regions for scripts/web-motion.py: what moves in each illustrated scene. Everything is in fractions of the source image (x right, y down); the sources, phone crops and foreground boxes come from screens.json. trees: with a 'pivot' (a point low on the trunk, may lie outside the picture) one tree whose crown ('poly', drawn generously around it) turns about that point as one piece, its farthest leaves moving 'sway' source pixels in a full gust; without a pivot a stretch of tree line that the script splits into clumps ('split': least distance between two clumps), each swaying about its own foot. beds: boxes of flowers, bushes and reeds; every flower head (found by colour) is a stem that bends from the soil, taking the leaves within about a 'cell' of it; with 'fill' the leaves that have no flower get a stem per cell too (bushes, reeds, a bed inside a rim) ('soil': the soil line's y, or 'stem': the stem length; 'head': the area of the smallest head in source pixels, default 30; 'sway': head movement as a share of the stem, at most 'maxSway' source pixels). exclude: boxes around characters and objects that must never move; inside a box whatever is not plant-coloured is the character and stays still, except the flower heads of a bed that reaches into the box (small islands of flower colour that stand clear of the character; 'headMax' on the scene: the largest such head as a share of the picture's width squared, default 0.0005), and only the sky's blue lets clouds through. The skyline and the sky behind the trees need no region: they are found by colour above 'horizon' and never move. behind: polygons on a still object where flowers are drawn across it (a rock, a wall, the bench's seat), keeping clear of the character ({ poly, heads: false } where nothing on the object is a flower, like the red bench seat above a bed); inside one the object is a still layer behind those flowers (it never moves, and they sway in front of it) instead of something that holds them still. clouds / birds / kite / balloon / butterflies: boxes around elements painted in the art; they are cut out as sprites and painted out of the base. cloudBand: the heights (top, bottom) travelling clouds keep to, clear of everything that is not sky or tree. water: a polygon around the pond. lamps (Dusk only): glow points. bulbs (Dusk only): boxes around string lights; every bulb in them is found by its light. lanes: quadratic paths (start, control, end) that new flocks of birds fly along; lanesMobile is used for the phone crop.",
   "output": "web/public/marketing/motion",
   "manifest": "web/components/marketing/motion-manifest.ts",
   "review": "art/web/review/motion",
@@ -14,8 +14,8 @@
         { "poly": [[1, 0.16], [0.95, 0.17], [0.885, 0.25], [0.875, 0.33], [0.9, 0.42], [0.93, 0.5], [1, 0.52]], "pivot": [1.02, 0.62], "sway": 22, "freq": 0.21 }
       ],
       "beds": [
-        { "box": [0, 0.6, 0.2, 0.8], "stem": 0.032 },
-        { "box": [0.655, 0.59, 1, 0.775], "stem": 0.032 },
+        { "box": [0, 0.6, 0.2, 0.83], "stem": 0.032, "head": 24 },
+        { "box": [0.655, 0.59, 1, 0.79], "stem": 0.032, "head": 24 },
         { "box": [0.265, 0.86, 0.69, 1], "soil": 0.985, "sway": 0.085, "maxSway": 14, "cell": 0.014, "fill": true }
       ],
       "exclude": [
@@ -26,6 +26,10 @@
         [0.69, 0.45, 0.86, 0.86],
         [0.855, 0.36, 0.985, 0.86],
         [0.805, 0.39, 0.84, 0.6]
+      ],
+      "behind": [
+        { "poly": [[0.762, 0.699], [0.798, 0.699], [0.798, 0.716], [0.762, 0.716]], "heads": false },
+        { "poly": [[0.852, 0.7], [0.888, 0.7], [0.888, 0.722], [0.852, 0.722]], "heads": false }
       ],
       "clouds": [
         [0, 0.135, 0.19, 0.295],
@@ -64,7 +68,7 @@
       ],
       "beds": [
         { "box": [0.765, 0.585, 0.83, 0.69], "soil": 0.688, "sway": 0.06, "cell": 0.007, "fill": true },
-        { "box": [0.955, 0.63, 1, 0.76], "soil": 0.76, "sway": 0.06, "cell": 0.008, "fill": true },
+        { "box": [0.955, 0.63, 1, 0.79], "soil": 0.79, "sway": 0.06, "cell": 0.008, "fill": true },
         { "box": [0, 0.6, 0.05, 0.67] },
         { "box": [0.12, 0.64, 0.205, 0.74] },
         { "box": [0.725, 0.63, 0.775, 0.67] },
@@ -72,12 +76,13 @@
         { "box": [0, 0.7, 0.035, 0.87] },
         { "box": [0.13, 0.76, 0.175, 0.86] },
         { "box": [0.72, 0.76, 0.84, 0.87] },
-        { "box": [0.9, 0.87, 1, 1] },
+        { "box": [0.9, 0.855, 1, 1] },
         { "box": [0, 0.93, 0.05, 1] },
         { "box": [0.21, 0.95, 0.24, 1] },
         { "box": [0.33, 0.86, 0.39, 0.92] },
         { "box": [0.45, 0.93, 0.51, 1] },
-        { "box": [0.76, 0.93, 0.83, 1] }
+        { "box": [0.76, 0.93, 0.83, 1] },
+        { "box": [0.285, 0.695, 0.34, 0.76] }
       ],
       "exclude": [
         [0.03, 0.48, 0.15, 0.97],
@@ -89,6 +94,7 @@
         [0.15, 0.72, 0.2, 0.75],
         [0, 0.84, 0.03, 0.89]
       ],
+      "behind": [[[0.922, 0.84], [1, 0.84], [1, 0.94], [0.908, 0.94], [0.908, 0.905], [0.922, 0.87]]],
       "water": [[0.7375, 0.7], [0.748, 0.688], [0.765, 0.6835], [0.786, 0.682], [0.807, 0.681], [0.8225, 0.678], [0.8355, 0.675], [0.862, 0.675], [0.866, 0.7], [0.86, 0.73], [0.841, 0.7405], [0.817, 0.737], [0.799, 0.734], [0.7756, 0.728], [0.756, 0.72], [0.7405, 0.71]],
       "clouds": [
         [0, 0.14, 0.165, 0.29],
@@ -165,8 +171,8 @@
         { "box": [0.9, 0.76, 1, 0.84] },
         { "box": [0, 0.82, 0.14, 1], "soil": 1.0, "sway": 0.06 },
         { "box": [0.83, 0.84, 1, 1], "soil": 1.0, "sway": 0.06 },
-        { "box": [0.14, 0.82, 0.17, 0.9] },
-        { "box": [0.77, 0.83, 0.83, 0.9] }
+        { "box": [0.14, 0.82, 0.185, 1] },
+        { "box": [0.77, 0.83, 0.83, 1] }
       ],
       "exclude": [[0.16, 0.2, 0.8, 1]],
       "clouds": [
@@ -199,13 +205,14 @@
       "beds": [
         { "box": [0.17, 0.86, 0.5, 1], "soil": 1.0, "sway": 0.06 },
         { "box": [0.66, 0.9, 1, 1], "soil": 1.0, "sway": 0.06 },
-        { "box": [0, 0.86, 0.04, 1], "soil": 1.0, "sway": 0.06 }
+        { "box": [0, 0.86, 0.17, 1], "soil": 1.0, "sway": 0.06 }
       ],
       "exclude": [
         [0, 0.52, 0.19, 1],
         [0.16, 0.52, 0.185, 0.88],
         [0.825, 0.47, 0.975, 0.94]
       ],
+      "behind": [[[0, 0.85], [0.105, 0.85], [0.105, 0.97], [0, 0.97]]],
       "clouds": [
         [0, 0.19, 0.165, 0.4],
         [0.1, 0.415, 0.18, 0.47],

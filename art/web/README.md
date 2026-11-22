@@ -109,10 +109,28 @@ orthographic camera and textured planes, no 3D model).
   shader draws the picture turned back by its piece's angle; where two pieces touch they blend. Nothing
   waves or ripples inside a crown. On top, leaves flutter: a small, quick shake in leaf-clump-sized patches,
   only in a band along the crowns' edges, stronger in a gust.
+- Characters and authored objects never move. Inside an `exclude` box whatever is not plant-coloured is
+  the character (skin, hair, clothes, shoes, what they hold, the bench, the rock, the paving), with its
+  thin parts and ink outline as far as they are joined to it. The flower heads of a bed that reaches into
+  the box are told apart from it: a head is a small island of flower colour (red, yellow, orange, white,
+  pink) that stands clear of the character, so the flowers beside and behind a character sway like any
+  other bed. A flower drawn right across a leg stays with the leg.
+- A still object with flowers drawn across it (the rock in Copy link, the wall on the inner pages, the
+  hero bench's seat above its daisies) gets a `behind` polygon in `motion.json`, kept clear of the
+  character. Inside it the object is a still layer behind the flowers, handled like the skyline below: it
+  never moves, the flower heads and stems across it are ordinary pieces with full weight, and the plate
+  carries the rock or wall on under them (from the object's own nearest pixels), so a head that sways
+  aside uncovers painted rock. The gate then only holds towards the character itself.
 - A piece's hold on a pixel falls to zero towards anything that must not move, over more than the
   distance that pixel can move (2.5 times it next to a character or an authored object, 1.2 times next to
-  a lamp post or a bench), so nothing still is ever reached. Only the pale skyline far behind the tree
-  line gives way by a few pixels where a tree's edge sways across it.
+  a lamp post or a bench), so nothing still is ever reached and no outline smears.
+- The skyline and the sky behind the trees never move either. They are found by colour above the horizon
+  (pale or sky-coloured; a roof garden on a tower, with the tower's wall under it, belongs to the skyline
+  and not to the tree line) and marked in the mask's alpha. The trees are drawn as a layer in front: the
+  shader shows the moved picture only where it lands on something in front, and otherwise what is behind
+  that very spot. That is the picture itself where the skyline shows at rest and, where a leaf has swayed
+  aside, the plate, which carries the skyline on under the leaves (each pixel from the nearest skyline
+  pixel above or below it, since buildings are upright) as far as the leaves there can move.
 - The home hero's round flower bed is the scene's foreground cut-out, drawn in front of the phone. It gets
   a second, transparent canvas over it (made by `scene-motion.tsx` inside `.mk-scene-fg`), drawn by the same
   engine with the same pieces in the same frame, so the tulips in front of the phone sway and the layer
@@ -137,8 +155,8 @@ orthographic camera and textured planes, no 3D model).
 trees (`poly` around the crown, `pivot` low on the trunk, `sway` in source pixels at the crown's far end),
 stretches of tree line (a `poly` with no pivot; `split` sets how fine the clumps are), flower beds (boxes;
 `soil` or `stem` says where the stems start), boxes around characters and objects that must not move,
-boxes around the painted clouds, birds, kite, balloon and butterflies, the pond, lamp points, boxes around
-string lights and bird lanes. `scripts/web-motion.py` turns them into, in `web/public/marketing/motion/`:
+`behind` polygons on still objects that flowers are drawn across, boxes around the painted clouds, birds,
+kite, balloon and butterflies, the pond, lamp points, boxes around string lights and bird lanes. `scripts/web-motion.py` turns them into, in `web/public/marketing/motion/`:
 
 - `{scene}-seg.webp` (one for both themes): which piece a pixel belongs to, its neighbouring piece, how
   much of the neighbour it takes, and the leaf flutter. The pieces themselves (pivot, angle, stem, pace)
@@ -146,17 +164,24 @@ string lights and bird lanes. `scripts/web-motion.py` turns them into, in `web/p
   near leaves (a big tulip's middle is far from its leaves; counted only along its rim it stayed still).
   Leaves with no flower get a piece per `cell`.
 - `{scene}-{theme}-mask.webp`: R how much of its piece's sway a pixel takes, G water, B the sky layer
-  (hidden, open or cut out).
+  (hidden, open or cut out), alpha the still layers behind what sways (128: the skyline and sky behind the
+  trees, a rock or wall behind flowers) against everything in front (255).
 - `{scene}-{theme}-plate.webp`: the clean plate (a smooth sky fitted around each cut-out, as the kite
-  eraser does, or inpainted grass).
+  eraser does, or inpainted grass), the skyline carried on under the tree edges and the rock or wall
+  carried on under the flowers drawn across it.
 - `{scene}-{theme}-atlas.webp`: the cut-outs.
 
-That is about 250 KB per scene and theme, none of it in the first paint, plus
+That is about 200 KB per scene and theme (2.07 MB in 35 files for all five scenes), none of it in the first
+paint, plus
 `web/components/marketing/motion-manifest.ts`. The script also writes review pictures to `review/motion/`:
 `{scene}-masks.jpg` (every piece in its own colour with a dot at its pivot, flutter whitened, water blue,
-cut-outs magenta, still things outlined yellow), `{scene}-{theme}-plate.jpg` (the art with everything cut
-out) and the atlases. After changing a region, look at those: no colour may touch a character, a face, a
-phone or a building edge, and every tree and flower should have one. The script prints the largest weight
+cut-outs magenta, the characters and authored objects hatched cyan, the still layers behind what sways
+(the skyline and sky behind the trees, a rock or wall behind flowers) hatched orange, other still things
+outlined yellow), `{scene}-{theme}-plate.jpg` (the art with everything
+cut out and the skyline carried on under the tree edges) and the atlases. After changing a region, look at
+those: the cyan hatching must cover every character whole and no flower that should sway, no colour may
+touch a character, a face or a phone, and every tree and flower should have one. A piece's colour may
+overlap the orange hatching: there the tree sways across the skyline, which itself stays put. The script prints the largest weight
 on still pixels (must be 0) and how far the rest frame is from the picture. Given the same art and
 `motion.json` it writes the same files.
 
