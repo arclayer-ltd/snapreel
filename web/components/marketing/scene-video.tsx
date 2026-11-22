@@ -91,10 +91,21 @@ function Loop({ data, className }: { data: SceneVideoData; className: string }) 
       canvas.style.height = `${(box[3] - box[1]) * 100}%`;
     };
     place();
-    // Each video frame: that part of the video, cut to the cut-out's shape.
+    // The cut-out as a plain image of the same file (from the cache): the <img>'s own size is corrected
+    // for its srcset density, which drawImage doesn't use, so its pixels can't be addressed reliably.
+    let mask: HTMLImageElement | null = null;
+    const loadMask = () => {
+      const url = fgImg?.currentSrc;
+      if (!url || mask?.src === url) return;
+      mask = new Image();
+      mask.decoding = "async";
+      mask.src = url;
+    };
+    // Each video frame: that part of the video, cut to the cut-out's shape. Returns whether it drew.
     const draw = () => {
       const box = fgBox();
-      if (!canvas || !ctx || !fgImg || !box || video.readyState < 2 || !fgImg.complete || !fgImg.naturalWidth) return;
+      loadMask();
+      if (!canvas || !ctx || !mask || !box || video.readyState < 2 || !mask.complete || !mask.naturalWidth) return false;
       const ratio = Math.min(window.devicePixelRatio || 1, 2);
       const cw = Math.max(1, Math.round(canvas.clientWidth * ratio));
       const ch = Math.max(1, Math.round(canvas.clientHeight * ratio));
@@ -105,18 +116,28 @@ function Loop({ data, className }: { data: SceneVideoData; className: string }) 
       const [x0, y0, x1, y1] = box;
       const vw = video.videoWidth;
       const vh = video.videoHeight;
-      const iw = fgImg.naturalWidth;
-      const ih = fgImg.naturalHeight;
+      const iw = mask.naturalWidth;
+      const ih = mask.naturalHeight;
       ctx.globalCompositeOperation = "copy";
       ctx.drawImage(video, x0 * vw, y0 * vh, (x1 - x0) * vw, (y1 - y0) * vh, 0, 0, cw, ch);
       ctx.globalCompositeOperation = "destination-in";
-      ctx.drawImage(fgImg, x0 * iw, y0 * ih, (x1 - x0) * iw, (y1 - y0) * ih, 0, 0, cw, ch);
+      ctx.drawImage(mask, x0 * iw, y0 * ih, (x1 - x0) * iw, (y1 - y0) * ih, 0, 0, cw, ch);
+      return true;
+    };
+    // Draw, and once the video shows and a frame has been drawn, fade the canvas in; after that the
+    // cut-out picture under it goes (a flower that sways aside must not uncover its painted twin).
+    let liveTimer = 0;
+    const paint = () => {
+      if (!draw() || !canvas || !video.hasAttribute("data-on") || canvas.hasAttribute("data-on")) return;
+      canvas.setAttribute("data-on", "");
+      clearTimeout(liveTimer);
+      liveTimer = window.setTimeout(() => fgHost?.setAttribute("data-live", ""), FADE_MS + 50);
     };
     let frameHandle = 0;
     let rafHandle = 0;
     const loop = () => {
       if (!canvas) return;
-      draw();
+      paint();
       if (typeof video.requestVideoFrameCallback === "function") frameHandle = video.requestVideoFrameCallback(loop);
       else rafHandle = requestAnimationFrame(loop);
     };
@@ -133,7 +154,6 @@ function Loop({ data, className }: { data: SceneVideoData; className: string }) 
     let src = ""; // the file the video was given
     let swapping = false;
     let timer = 0;
-    let liveTimer = 0;
     let idleHandle = 0;
 
     const run = () => {
@@ -150,14 +170,7 @@ function Loop({ data, className }: { data: SceneVideoData; className: string }) 
     const show = () => {
       if (dead || swapping) return;
       video.setAttribute("data-on", "");
-      if (canvas) {
-        draw();
-        canvas.setAttribute("data-on", "");
-        // Once the canvas has faded in, the cut-out picture under it goes (a flower that sways
-        // aside must not uncover its painted twin).
-        clearTimeout(liveTimer);
-        liveTimer = window.setTimeout(() => fgHost?.setAttribute("data-live", ""), FADE_MS + 50);
-      }
+      paint();
     };
 
     const hide = () => {
