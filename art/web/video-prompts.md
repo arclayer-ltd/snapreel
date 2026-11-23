@@ -22,3 +22,16 @@ with the same opening and ends with the same closing:
 | Footer, Dusk | a picnic on a grassy hill at dusk | as Light | as Light, with pink clouds, the lantern on the blanket flickering warmly, fireflies, stars and city windows | as Light |
 | Inner pages, Light | a sunny city park | The buildings, skyline, lamp post, low stone wall, paved path and the bicycle | A gentle summer breeze: tree leaves rustle and branches sway softly, the bushes, tulips and daisies sway gently, the white clouds drift slowly, the two birds flap and glide, the little airplane moves slowly along its trail | The two people stay in place and remain exactly the same people, just alive: the girl sitting on the wall blinks, breathes, smiles and glances at her phone; the boy on the bicycle balances in place without riding off and waves his hand gently |
 | Inner pages, Dusk | a city park at dusk | as Light | as Light, with pink clouds and the airplane's light blinking; the street lamp and the bicycle headlight glow warmly with a soft flicker, the city windows glimmer and the stars twinkle | as Light |
+
+## Round 8b (10 s, first frame only)
+
+Three clips were made again so their motion stays even for the whole clip (`minimax_h3`, 2K, 10 s, the scene
+picture as `start_image` only). The opening is the same with "as a calm, continuous shot"; the clouds are listed
+with the things that stay rigid (the script lays the still's clouds back in); "steady ... that never stops" and
+"continuously" are added to the breeze; the people move "with small, steady movements all the way through"; and
+the last sentence is "Even, continuous motion from the first second to the last, with no pause and no slowing
+down." instead of the last-frame sentence.
+
+- Pricing, Light: as before, and "the boy with raised fists keeps his arms up and sways a little".
+- Footer, Dusk: as before, and the friends "wave their hands gently and keep waving".
+- Inner pages, Light: as before, and the boy on the bicycle "waves his hand slowly and evenly the whole time".

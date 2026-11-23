@@ -14,6 +14,7 @@ Red is the only accent.
 | `refs-crops/` | The character crops from `art/characters/lineup.png` uploaded as references. |
 | `screens.json` | The scene slots. Drives `scripts/web-compose.py`. |
 | `video-prompts.md` | The prompts of the scenes' video loops (see Video loops). |
+| `video-loops.json` | Each loop's cut points, length, energy dips before and after round 8b, and cloud drift. Written by `scripts/web-scene-video.py`. |
 | `screens/` | The app screenshots the site's iPhones show, Light and Dark (`light/`, `dark/`), copied from CI runs (the Pro screens from run r31, the rest from build 40, run 44708462842). Drives `scripts/web-screens.py`. |
 | `og.html` | Source of `web/app/(marketing)/opengraph-image.jpg` and `twitter-image.jpg`. |
 | `review/` | Full-page review screenshots of every page at 390 and 1440 px, Light and Dark (`{page}-{width}-{scheme}.jpg`), and `compose/` previews of each phone and scene. |
@@ -89,9 +90,10 @@ headline, was painted out with `scripts/web-hero-erase-kite.py` (originals in gi
 
 Every scene lives: wind in the trees and flowers, drifting clouds, birds, the kite and the balloon, lamps and
 string lights at dusk, and the characters breathing, blinking and waving. Each scene picture in `gen2/`, Light
-and Dusk, was animated by an image-to-video model with the picture as both its first and its last frame
-(MiniMax H3 on Higgsfield, 2K, 8 s; the choice, job IDs and credits are in `credits.md`, the prompts in
-`video-prompts.md`). The camera is locked off, so the art stays where the page's phones and cards expect it.
+and Dusk, was animated by an image-to-video model starting from the picture (MiniMax H3 on Higgsfield, 2K; 8 s
+with the picture as first and last frame, or 10 s from the first frame only for the three clips redone in round
+8b; the choice, job IDs and credits are in `credits.md`, the prompts in `video-prompts.md`). The camera is locked
+off, so the art stays where the page's phones and cards expect it.
 This replaced a hand-written Three.js sway layer (round 4 to 7), which the owner found looked like trees under
 water.
 
@@ -100,8 +102,22 @@ water.
 
 - each clip back in its picture's exact shape (the 3:2 hero went to the model stretched to 16:9 and is squeezed
   back) and matched to the still's average colour, so the fade from picture to video can't be seen;
-- a seamless loop: the last 14 frames are blended into the first ones and the clip is shortened by as many.
-  The model eases into its last frame, so each loop has a short calm before the breeze picks up again;
+- a loop without a calm. The model eases into and out of its keyframes, so the script drops the eased ends,
+  measures the motion energy (mean difference of consecutive frames, sky left out) and cuts the loop inside
+  the active part between the two frames at least 4.5 s apart that best match in picture and in motion,
+  joined by a 0.5 s crossfade. Among the best matches it takes the one whose energy dips least. The file then
+  starts at the loop frame nearest the still, so the fade from picture to video stays soft. Loop points,
+  lengths and dips (before and after) are in `video-loops.json`;
+- clouds that drift instead of shimmering. Inside each cloud box (`CLOUDS` in the script) the video's sky and
+  clouds are replaced by a clean sky plate (the still with its clouds painted out over a fitted sky gradient)
+  and the still's own clouds, drifting 8 px (on a 1440 px page) over each loop: copy A moves 0 to +D and fades
+  out while copy B moves -D to 0 and fades in, so the end equals the start. A cloud is carried on sideways under
+  the tree it meets and mirrored past the picture's edge, so no copy shows a cut. Whatever the video shows as
+  leaf, trunk, bird, kite or balloon stays on top, so swaying branches still pass over the clouds. Lamp heads,
+  the rooftop lantern, the string lights, the footer's kite and the characters right under a cloud (a cream
+  sleeve, or skin at dusk, has a cloud's colour) are protected boxes that always stay the video's. The Dusk
+  footer's clip flies the kite off to the right, so there the kite is shown as painted, or it would jump back at
+  every loop point;
 - the same cuts as the pictures (`screens.json`): wide (1920 px), the phone crop (720 px; the inner-page banner,
   which has none, whole at 960 px) and every spot cut from the same picture (480 px);
 - H.264 MP4 for every browser and, where it comes out at least 15 % smaller, AV1 MP4 for the browsers that say
@@ -117,7 +133,7 @@ back in), and with `prefers-reduced-motion: reduce` or Save-Data there is no vid
 flower bed, the cut-out drawn in front of the phone, is redrawn every frame from the same video on a small canvas
 masked by the cut-out, so the tulips in front of the phone move with the rest of the bed.
 
-The raw clips (about 8 MB each) are not in the repo; download them again from the job IDs in `credits.md`.
+The raw clips (8 to 12 MB each) are not in the repo; download them again from the job IDs in `credits.md`.
 
 ## Running it
 

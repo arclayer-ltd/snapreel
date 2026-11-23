@@ -23,6 +23,7 @@ export const sceneVideos = {
         "w": 1920
       },
       "light": {
+        "av1": "/marketing/video/scene-features-wide-light.av1.mp4",
         "h": 1080,
         "h264": "/marketing/video/scene-features-wide-light.mp4",
         "w": 1920
