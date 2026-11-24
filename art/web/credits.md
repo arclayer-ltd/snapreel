@@ -90,3 +90,27 @@ clips; Seedance 2.0 fast is 20 for 8 s at 1080p.
 
 **Round 8 total: 182 credits** (38 for the tests and the outpaint, 144 for the nine other loops). The spots are
 cut from the same loops, so they cost nothing. The prompts are in `video-prompts.md`.
+
+## Round 8b: no calm at the loop point, clouds that drift (23 Nov 2026)
+
+The owner asked to fix the calm pause at each loop point and the shimmering clouds. Limit: 100 Higgsfield
+credits without asking. Seven loops were re-cut from the round 8 clips at no cost. Three clips had no 4.5 s
+stretch of steady motion and were made again with MiniMax H3, 2K, 10 s, the scene picture as first frame only
+(the loop is now made by a crossfade, so no last frame is needed); prompts in `video-prompts.md`:
+
+| Scene | Why | Job ID | Credits |
+|---|---|---|---|
+| Pricing / rooftop, Light | motion died down after 4 s | c7003d44-1405-4714-9849-4b0ff153e173 | 20 |
+| Footer, Dusk | motion died down after 4 s | d1aabd7c-d1ea-4005-96ff-60bcdb22c7dd | 20 |
+| Inner pages, Light | rhythmic lull every 1.5 s | d51f09ec-d14c-4a6f-8659-6fc7d5f5d9f7 | 20 |
+
+**Round 8b total: 60 credits.** The clouds are composited from the stills in `scripts/web-scene-video.py`, so
+they cost nothing.
+
+## Round 9: only nature moves (23 Nov 2026)
+
+The owner's rule: "make sure the charecter dosen't animate only the nature". The people and objects are the still
+picture in every frame; the nature comes from the round 8 and 8b clips (round 8c, which morphed the moving characters
+at the loop point, was never finished). Limit: 200 Higgsfield credits without asking.
+
+**Round 9 total: 0 credits.** Nothing was generated: see Video loops in `README.md`, `scene-nature.json` and `held/`.

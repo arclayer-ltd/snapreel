@@ -4,7 +4,7 @@ import { useEffect, useRef, useSyncExternalStore } from "react";
 
 /**
  * The living version of an illustrated scene: an AI-animated loop of the very same picture (wind in the
- * trees and flowers, birds, lamps at dusk, the characters breathing), made by scripts/web-scene-video.py.
+ * trees and flowers, birds, clouds, water; the people and objects never move), made by scripts/web-scene-video.py.
  * A muted, looping, inline <video> laid exactly over the scene's <picture>, under the phone, the cards and
  * the text. The picture stays the first paint, the LCP and the fallback: the video only starts loading
  * after the page has loaded and gone idle, only when the scene is near the viewport, and fades in over
