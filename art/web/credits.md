@@ -106,3 +106,11 @@ stretch of steady motion and were made again with MiniMax H3, 2K, 10 s, the scen
 
 **Round 8b total: 60 credits.** The clouds are composited from the stills in `scripts/web-scene-video.py`, so
 they cost nothing.
+
+## Round 9: only nature moves (23 Nov 2026)
+
+The owner's rule: "make sure the charecter dosen't animate only the nature". The people and objects are the still
+picture in every frame; the nature comes from the round 8 and 8b clips (round 8c, which morphed the moving characters
+at the loop point, was never finished). Limit: 200 Higgsfield credits without asking.
+
+**Round 9 total: 0 credits.** Nothing was generated: see Video loops in `README.md`, `scene-nature.json` and `held/`.

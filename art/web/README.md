@@ -14,7 +14,9 @@ Red is the only accent.
 | `refs-crops/` | The character crops from `art/characters/lineup.png` uploaded as references. |
 | `screens.json` | The scene slots. Drives `scripts/web-compose.py`. |
 | `video-prompts.md` | The prompts of the scenes' video loops (see Video loops). |
-| `video-loops.json` | Each loop's cut points, length, energy dips before and after round 8b, and cloud drift. Written by `scripts/web-scene-video.py`. |
+| `video-loops.json` | Each loop's length, its regions' cut points, energy dips and cloud drift. Written by `scripts/web-scene-video.py`. |
+| `scene-nature.json` | What may move in each scene (see Video loops). |
+| `held/` | The people and objects of each scene, which never move: 1-bit masks at the pictures' outlines, half size, the same for Light and Dusk. |
 | `screens/` | The app screenshots the site's iPhones show, Light and Dark (`light/`, `dark/`), copied from CI runs (the Pro screens from run r31, the rest from build 40, run 44708462842). Drives `scripts/web-screens.py`. |
 | `og.html` | Source of `web/app/(marketing)/opengraph-image.jpg` and `twitter-image.jpg`. |
 | `review/` | Full-page review screenshots of every page at 390 and 1440 px, Light and Dark (`{page}-{width}-{scheme}.jpg`), and `compose/` previews of each phone and scene. |
@@ -88,12 +90,14 @@ headline, was painted out with `scripts/web-hero-erase-kite.py` (originals in gi
 
 ## Video loops
 
-Every scene lives: wind in the trees and flowers, drifting clouds, birds, the kite and the balloon, lamps and
-string lights at dusk, and the characters breathing, blinking and waving. Each scene picture in `gen2/`, Light
-and Dusk, was animated by an image-to-video model starting from the picture (MiniMax H3 on Higgsfield, 2K; 8 s
-with the picture as first and last frame, or 10 s from the first frame only for the three clips redone in round
-8b; the choice, job IDs and credits are in `credits.md`, the prompts in `video-prompts.md`). The camera is locked
-off, so the art stays where the page's phones and cards expect it.
+Only nature moves (the owner's rule, 23 Nov 2026): wind in the trees, flowers and grass, drifting clouds, birds,
+butterflies, water, fireflies and leaf shadows. The people, what they wear and hold, animals on the ground, bicycles,
+the kite, the plane, the balloon, lamps, string lights, benches and buildings are the still picture in every frame.
+Each scene picture in `gen2/`, Light and Dusk, was animated by an image-to-video model starting from the picture
+(MiniMax H3 on Higgsfield, 2K; 8 s with the picture as first and last frame, or 10 s from the first frame only for
+the three clips redone in round 8b; the choice, job IDs and credits are in `credits.md`, the prompts in
+`video-prompts.md`). The people move in those clips; `scripts/web-scene-video.py` shows only their nature. The camera
+is locked off, so the art stays where the page's phones and cards expect it.
 This replaced a hand-written Three.js sway layer (round 4 to 7), which the owner found looked like trees under
 water.
 
@@ -101,28 +105,38 @@ water.
 `web/components/marketing/video-manifest.ts`:
 
 - each clip back in its picture's exact shape (the 3:2 hero went to the model stretched to 16:9 and is squeezed
-  back) and matched to the still's average colour, so the fade from picture to video can't be seen;
-- a loop without a calm. The model eases into and out of its keyframes, so the script drops the eased ends,
-  measures the motion energy (mean difference of consecutive frames, sky left out) and cuts the loop inside
-  the active part between the two frames at least 4.5 s apart that best match in picture and in motion,
-  joined by a 0.5 s crossfade. Among the best matches it takes the one whose energy dips least. The file then
-  starts at the loop frame nearest the still, so the fade from picture to video stays soft. Loop points,
-  lengths and dips (before and after) are in `video-loops.json`;
+  back), its colours matched to the still frame by frame, so the fade from picture to video can't be seen;
+- the still everywhere but in the nature (round 9). `scene-nature.json` says where a scene's clip may show at all
+  (polygons around crowns, beds, bushes, water, birds, shadows; tree lines in front of buildings count only where
+  they are plant-coloured), and within that only what moves shows, with soft edges. `held/<scene>.png` (the people and
+  objects, at the still's outlines; the same for Light and Dusk) is laid over everything from the still. So leaves
+  and flowers move right up to and behind a character who doesn't. Outside the nature a file is the still, resampled
+  straight from the picture. A new scene, or a character in a new place, needs both files updated;
+- a loop without a calm. The model eases into and out of its keyframes, and a tree lulls at each end of its sway.
+  Every separate piece of nature gets its own loop, all of one length (at least 4.5 s): cut where the two ends match
+  best in picture and in motion, and turned round so the pieces' lulls don't fall together. The ends are joined over
+  0.5 s by a morph, not a crossfade: the optical flow between the two frames, both ways (OpenCV DIS), slides each pose
+  towards the other before they are blended. Birds fade over. Loop points, lengths and energy dips are in
+  `video-loops.json`;
+- no jump at the wrap. Each file starts at one of its own quietest steps (of the quietest fiftieth, the one whose
+  picture is nearest the still), so the decoder's jump back to the first frame lands where the picture barely moves;
 - clouds that drift instead of shimmering. Inside each cloud box (`CLOUDS` in the script) the video's sky and
   clouds are replaced by a clean sky plate (the still with its clouds painted out over a fitted sky gradient)
   and the still's own clouds, drifting 8 px (on a 1440 px page) over each loop: copy A moves 0 to +D and fades
   out while copy B moves -D to 0 and fades in, so the end equals the start. A cloud is carried on sideways under
   the tree it meets and mirrored past the picture's edge, so no copy shows a cut. Whatever the video shows as
-  leaf, trunk, bird, kite or balloon stays on top, so swaying branches still pass over the clouds. Lamp heads,
-  the rooftop lantern, the string lights, the footer's kite and the characters right under a cloud (a cream
-  sleeve, or skin at dusk, has a cloud's colour) are protected boxes that always stay the video's. The Dusk
-  footer's clip flies the kite off to the right, so there the kite is shown as painted, or it would jump back at
-  every loop point;
+  leaf, trunk or bird stays on top, so swaying branches still pass over the clouds. Lamp heads, the rooftop
+  lantern, the string lights, the footer's kite and the characters right under a cloud (a cream sleeve, or skin at
+  dusk, has a cloud's colour) are protected boxes;
 - the same cuts as the pictures (`screens.json`): wide (1920 px), the phone crop (720 px; the inner-page banner,
   which has none, whole at 960 px) and every spot cut from the same picture (480 px);
-- H.264 MP4 for every browser and, where it comes out at least 15 % smaller, AV1 MP4 for the browsers that say
-  they play it. Each file is one keyframe and then predicted frames: at these bitrates a keyframe is sharper
-  than the frames before it, and the usual keyframe every 4 s showed as a pulse, also at the loop seam.
+- H.264 MP4, no AV1 (at these sizes AV1's big blocks recoded bits of the people next to moving leaves). Each file is one keyframe and then predicted frames: at these bitrates a keyframe is sharper
+  than the frames before it, and the usual keyframe every 4 s showed as a pulse, also at the loop seam. For
+  the same reason the keyframe and the last frame have to be coded alike, or the picture jumps at the wrap. H.264 is
+  two-pass (the raw frames tagged BT.709, or ffmpeg shifts the colours): the first encode's keyframe is decoded, every
+  never-moving pixel is set to exactly that, and the last 24 frames, which get more bits, carry the keyframe's own
+  coding error, fading in; the second encode uses the same first-pass statistics, so it makes the same keyframe.
+  `video-limits.json` holds a size ceiling per file (round 8b's sizes, and up to 1.6 times that for the inner-page banner and three spots, where fewer bits made held edges shimmer).
 
 On the page (`web/components/marketing/scene-video.tsx`, `.mk-scene-video` in `marketing.css`) a scene gets a
 muted, looping, inline `<video>` exactly over its `<picture>`, under the phone, the cards and the text. The

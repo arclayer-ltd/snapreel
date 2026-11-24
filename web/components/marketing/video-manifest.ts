@@ -1,5 +1,5 @@
 // Written by scripts/web-scene-video.py. Don't edit by hand.
-// Per slot: the wide and phone loops in Light and Dark (H.264, plus AV1 where it is smaller) and the
+// Per slot: the wide and phone loops in Light and Dark (H.264) and the
 // foreground cut-out's box in fractions of the picture.
 export const sceneVideos = {
   "scene-features": {
@@ -17,13 +17,11 @@ export const sceneVideos = {
     },
     "wide": {
       "dark": {
-        "av1": "/marketing/video/scene-features-wide-dark.av1.mp4",
         "h": 1080,
         "h264": "/marketing/video/scene-features-wide-dark.mp4",
         "w": 1920
       },
       "light": {
-        "av1": "/marketing/video/scene-features-wide-light.av1.mp4",
         "h": 1080,
         "h264": "/marketing/video/scene-features-wide-light.mp4",
         "w": 1920
@@ -45,13 +43,11 @@ export const sceneVideos = {
     },
     "wide": {
       "dark": {
-        "av1": "/marketing/video/scene-footer-wide-dark.av1.mp4",
         "h": 824,
         "h264": "/marketing/video/scene-footer-wide-dark.mp4",
         "w": 1920
       },
       "light": {
-        "av1": "/marketing/video/scene-footer-wide-light.av1.mp4",
         "h": 824,
         "h264": "/marketing/video/scene-footer-wide-light.mp4",
         "w": 1920
@@ -87,13 +83,11 @@ export const sceneVideos = {
     },
     "wide": {
       "dark": {
-        "av1": "/marketing/video/scene-hero-wide-dark.av1.mp4",
         "h": 1280,
         "h264": "/marketing/video/scene-hero-wide-dark.mp4",
         "w": 1920
       },
       "light": {
-        "av1": "/marketing/video/scene-hero-wide-light.av1.mp4",
         "h": 1280,
         "h264": "/marketing/video/scene-hero-wide-light.mp4",
         "w": 1920
@@ -115,13 +109,11 @@ export const sceneVideos = {
     },
     "wide": {
       "dark": {
-        "av1": "/marketing/video/scene-page-wide-dark.av1.mp4",
         "h": 824,
         "h264": "/marketing/video/scene-page-wide-dark.mp4",
         "w": 1920
       },
       "light": {
-        "av1": "/marketing/video/scene-page-wide-light.av1.mp4",
         "h": 824,
         "h264": "/marketing/video/scene-page-wide-light.mp4",
         "w": 1920
@@ -143,13 +135,11 @@ export const sceneVideos = {
     },
     "wide": {
       "dark": {
-        "av1": "/marketing/video/scene-pricing-wide-dark.av1.mp4",
         "h": 1080,
         "h264": "/marketing/video/scene-pricing-wide-dark.mp4",
         "w": 1920
       },
       "light": {
-        "av1": "/marketing/video/scene-pricing-wide-light.av1.mp4",
         "h": 1080,
         "h264": "/marketing/video/scene-pricing-wide-light.mp4",
         "w": 1920
