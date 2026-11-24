@@ -13,11 +13,20 @@ import { useEffect, useRef, useSyncExternalStore } from "react";
  * or Save-Data.
  *
  * A scene with a foreground cut-out in front of the phone (`.mk-scene-fg`, the hero's front flower bed)
- * gets a canvas over the cut-out's box that redraws that part of the video every frame, masked by the
- * cut-out, so the flowers in front of the phone move with the rest of the bed.
+ * gets a canvas over the cut-out's box that redraws that part of the video every frame, so the flowers in
+ * front of the phone move with the rest of the bed. Their shape in every frame comes with the video: a grey
+ * strip under the picture (`matte`), which the page never shows.
  */
 
-type Clip = { readonly w: number; readonly h: number; readonly h264: string; readonly av1?: string };
+type Clip = {
+  readonly w: number;
+  readonly h: number;
+  readonly h264: string;
+  readonly av1?: string;
+  /** The file is `coded` rows high: the picture (`h`), a gap, and from row `strip` on the matte of the picture's
+      rows from `row` down. */
+  readonly matte?: { readonly coded: number; readonly row: number; readonly strip: number };
+};
 type Themed = { readonly light: Clip; readonly dark: Clip };
 type Box = readonly number[];
 export type SceneVideoData = {
@@ -32,6 +41,54 @@ const DARK = "(prefers-color-scheme: dark)";
 const NARROW = "(max-width: 1023px)";
 const AV1 = 'video/mp4; codecs="av01.0.08M.08"';
 const FADE_MS = 600;
+
+/** A painter for the foreground cut-out: part of a video frame, with its alpha taken from another part. */
+function mattePainter(canvas: HTMLCanvasElement) {
+  const gl = canvas.getContext("webgl", { premultipliedAlpha: true, antialias: false });
+  if (!gl) return null;
+  const program = gl.createProgram();
+  for (const [type, source] of [
+    [gl.VERTEX_SHADER, "attribute vec2 p;varying vec2 u;void main(){u=vec2(p.x,1.-p.y);gl_Position=vec4(p*2.-1.,0.,1.);}"],
+    [
+      gl.FRAGMENT_SHADER,
+      "precision mediump float;varying vec2 u;uniform sampler2D v;uniform vec4 c,m;void main(){" +
+        "float a=clamp((texture2D(v,m.xy+u*m.zw).g-.06)/.86,0.,1.);gl_FragColor=vec4(texture2D(v,c.xy+u*c.zw).rgb*a,a);}",
+    ],
+  ] as const) {
+    const shader = gl.createShader(type);
+    if (!shader) return null;
+    gl.shaderSource(shader, source);
+    gl.compileShader(shader);
+    gl.attachShader(program, shader);
+  }
+  gl.linkProgram(program);
+  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) return null;
+  gl.useProgram(program);
+  gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([0, 0, 1, 0, 0, 1, 1, 1]), gl.STATIC_DRAW);
+  gl.enableVertexAttribArray(0);
+  gl.vertexAttribPointer(gl.getAttribLocation(program, "p"), 2, gl.FLOAT, false, 0, 0);
+  gl.bindTexture(gl.TEXTURE_2D, gl.createTexture());
+  for (const [name, value] of [
+    [gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE],
+    [gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE],
+    [gl.TEXTURE_MIN_FILTER, gl.LINEAR],
+    [gl.TEXTURE_MAG_FILTER, gl.LINEAR],
+  ] as const) {
+    gl.texParameteri(gl.TEXTURE_2D, name, value);
+  }
+  const colour = gl.getUniformLocation(program, "c");
+  const matte = gl.getUniformLocation(program, "m");
+  return (video: HTMLVideoElement, c: Box, m: Box) => {
+    if (gl.isContextLost()) return false;
+    gl.viewport(0, 0, canvas.width, canvas.height);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, gl.RGB, gl.UNSIGNED_BYTE, video);
+    gl.uniform4f(colour, c[0], c[1], c[2], c[3]);
+    gl.uniform4f(matte, m[0], m[1], m[2], m[3]);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    return true;
+  };
+}
 
 function watchReduce(notify: () => void) {
   const query = window.matchMedia(REDUCE);
@@ -63,23 +120,26 @@ function Loop({ data, className }: { data: SceneVideoData; className: string }) 
     const narrow = window.matchMedia(NARROW);
     let av1 = video.canPlayType(AV1) === "probably";
     const crop = () => (narrow.matches && data.mobile ? "mobile" : "wide");
-    const pick = () => {
+    const clip = () => {
       const set = crop() === "mobile" && data.mobile ? data.mobile : data.wide;
-      const clip = dark.matches ? set.dark : set.light;
-      return av1 && clip.av1 ? clip.av1 : clip.h264;
+      return dark.matches ? set.dark : set.light;
+    };
+    const pick = () => {
+      const c = clip();
+      return av1 && c.av1 ? c.av1 : c.h264;
     };
 
-    // The foreground cut-out's canvas, if the scene has one.
+    // The foreground cut-out's canvas, if the scene has one (and its video brings the matte).
     const fgHost = data.fg ? host.parentElement?.querySelector<HTMLElement>(":scope > .mk-scene-fg") : null;
-    const fgImg = fgHost?.querySelector("img") ?? null;
     let canvas: HTMLCanvasElement | null = null;
-    let ctx: CanvasRenderingContext2D | null = null;
-    if (fgHost && fgImg) {
+    let paintMatte: ReturnType<typeof mattePainter> = null;
+    if (fgHost) {
       canvas = document.createElement("canvas");
       canvas.className = "mk-scene-video mk-scene-video--fg";
       canvas.setAttribute("aria-hidden", "true");
-      fgHost.appendChild(canvas);
-      ctx = canvas.getContext("2d");
+      paintMatte = mattePainter(canvas);
+      if (paintMatte) fgHost.appendChild(canvas);
+      else canvas = null;
     }
     const fgBox = () => (crop() === "mobile" ? data.fg?.mobile : data.fg?.wide) ?? null;
     const place = () => {
@@ -91,21 +151,18 @@ function Loop({ data, className }: { data: SceneVideoData; className: string }) 
       canvas.style.height = `${(box[3] - box[1]) * 100}%`;
     };
     place();
-    // The cut-out as a plain image of the same file (from the cache): the <img>'s own size is corrected
-    // for its srcset density, which drawImage doesn't use, so its pixels can't be addressed reliably.
-    let mask: HTMLImageElement | null = null;
-    const loadMask = () => {
-      const url = fgImg?.currentSrc;
-      if (!url || mask?.src === url) return;
-      mask = new Image();
-      mask.decoding = "async";
-      mask.src = url;
+    // The file that is loaded, as it was picked (the matte's place in it).
+    let loaded: Clip | null = null;
+    // The picture's part of the file fills the scene; the strip under it is cut off.
+    const frameVideo = (c: Clip) => {
+      loaded = c;
+      video.style.height = c.matte ? `${(c.matte.coded / c.h) * 100}%` : "";
+      video.style.clipPath = c.matte ? `inset(0 0 ${(1 - c.h / c.matte.coded) * 100}% 0)` : "";
     };
-    // Each video frame: that part of the video, cut to the cut-out's shape. Returns whether it drew.
+    // Each video frame: that part of the video, cut to the flowers' shape in that frame. Returns whether it drew.
     const draw = () => {
       const box = fgBox();
-      loadMask();
-      if (!canvas || !ctx || !mask || !box || video.readyState < 2 || !mask.complete || !mask.naturalWidth) return false;
+      if (!canvas || !paintMatte || !box || !loaded?.matte || video.readyState < 2) return false;
       const ratio = Math.min(window.devicePixelRatio || 1, 2);
       const cw = Math.max(1, Math.round(canvas.clientWidth * ratio));
       const ch = Math.max(1, Math.round(canvas.clientHeight * ratio));
@@ -114,15 +171,10 @@ function Loop({ data, className }: { data: SceneVideoData; className: string }) 
         canvas.height = ch;
       }
       const [x0, y0, x1, y1] = box;
-      const vw = video.videoWidth;
-      const vh = video.videoHeight;
-      const iw = mask.naturalWidth;
-      const ih = mask.naturalHeight;
-      ctx.globalCompositeOperation = "copy";
-      ctx.drawImage(video, x0 * vw, y0 * vh, (x1 - x0) * vw, (y1 - y0) * vh, 0, 0, cw, ch);
-      ctx.globalCompositeOperation = "destination-in";
-      ctx.drawImage(mask, x0 * iw, y0 * ih, (x1 - x0) * iw, (y1 - y0) * ih, 0, 0, cw, ch);
-      return true;
+      const { coded, row, strip } = loaded.matte;
+      const scale = loaded.h / coded;
+      const tall = (y1 - y0) * scale;
+      return paintMatte(video, [x0, y0 * scale, x1 - x0, tall], [x0, (strip + y0 * loaded.h - row) / coded, x1 - x0, tall]);
     };
     // Draw, and once the video shows and a frame has been drawn, fade the canvas in; after that the
     // cut-out picture under it goes (a flower that sways aside must not uncover its painted twin).
@@ -183,6 +235,7 @@ function Loop({ data, className }: { data: SceneVideoData; className: string }) 
     const load = () => {
       if (dead) return;
       src = pick();
+      frameVideo(clip());
       place();
       video.src = src;
       video.load();

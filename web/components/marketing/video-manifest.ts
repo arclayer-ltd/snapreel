@@ -73,11 +73,21 @@ export const sceneVideos = {
       "dark": {
         "h": 960,
         "h264": "/marketing/video/scene-hero-mobile-dark.mp4",
+        "matte": {
+          "coded": 1118,
+          "row": 810,
+          "strip": 968
+        },
         "w": 720
       },
       "light": {
         "h": 960,
         "h264": "/marketing/video/scene-hero-mobile-light.mp4",
+        "matte": {
+          "coded": 1118,
+          "row": 810,
+          "strip": 968
+        },
         "w": 720
       }
     },
@@ -85,11 +95,21 @@ export const sceneVideos = {
       "dark": {
         "h": 1280,
         "h264": "/marketing/video/scene-hero-wide-dark.mp4",
+        "matte": {
+          "coded": 1486,
+          "row": 1082,
+          "strip": 1288
+        },
         "w": 1920
       },
       "light": {
         "h": 1280,
         "h264": "/marketing/video/scene-hero-wide-light.mp4",
+        "matte": {
+          "coded": 1486,
+          "row": 1082,
+          "strip": 1288
+        },
         "w": 1920
       }
     }
@@ -205,12 +225,12 @@ export const sceneVideos = {
   "spot-watch": {
     "wide": {
       "dark": {
-        "h": 504,
+        "h": 502,
         "h264": "/marketing/video/spot-watch-dark.mp4",
         "w": 480
       },
       "light": {
-        "h": 504,
+        "h": 502,
         "h264": "/marketing/video/spot-watch-light.mp4",
         "w": 480
       }
