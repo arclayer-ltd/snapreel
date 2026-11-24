@@ -114,3 +114,35 @@ picture in every frame; the nature comes from the round 8 and 8b clips (round 8c
 at the loop point, was never finished). Limit: 200 Higgsfield credits without asking.
 
 **Round 9 total: 0 credits.** Nothing was generated: see Video loops in `README.md`, `scene-nature.json` and `held/`.
+
+## Round 10: Seedance 2.5 (25 Nov 2026)
+
+The owner found round 9's motion unnatural (patches of plants moving beside frozen ones; the tulips in front of the
+phone cut with a fixed stencil) and asked for every loop to be made again with Seedance 2.5, at 720p, about 350 credits.
+
+What the model needs (Higgsfield `seedance_2_5`, mode `omni_reference`, the picture as `start_image` and `end_image`, no
+audio): `aspect_ratio: auto` keeps the picture exactly (scale 1.000); a forced 16:9, or draft mode, redraws and
+reframes it. With `auto`, 720p failed every time (six tries, refunded), so the clips are 480p and
+`scripts/web-scene-video.py` puts the picture's own line work back.
+
+| What | Job ID | Credits | Kept |
+|---|---|---|---|
+| Hero Light test: draft, "everything else frozen" | 66da271a-2f73-487c-aee7-5c7119e216b2 | 18 | no, hardly any wind, reframed |
+| Hero Light test: draft, strong wind, first frame only | 46bfc237-57e4-4ebc-945b-d7061a202f63 | 18 | no, redrawn |
+| Hero Light test: 480p, 4 s, `auto` | 2b564fd2-7525-481a-82bc-8a4acaa3086b | 12 | no, replaced |
+| Hero Light, 720p, 16:9 | 38de67dc-3293-4edb-a3e2-46499425138a | 35 | no, redrawn |
+| Hero, Light | 18f4bd8c-1d4d-4c8e-86aa-407cefb1a73c | 15 | yes |
+| Hero, Dusk | 4d17483b-2509-48b6-936a-4e9c0a29099d | 15 | yes |
+| Features, Light | 2c55b9db-f1d3-4b68-bfcb-393da941a40b | 15 | no, calms down |
+| Features, Light | 19605b96-782d-4f7d-b930-32931e5eb2b5 | 15 | yes |
+| Features, Dusk | 9e7e6f62-e161-4688-9909-c4be822b3d30 | 15 | no, wind ribbons |
+| Features, Dusk | 08814f85-a36e-4d3d-852d-dc20a01c90b3 | 15 | yes |
+| Pricing / rooftop, Light | f4ea9d7b-3053-486c-b3fd-059409afdb50 | 15 | yes |
+| Pricing / rooftop, Dusk | 7a1601e1-2410-4086-aadf-3f36b484688f | 15 | yes |
+| Footer, Light | 32505b81-638b-445b-930f-e3b270c60e42 | 15 | no, wind ribbons |
+| Footer, Light | 1d6ca0d2-e7ab-4c22-87c8-429acf402024 | 15 | yes |
+| Footer, Dusk | edab2844-f86b-4848-a928-285dc660c28e | 15 | yes |
+| Inner pages, Light | c313b5aa-4b10-405d-b041-183aba673059 | 15 | yes |
+| Inner pages, Dusk | 88eda631-7938-451d-8a68-534739201e1e | 15 | yes |
+
+**Round 10 total: 278 credits** (48 for the first tests, 230 after the owner's go).

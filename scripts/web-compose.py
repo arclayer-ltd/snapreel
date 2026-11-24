@@ -670,40 +670,36 @@ def render_iphone(slot: dict, shot: Image.Image, L: dict) -> Image.Image:
 # Kind "scene": a full-bleed illustrated environment (Light and Dusk), sized for the page
 # ----------------------------------------------------------------------------------------------
 
-def foreground_matte(img: Image.Image, box: list[float]) -> Image.Image:
-    """Cut a foreground object (the hero's round flower bed) out of the scene so it can sit in
-    front of the phone. `box` (fractions x0, y0, x1, y1) must have plain paving along its top and
-    side edges. Paving is flood-filled in from those edges; the inked outline stops the fill, so
-    whatever it can't reach (flowers, leaves and the stone rim) is the object."""
+def foreground_matte(img: Image.Image, box: list[float], rim: list[float]) -> Image.Image:
+    """Cut a round flower bed out of the scene so it can sit in front of the phone: the whole bed, stone rim
+    included, and the flowers that stand above the rim. `rim` is the rim's outer ellipse (centre x, centre y,
+    half width, half height, as fractions of the picture), upright below its centre; `box` (x0, y0, x1, y1) holds the
+    bed with paving above and beside it. A flower above the rim is whatever is unlike the paving there."""
     arr = np.asarray(img.convert("RGB"))
     H, W = arr.shape[:2]
     x0, y0, x1, y1 = int(box[0] * W), int(box[1] * H), int(box[2] * W), int(box[3] * H)
     crop = arr[y0:y1, x0:x1]
-    lab = cv2.cvtColor(crop, cv2.COLOR_RGB2LAB).astype(np.float32)
-    # Paving colour: the median of the crop's top band and side strips.
-    band = np.concatenate([lab[:12].reshape(-1, 3), lab[:, :12].reshape(-1, 3), lab[:, -12:].reshape(-1, 3)])
-    ref = np.median(band, axis=0)
-    spread = np.percentile(np.linalg.norm(band - ref, axis=1), 90)
-    dist = np.linalg.norm(lab - ref, axis=2)
-    # Dappled shadows on the paving change lightness, not hue: weigh chroma more than L.
-    dchroma = np.linalg.norm(lab[..., 1:] - ref[1:], axis=2)
-    paving = ((dchroma < max(9.0, spread * 0.9)) & (np.abs(lab[..., 0] - ref[0]) < 60) & (dist < max(40.0, spread * 2.5)))
-    paving = paving.astype(np.uint8)
-    h, w = paving.shape
-    seeds = np.zeros_like(paving)
-    seeds[0, :] = 1
-    seeds[:, 0] = 1
-    seeds[:, -1] = 1
-    n, labels = cv2.connectedComponents(paving, connectivity=4)
-    reach = np.unique(labels[(seeds > 0) & (paving > 0)])
-    reach = reach[reach > 0]
-    background = np.isin(labels, reach)
-    obj = (~background).astype(np.uint8)
-    # Keep the biggest blob (the bed) and fill its holes.
-    n, labels, stats, _ = cv2.connectedComponentsWithStats(obj, connectivity=8)
-    if n > 1:
-        big = 1 + int(np.argmax(stats[1:, cv2.CC_STAT_AREA]))
-        obj = (labels == big).astype(np.uint8)
+    h, w = crop.shape[:2]
+    cx, cy, a, b = rim[0] * W - x0, rim[1] * H - y0, rim[2] * W, rim[3] * H
+    yy, xx = np.mgrid[0:h, 0:w].astype(np.float32)
+    bed = ((xx - cx) / a) ** 2 + ((np.minimum(yy, cy) - cy) / b) ** 2 <= 1
+    lab = cv2.cvtColor(crop.astype(np.float32) / 255, cv2.COLOR_RGB2LAB)
+    # The paving: a smooth picture of it, from the pixels outside the bed, leaving out what is unlike it.
+    ok = ~bed
+    for _ in range(6):
+        sigma = 0.035 * w
+        weight = cv2.GaussianBlur(ok.astype(np.float32), (0, 0), sigma) + 1e-4
+        ref = np.dstack([cv2.GaussianBlur(lab[..., c] * ok, (0, 0), sigma) / weight for c in range(3)])
+        far = np.sqrt(((lab - ref) ** 2 * np.array([0.35, 1, 1])).sum(axis=2))
+        ok = (far < 14) & ~bed
+    # Dusk's flowers glow: a wider step there, or the glow on the paving comes along.
+    dusk = np.median(lab[..., 0][ok]) < 60
+    plant = (far > (19 if dusk else 11)) & ~bed & (np.abs(xx - cx) < 0.93 * a) & (yy < cy)
+    ellipse = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
+    plant = cv2.morphologyEx(plant.astype(np.uint8), cv2.MORPH_OPEN, ellipse)
+    obj = cv2.morphologyEx((bed | (plant > 0)).astype(np.uint8), cv2.MORPH_CLOSE, ellipse)
+    n, labels, stats, _ = cv2.connectedComponentsWithStats(obj)
+    obj = (labels == 1 + int(np.argmax(stats[1:, cv2.CC_STAT_AREA]))).astype(np.uint8)
     cnts, _ = cv2.findContours(obj, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
     filled = np.zeros_like(obj)
     cv2.drawContours(filled, cnts, -1, 1, thickness=cv2.FILLED)
@@ -758,7 +754,7 @@ def compose_scene(name: str, slot: dict, out_dir: Path, preview: bool) -> dict:
         crops = {"wide": (wide, slot.get("widths", [1600, 2880]))}
         if slot.get("mobile"):
             crops["mobile"] = (slot["mobile"], slot.get("mobileWidths", [800, 1200]))
-        fg_img = foreground_matte(img, slot["foreground"]) if slot.get("foreground") else None
+        fg_img = foreground_matte(img, slot["foreground"], slot["foregroundRim"]) if slot.get("foreground") else None
         for crop_name, (c, widths) in crops.items():
             box = (round(c[0] * W), round(c[1] * H), round(c[2] * W), round(c[3] * H))
             im = img.crop(box)

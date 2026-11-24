@@ -14,8 +14,8 @@ Red is the only accent.
 | `refs-crops/` | The character crops from `art/characters/lineup.png` uploaded as references. |
 | `screens.json` | The scene slots. Drives `scripts/web-compose.py`. |
 | `video-prompts.md` | The prompts of the scenes' video loops (see Video loops). |
-| `video-loops.json` | Each loop's length, its regions' cut points, energy dips and cloud drift. Written by `scripts/web-scene-video.py`. |
-| `scene-nature.json` | What may move in each scene (see Video loops). |
+| `video-loops.json` | Each loop's length, cloud drift and how much of the picture moves. Written by `scripts/web-scene-video.py`. |
+| `scene-nature.json` | Extra places that stay still (`hold`) or don't (`free`) in each scene (see Video loops). |
 | `held/` | The people and objects of each scene, which never move: 1-bit masks at the pictures' outlines, half size, the same for Light and Dusk. |
 | `screens/` | The app screenshots the site's iPhones show, Light and Dark (`light/`, `dark/`), copied from CI runs (the Pro screens from run r31, the rest from build 40, run 44708462842). Drives `scripts/web-screens.py`. |
 | `og.html` | Source of `web/app/(marketing)/opengraph-image.jpg` and `twitter-image.jpg`. |
@@ -74,9 +74,9 @@ widths, plus:
 
 - `mobile`: a centre crop for screens under 1024 px (art direction through `<source media>`), so a phone
   sees the characters next to the iPhone rather than a thin strip;
-- `foreground`: a cut-out that sits in front of the phone. The hero's round flower bed is found by
-  flood-filling the paving in from the box edges; the inked outline stops the fill, so the flowers and the
-  stone rim come out clean in both Light and Dusk;
+- `foreground`: a cut-out that sits in front of the phone. The hero's round flower bed is the
+  ellipse of its stone rim (`foregroundRim`: centre and radii, as shares of the picture) and the flowers that stand
+  up above it, found by how unlike the paving they are, in both Light and Dusk;
 - the colour along the middle of the top edge, which the page uses as the sky above the picture.
 
 Spots (the guide-card and 404 illustrations) are just scene crops (`wide` box), so they cost no credits.
@@ -93,11 +93,10 @@ headline, was painted out with `scripts/web-hero-erase-kite.py` (originals in gi
 Only nature moves (the owner's rule, 23 Nov 2026): wind in the trees, flowers and grass, drifting clouds, birds,
 butterflies, water, fireflies and leaf shadows. The people, what they wear and hold, animals on the ground, bicycles,
 the kite, the plane, the balloon, lamps, string lights, benches and buildings are the still picture in every frame.
-Each scene picture in `gen2/`, Light and Dusk, was animated by an image-to-video model starting from the picture
-(MiniMax H3 on Higgsfield, 2K; 8 s with the picture as first and last frame, or 10 s from the first frame only for
-the three clips redone in round 8b; the choice, job IDs and credits are in `credits.md`, the prompts in
-`video-prompts.md`). The people move in those clips; `scripts/web-scene-video.py` shows only their nature. The camera
-is locked off, so the art stays where the page's phones and cards expect it.
+Each scene picture in `gen2/`, Light and Dusk, was animated by Seedance 2.5 on Higgsfield (round 10: 480p, 5 s, the
+picture as first and last frame; settings, job IDs and credits are in `credits.md`, the prompts in `video-prompts.md`).
+The camera is locked off, so the art stays where the page's phones and cards expect it.
+Rounds 8 to 9 cut the nature out of MiniMax H3 clips, patch by patch; the owner found that motion unnatural.
 This replaced a hand-written Three.js sway layer (round 4 to 7), which the owner found looked like trees under
 water.
 
@@ -106,23 +105,23 @@ water.
 
 - each clip back in its picture's exact shape (the 3:2 hero went to the model stretched to 16:9 and is squeezed
   back), its colours matched to the still frame by frame, so the fade from picture to video can't be seen;
-- the still everywhere but in the nature (round 9). `scene-nature.json` says where a scene's clip may show at all
-  (polygons around crowns, beds, bushes, water, birds, shadows; tree lines in front of buildings count only where
-  they are plant-coloured), and within that only what moves shows, with soft edges. `held/<scene>.png` (the people and
-  objects, at the still's outlines; the same for Light and Dusk) is laid over everything from the still. So leaves
-  and flowers move right up to and behind a character who doesn't. Outside the nature a file is the still, resampled
-  straight from the picture. A new scene, or a character in a new place, needs both files updated;
-- a loop without a calm. The model eases into and out of its keyframes, and a tree lulls at each end of its sway.
-  Every separate piece of nature gets its own loop, all of one length (at least 4.5 s): cut where the two ends match
-  best in picture and in motion, and turned round so the pieces' lulls don't fall together. The ends are joined over
-  0.5 s by a morph, not a crossfade: the optical flow between the two frames, both ways (OpenCV DIS), slides each pose
-  towards the other before they are blended. Birds fade over. Loop points, lengths and energy dips are in
-  `video-loops.json`;
-- no jump at the wrap. Each file starts at one of its own quietest steps (of the quietest fiftieth, the one whose
+- the whole clip, not patches of it: every plant the clip moves moves, all in one wind. Where the clip doesn't move
+  at all the file is the still, resampled straight from the picture, so nothing rigid shimmers;
+- the still's own line work. The clip is only 480p, so each frame's fine detail comes from the picture itself, slid
+  along the optical flow (OpenCV DIS, with its edges put back where the petals' and leaves' are) between the frame and
+  the picture, and the clip gives everything broader, and all
+  of it where the two disagree, in colour or stroke for stroke (a leaf that turns over, a bird's wing, lavender swaying
+  past its own spikes);
+- `held/<scene>.png` (the people and objects, at the still's outlines; the same for Light and Dusk) on top of it all
+  from the still. What has moved out of a held outline in the clip (hair, a skirt, a bag, a waving hand) is found by the
+  same flow and replaced by the picture's background. `scene-nature.json` adds `hold` boxes (still) and `free` ones (a
+  flower caught in a held outline). A new scene, or a character in a new place, needs both files updated;
+- a loop: the clip starts and ends on the same picture, and its last 8 frames run into the first;
+- no jump at the wrap. Each file starts at one of its own quietest steps (of the quietest tenth, the one whose
   picture is nearest the still), so the decoder's jump back to the first frame lands where the picture barely moves;
 - clouds that drift instead of shimmering. Inside each cloud box (`CLOUDS` in the script) the video's sky and
   clouds are replaced by a clean sky plate (the still with its clouds painted out over a fitted sky gradient)
-  and the still's own clouds, drifting 8 px (on a 1440 px page) over each loop: copy A moves 0 to +D and fades
+  and the still's own clouds, drifting 5 px (on a 1440 px page) over each loop: copy A moves 0 to +D and fades
   out while copy B moves -D to 0 and fades in, so the end equals the start. A cloud is carried on sideways under
   the tree it meets and mirrored past the picture's edge, so no copy shows a cut. Whatever the video shows as
   leaf, trunk or bird stays on top, so swaying branches still pass over the clouds. Lamp heads, the rooftop
@@ -138,6 +137,10 @@ water.
   coding error, fading in; the second encode uses the same first-pass statistics, so it makes the same keyframe.
   `video-limits.json` holds a size ceiling per file (round 8b's sizes, and up to 1.6 times that for the inner-page banner and three spots, where fewer bits made held edges shimmer).
 
+The hero's front flower bed stands in front of the phone, so its files also carry the bed's shape in every frame: the
+cut-out's alpha, slid along the same flow, as a grey strip under the picture (`matte` in the manifest). The page cuts
+the strip off and uses it to draw the bed again in front of the phone (WebGL).
+
 On the page (`web/components/marketing/scene-video.tsx`, `.mk-scene-video` in `marketing.css`) a scene gets a
 muted, looping, inline `<video>` exactly over its `<picture>`, under the phone, the cards and the text. The
 picture is the poster and the fallback and stays the first paint and the LCP: the video starts loading only after
@@ -145,9 +148,9 @@ the page has loaded and gone idle, only for a scene near the viewport, and fades
 while on screen in a visible tab, follows Light/Dark and the phone crop (fading out, swapping the file and fading
 back in), and with `prefers-reduced-motion: reduce` or Save-Data there is no video at all. The hero's front
 flower bed, the cut-out drawn in front of the phone, is redrawn every frame from the same video on a small canvas
-masked by the cut-out, so the tulips in front of the phone move with the rest of the bed.
+in the shape the file carries for that frame, so the tulips in front of the phone move with the rest of the bed.
 
-The raw clips (8 to 12 MB each) are not in the repo; download them again from the job IDs in `credits.md`.
+The raw clips are not in the repo; download them again from the job IDs in `credits.md`.
 
 ## Running it
 

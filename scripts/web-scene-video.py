@@ -1,16 +1,17 @@
 """Video loops for the site's illustrated scenes (web/components/marketing/scene-video.tsx).
 
-Each scene picture in art/web/gen2/ (Light and Dusk) was animated by an image-to-video model (MiniMax H3,
-2K; prompts and job IDs in art/web/credits.md and video-prompts.md). This script turns those raw clips into
+Each scene picture in art/web/gen2/ (Light and Dusk) was animated by an image-to-video model (Seedance 2.5,
+480p, 5 s; prompts and job IDs in art/web/credits.md and video-prompts.md). This script turns those raw clips into
 the files the page plays:
 
 - resampled to the picture's exact shape (the hero is 3:2 and went to the model stretched to 16:9, so it is
   squeezed back here) and matched to the still's colours;
-- only nature moves: the clip shows only inside the scene's nature (art/web/scene-nature.json) and where it moves;
-  everything else, and the people and objects of art/web/held/ on top of it all, is the still in every frame;
-- looped without a calm: each separate piece of nature has its own loop, all of one length (at least LOOP_MIN), cut
-  where the ends match best in picture and in motion, joined by an XF-frame optical-flow morph, and turned round so
-  that the pieces' lulls don't fall together (find_loops);
+- at the picture's own sharpness: the fine detail of every frame is the still's, slid along the optical flow between
+  the frame and the still (detail);
+- only nature moves: the people and objects of art/web/held/ (and the `hold` boxes of art/web/scene-nature.json) are the
+  still in every frame, what strays out of their outlines in the clip is replaced by the still's background, and
+  where the clip doesn't move at all the file is the still too;
+- looped: a clip starts and ends on the same picture, and its last CLOSE_XF frames run into the first;
 - clouds that drift instead of shimmering: inside each cloud box of CLOUDS the video's sky and clouds are
   replaced by a clean sky plate (the still with its clouds painted out) and the still's own clouds, drifting
   over one loop with a seamless crossfade (copy A moves 0 to +D and fades out, copy B moves -D to 0 and fades
@@ -22,11 +23,10 @@ the files the page plays:
 - encoded as H.264 MP4, muted, one keyframe per file (at these
   bitrates a keyframe comes out sharper than the frames before it, which showed as a pulse with the usual GOP);
 - listed in web/components/marketing/video-manifest.ts, with the foreground cut-out's box (the hero's front
-  flower bed, which the page redraws from the video in front of the phone), and the loop points, energy dips
-  and drift in art/web/video-loops.json.
+  flower bed, which the page redraws from the video in front of the phone), and the loops' lengths and
+  drift in art/web/video-loops.json.
 
-$WEB_SCENE_VIDEO_THEMES (light, dark or light,dark) limits a run to one theme; with $WEB_SCENE_VIDEO_SAME_LOOPS set the
-loops recorded in video-loops.json are cut again instead of searched for (while the nature polygons keep their order).
+$WEB_SCENE_VIDEO_THEMES (light, dark or light,dark) limits a run to one theme.
 
 usage:
     python scripts/web-scene-video.py <folder with the raw clips>             # everything (about 40 min)
@@ -58,8 +58,8 @@ LOOPS = ROOT / "art/web/video-loops.json"
 URL = "/marketing/video"
 
 FPS = 24
-LOOP_MIN = round(4.5 * FPS)  # shortest loop
-XF = 12  # crossfade at the loop point (0.5 s)
+MATTE_PAD = 8  # black rows between the picture and the foreground's matte
+CLOSE_XF = 8  # frames over which the end of the clip runs into its start
 WIDTH = {"wide": 1920, "mobile": 720, "phone-full": 960, "spot": 480}
 GOP = FPS * 10  # longer than any clip: one keyframe, no pulse
 # The wrap from the last frame back to the keyframe shows as a pop wherever the two are coded differently: see
@@ -76,9 +76,9 @@ RAMPS = ([(24, 17, 1.0), (16, 11, 1.15), (10, 6, 1.4), (5, 3, 2.0), (2, 1, 3.5)]
          [(24, 17, 1.5), (16, 11, 2.6), (10, 6, 6), (5, 3, 18), (2, 1, 50)])
 TMP = Path(os.environ.get("WEB_SCENE_VIDEO_TMP") or Path(tempfile.gettempdir()) / "web-scene-video")
 
-# Cloud drift over one loop, as a share of the picture's width: 8 px on a 1440 px wide page. Two copies
+# Cloud drift over one loop, as a share of the picture's width: 5 px on a 1440 px wide page. Two copies
 # this far apart are blended halfway through the loop; much more and the halfway frame shows a ghost edge.
-DRIFT = 8 / 1440
+DRIFT = 5 / 1440
 # Per scene picture: the horizon (sky above it), boxes around the painted clouds (fractions of the picture;
 # the same in Light and Dusk), and `protect`: boxes that always stay the video's own, never part of a cloud
 # (lamp heads, the rooftop lantern, string lights, characters right under a cloud: a cream sleeve or skin at dusk
@@ -110,7 +110,7 @@ def polygons(polys, shape):
     return m
 
 
-def held_mask(scene: str, shape):
+def held_mask(scene: str, shape, theme: str):
     """Everything that must look like the still in every frame, whatever the clip does there: the people, what they wear
     and hold, animals, and the objects (art/web/held/, drawn at the still's outlines), plus the scene's own `hold`
     polygons, minus its `free` ones (flowers caught in the outlines)."""
@@ -118,31 +118,8 @@ def held_mask(scene: str, shape):
     h, w = shape
     m = cv2.resize(cv2.imread(str(ROOT / f"art/web/held/{scene}.png"), cv2.IMREAD_GRAYSCALE), (w, h), interpolation=cv2.INTER_LINEAR) > 127
     m[polygons(cfg.get("free", []), shape) > 0] = False
-    m[polygons(cfg.get("hold", []), shape) > 0] = True
+    m[polygons(cfg.get("hold", []) + cfg.get(f"hold_{theme}", []), shape) > 0] = True
     return m
-
-
-def nature_zone(scene: str, theme: str, shape):
-    """Where the clip may show at all: the scene's nature polygons, without the held things."""
-    cfg = NATURE[scene]
-    z = polygons(cfg["nature"] + cfg.get(f"nature_{theme}", []), shape) > 0
-    if "leafy" in cfg:
-        # tree lines in front of buildings: only what is plant-coloured in the Light picture (the Dusk one has the same
-        # outlines), so no building is ever in the zone
-        h, w = shape
-        pic = cv2.resize(cv2.imread(str(ROOT / f"art/web/gen2/{scene}-light.webp")), (w, h), interpolation=cv2.INTER_AREA).astype(np.float32)
-        b, g, r = pic[..., 0], pic[..., 1], pic[..., 2]
-        leaf = ((g - b > 22) & ((g - r > -5) | (g - b > 60))).astype(np.uint8)
-        k = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2 * round(w / 480) + 1,) * 2)
-        leaf = cv2.morphologyEx(cv2.morphologyEx(leaf, cv2.MORPH_CLOSE, k), cv2.MORPH_OPEN, k) * polygons(cfg["leafy"], shape)
-        n, lab, stats, _ = cv2.connectedComponentsWithStats(leaf)
-        small = stats[:, cv2.CC_STAT_AREA] < 0.002 * w * h  # roof gardens, reflections
-        leaf[small[lab]] = 0
-        big = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2 * round(w / 160) + 1,) * 2)
-        leaf = cv2.morphologyEx(leaf, cv2.MORPH_OPEN, big) | (leaf & (cv2.dilate(cv2.morphologyEx(leaf, cv2.MORPH_OPEN, big), k) > 0))
-        z |= (polygons(cfg["leafy"], shape) > 0) & (leaf > 0)
-    z[polygons(cfg.get(f"hold_{theme}", []), shape) > 0] = False
-    return z & ~held_mask(scene, shape)
 
 
 def probe(path: Path):
@@ -175,124 +152,6 @@ def frames_of(path: Path):
 def smoothstep(a, b, x):
     t = np.clip((x - a) / (b - a), 0, 1)
     return t * t * (3 - 2 * t)
-
-
-def smooth(e, k):
-    """Moving average over k frames, wrapping round (a loop has no ends)."""
-    pad = np.concatenate([e[-k:], e, e[:k]])
-    return np.convolve(pad, np.ones(k) / k, mode="same")[k:-k]
-
-
-def regions_of(zone, scene: str, theme: str):
-    """The pieces of nature that loop by themselves, as a label picture (1..n, 0 = none): one per nature polygon (an
-    earlier one wins where they overlap), the leafy areas and Dusk's extra ones, and the `solo` things (a butterfly,
-    birds) on top."""
-    cfg = NATURE[scene]
-    lab = np.zeros(zone.shape, np.int32)
-    k = 0
-    rest = cfg.get("leafy", []) + cfg.get(f"nature_{theme}", [])
-    for pl in cfg["nature"] + rest:
-        k += 1
-        lab[(polygons([pl], zone.shape) > 0) & zone & (lab == 0)] = k
-    for pl in cfg.get("solo", []):
-        k += 1
-        lab[(polygons([pl], zone.shape) > 0) & zone] = k
-    return lab, k
-
-
-def dip(e, k):
-    s = smooth(e, k)
-    return float(1 - s.min() / max(np.median(s), 1e-6))
-
-
-def find_loops(frames, weight, lab, count):
-    """One loop length for the whole picture, and for every region the frame its loop starts at (i) and how far it is
-    turned round (phase). frames: n grey frames 480 px wide; weight: how much each pixel shows (0..1). A region's loop
-    runs i..i+L; the best are those whose two ends match in picture and in motion and whose motion never dies down (the
-    generator eases in and out of its keyframes). The phases are then set so that the regions' lulls, at the ends of
-    their sways, don't fall together: the picture as a whole never goes calm. Motion energy = summed absolute
-    difference of consecutive frames; a dip = how far its moving average (0.25 s or 0.5 s; the generator's frames come
-    in uneven 2-3 frame steps) falls below its median."""
-    n = len(frames)
-    regs = []
-    for q in range(1, count + 1):
-        sel = (lab == q) & (weight > 0.3)
-        area = int(sel.sum())
-        if area < 12:
-            regs.append(None)
-            continue
-        s = frames[:, sel][:, ::max(1, area // 2500)]
-        v = np.zeros_like(s)
-        v[1:-1] = s[2:] - s[:-2]
-        d = np.stack([np.abs(s - s[t]).mean(axis=1) for t in range(n)])
-        dv = np.stack([np.abs(v - v[t]).mean(axis=1) for t in range(n)])
-        e = np.abs(np.diff(s, axis=0)).mean(axis=1) * area
-        regs.append({"d": d, "dv": dv, "e": np.append(e, e[-1]), "area": area, "scale": float(np.median(d[d > 0]))})
-
-    def cost(rg, L):
-        """Per start frame i: how badly the two ends match, plus what a lull in the region's own motion costs."""
-        out = np.full(n, np.inf)
-        for i in range(2, n - L - XF - 1):
-            j = i + L
-            match = np.mean([rg["d"][i + k, j + k] for k in range(0, XF, 2)])
-            motion = rg["dv"][i + XF // 2, j + XF // 2]
-            out[i] = (match + 0.5 * motion) / rg["scale"] + 0.8 * max(0.0, dip(rg["e"][i:j], 24) - 0.3)
-        return out
-
-    def energy(rg, i, L):
-        a = (np.arange(XF) + 1) / (XF + 1)
-        e = rg["e"][i:i + L].copy()
-        e[:XF] = e[:XF] * a + rg["e"][i + L:i + L + XF] * (1 - a)
-        return e
-
-    live = [q for q, rg in enumerate(regs) if rg]
-    weights = np.array([regs[q]["area"] ** 0.5 for q in live])
-    table = {}
-    for L in range(LOOP_MIN, n - XF - 4):
-        cs = [cost(regs[q], L) for q in live]
-        score = float(np.average([c.min() for c in cs], weights=weights)) - 0.0025 * (L - LOOP_MIN)
-        table[L] = (score, cs)
-
-    def obj(total):
-        return max(0.0, dip(total, 6) - 0.1) + 1.5 * max(0.0, dip(total, 12) - 0.05) + 4 * max(0.0, dip(total, 12) - 0.15)
-
-    best = None
-    rng = np.random.default_rng(1)
-    bins = {}
-    for L in sorted(table, key=lambda L: table[L][0]):
-        if len(bins.setdefault((L - LOOP_MIN) // 8, [])) < 2:
-            bins[(L - LOOP_MIN) // 8].append(L)
-    for L in sorted(sum(bins.values(), [])):
-        score, cs = table[L]
-        opts = []
-        for c in cs:
-            good = np.nonzero(c <= c.min() + 0.06)[0]
-            opts.append(sorted(good, key=lambda i: c[i])[:6])
-        for trial in range(2):
-            pick = [(int(o[0]), int(rng.integers(L)) if trial else 0) for o in opts]
-            curves = [np.roll(energy(regs[q], i, L), -ph) for q, (i, ph) in zip(live, pick)]
-            total = np.sum(curves, axis=0)
-            for _ in range(3):
-                for z, q in enumerate(live):
-                    rest = total - curves[z]
-                    cur = None
-                    for i in opts[z]:
-                        base = energy(regs[q], int(i), L)
-                        extra = 0.5 * (cs[z][i] - cs[z].min()) * weights[z] / weights.sum()
-                        for ph in range(0, L, 4):
-                            cv = np.roll(base, -ph)
-                            o = obj(rest + cv) + extra
-                            if cur is None or o < cur - 1e-6:
-                                cur, pick[z], curves[z] = o, (int(i), ph), cv
-                    total = rest + curves[z]
-            final = score + obj(total)
-            if best is None or final < best[0]:
-                best = (final, L, list(pick), total.copy(), [float(c[i]) for c, (i, _ph) in zip(cs, pick)])
-    _, L, pick, total, match = best
-    loops = {q + 1: pk for q, pk in zip(live, pick)}
-    return {"length": L, "seconds": round(L / FPS, 2), "regions": {str(q): {"i": i, "phase": ph} for q, (i, ph) in loops.items()},
-            "match": [round(m, 2) for m in match], "dip_025s": round(dip(total, 6), 3), "dip_05s": round(dip(total, 12), 3),
-            "energy": [round(float(x / total.mean()), 3) for x in total]}
 
 
 # ---------------------------------------------------------------------------------------------- clouds
@@ -510,9 +369,11 @@ class Clouds:
 # ----------------------------------------------------------------------------------------------- files
 
 class Sink:
-    """One output: a crop of the frame, resized, written losslessly (FFV1) to a master in TMP."""
+    """One output: a crop of the frame, resized, written losslessly (FFV1) to a master in TMP. A scene with a foreground
+    cut-out (the hero's front flower bed, which the page draws again in front of the phone) also carries the cut-out's
+    shape in every frame: its alpha, slid along with the picture, as a grey strip MATTE_PAD rows under the picture."""
 
-    def __init__(self, name: str, kind: str, box, shape):
+    def __init__(self, name: str, kind: str, box, shape, fg=None):
         th0, tw0 = shape
         self.frac = box
         if box:
@@ -521,10 +382,17 @@ class Sink:
         width = WIDTH[kind]
         self.size = (width - width % 2, (lambda v: v - v % 2)(round(th0 * width / tw0)))
         self.name, self.kind = name, kind
-        self.join = None  # the master frame where the join starts; set by render
+        self.alpha, self.row, coded = None, 0, self.size[1]
+        if fg is not None:
+            alpha, top = fg
+            if box:
+                top = (top - box[1]) / (box[3] - box[1])
+            self.alpha, self.row = alpha, (lambda v: v - v % 2)(round(top * self.size[1]))
+            coded = self.size[1] + MATTE_PAD + self.size[1] - self.row
+        self.coded = coded
         TMP.mkdir(parents=True, exist_ok=True)
         self.proc = subprocess.Popen(
-            ["ffmpeg", "-v", "error", "-y", "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{self.size[0]}x{self.size[1]}",
+            ["ffmpeg", "-v", "error", "-y", "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{self.size[0]}x{self.coded}",
              "-r", str(FPS), "-i", "-", "-c:v", "ffv1", "-pix_fmt", "gbrp", str(TMP / f"{name}.mkv")],
             stdin=subprocess.PIPE,
         )
@@ -543,14 +411,20 @@ class Sink:
         soft = cv2.dilate(self.cut(change), np.ones((3, 3), np.uint8))
         self.fix = (self.cut(still) - self.cut(ref)) * (1 - smoothstep(0, 0.25, soft))[..., None]
 
-    def write(self, frame):
-        self.proc.stdin.write(np.clip(self.cut(frame) + self.fix + 0.5, 0, 255).astype(np.uint8).tobytes())
+    def write(self, frame, grid):
+        pic = np.clip(self.cut(frame) + self.fix + 0.5, 0, 255).astype(np.uint8)
+        if self.alpha is not None:
+            a = self.cut(cv2.remap(self.alpha, grid[0], grid[1], cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE))
+            strip = np.zeros((self.coded - self.size[1], self.size[0], 3), np.uint8)
+            strip[MATTE_PAD:] = np.clip(a[self.row:] + 0.5, 0, 255).astype(np.uint8)[..., None]
+            pic = np.vstack([pic, strip])
+        self.proc.stdin.write(pic.tobytes())
 
     def close(self):
         self.proc.stdin.close()
         if self.proc.wait():
             raise SystemExit(f"master failed for {self.name}")
-        (TMP / f"{self.name}.json").write_text(json.dumps({"kind": self.kind, "w": self.size[0], "h": self.size[1], "join": self.join}))
+        (TMP / f"{self.name}.json").write_text(json.dumps({"kind": self.kind, "w": self.size[0], "h": self.coded, "pic": self.size[1], "row": self.row if self.alpha is not None else None}))
 
 
 TO_YUV = "scale=out_color_matrix=bt709:out_range=tv,format=yuv420p"
@@ -602,15 +476,15 @@ def still_grey(name: str, w: int, h: int):
     return cv2.resize(pic, (max(1, w // 4), max(1, h // 4)), interpolation=cv2.INTER_AREA).astype(np.float32)
 
 
-def quiet_start(name: str, w: int, h: int, join, n: int):
+def quiet_start(name: str, w: int, h: int, n: int):
     """The frame after a quiet step of the master, so that the file's own wrap (last frame back to the first) lands where
-    the picture barely moves; never inside the join, whose frames are blends. Of the quiet steps (the quietest fiftieth)
-    the one whose picture is nearest the still, so the page's fade from picture to video stays soft."""
+    the picture barely moves. Of the quiet steps (the quietest tenth) the
+    one whose picture is nearest the still, so the page's fade from picture to video stays soft."""
     still = still_grey(name, w, h)
     prev = first = None
     steps = np.empty(n)
     dist = np.empty(n)
-    for t, fr in enumerate(master_yuv(name, w, h)):
+    for t, fr in enumerate(master_yuv(name, w, json.loads((TMP / f"{name}.json").read_text())["h"])):
         y = cv2.resize(fr[:w * h].reshape(h, w), (max(1, w // 4), max(1, h // 4)), interpolation=cv2.INTER_AREA).astype(np.float32)
         dist[t] = np.abs(y - y.mean() - still + still.mean()).mean()
         if prev is None:
@@ -619,11 +493,7 @@ def quiet_start(name: str, w: int, h: int, join, n: int):
             steps[t] = np.abs(y - prev).mean()
         prev = y
     steps[0] = np.abs(first - prev).mean()  # steps[t] = |f[t] - f[t-1]|, round the loop
-    if join is not None:
-        for t in range(n):
-            if (t - join) % n <= XF + 1:
-                steps[t] = np.inf
-    quiet = np.percentile(steps[np.isfinite(steps)], 2)
+    quiet = np.percentile(steps, 10)
     return int(np.argmin(np.where(steps <= quiet, dist, np.inf)))
 
 
@@ -731,8 +601,8 @@ def encode(name: str):
     OUT.mkdir(parents=True, exist_ok=True)
     limits = json.loads((ROOT / "art/web/video-limits.json").read_text())
     n = sum(1 for _ in master_yuv(name, w, h))
-    start = meta["start"] = quiet_start(name, w, h, meta["join"], n)
-    (TMP / f"{name}.json").write_text(json.dumps(meta))  # the checks that look at the join need to know where it landed
+    start = meta["start"] = quiet_start(name, w, meta["pic"], n)
+    (TMP / f"{name}.json").write_text(json.dumps(meta))
     src = np.stack(list(master_yuv(name, w, h, start)))
     _, mask = never_moving(name, w, h, start)
     h264_file = OUT / f"{name}.mp4"
@@ -744,160 +614,165 @@ def encode(name: str):
         if best and best[0] <= 0.97:
             break
     h264_file.write_bytes(best[2])
-    entry = {"w": w, "h": h, "h264": f"{URL}/{h264_file.name}"}
+    entry = {"w": w, "h": meta["pic"], "h264": f"{URL}/{h264_file.name}"}
+    if meta["row"] is not None:
+        entry["matte"] = {"coded": h, "row": meta["row"], "strip": meta["pic"] + MATTE_PAD}
     print(f"    {name}: {w}x{h} starts {start}; h264 {best[1]} {len(best[2]) / 1e6:.3f} MB wrap {best[0]:.2f} x p90", flush=True)
     return entry
 
 
-def warp_pair(a_img, b_img, a, dis):
-    """a_img and b_img (float RGB), each slid along the optical flow between them (DIS, both ways, at half size)
-    towards the frame a of the way from a_img to b_img."""
-    h, w = a_img.shape[:2]
-    small = (w // 2, h // 2)
-    ga = cv2.resize(cv2.cvtColor(np.clip(a_img, 0, 255).astype(np.uint8), cv2.COLOR_RGB2GRAY), small, interpolation=cv2.INTER_AREA)
-    gb = cv2.resize(cv2.cvtColor(np.clip(b_img, 0, 255).astype(np.uint8), cv2.COLOR_RGB2GRAY), small, interpolation=cv2.INTER_AREA)
-    fab = cv2.resize(dis.calc(ga, gb, None), (w, h), interpolation=cv2.INTER_LINEAR) * 2
-    fba = cv2.resize(dis.calc(gb, ga, None), (w, h), interpolation=cv2.INTER_LINEAR) * 2
+def moving(far):
+    """Where the clip moves, given how far each pixel gets from the first frame (about 854 px wide): whole plants, and
+    small things that move a lot (birds, butterflies, fireflies), but no specks of shimmer."""
+    m = cv2.morphologyEx((far > 8).astype(np.uint8), cv2.MORPH_OPEN, np.ones((3, 3), np.uint8))
+    n, lab, stats, _ = cv2.connectedComponentsWithStats(cv2.dilate(m, np.ones((5, 5), np.uint8)))
+    top = np.zeros(n, np.float32)
+    np.maximum.at(top, lab.ravel(), far.ravel())
+    ok = (stats[:, cv2.CC_STAT_AREA] > 350) | ((top > 20) & (stats[:, cv2.CC_STAT_AREA] > 60))
+    ok[0] = False
+    return (ok[lab] & (m > 0)).astype(np.uint8)
+
+
+SHIFTS = [(r * x, r * y) for r in (6, 12, 20) for x, y in ((1, 0), (-1, 0), (0, 1), (0, -1), (.7, .7), (-.7, .7), (.7, -.7), (-.7, -.7))]
+
+
+def sharpen_flow(flow, f, soft, last):
+    """The flow with edges where the picture has them. DIS smooths it across the outline of a petal, so the paving beside it is
+    dragged along and the petal's tip lags behind. Here every pixel takes whichever flow nearby (or none at all) makes
+    the still look most like the frame. last: the sharp flow of the frame before, preferred, so the choice doesn't flicker."""
+    h, w = flow.shape[:2]
     gy, gx = np.mgrid[0:h, 0:w].astype(np.float32)
-    wa = cv2.remap(a_img, gx - a * fab[..., 0], gy - a * fab[..., 1], cv2.INTER_LINEAR, borderMode=cv2.BORDER_REFLECT)
-    wb = cv2.remap(b_img, gx - (1 - a) * fba[..., 0], gy - (1 - a) * fba[..., 1], cv2.INTER_LINEAR, borderMode=cv2.BORDER_REFLECT)
-    return wa, wb
+    f = f.astype(np.float32)
+
+    def cost(fl):
+        d = np.abs(cv2.remap(soft, gx + fl[..., 0], gy + fl[..., 1], cv2.INTER_LINEAR, borderMode=cv2.BORDER_REFLECT) - f)
+        return cv2.GaussianBlur(np.minimum(d.sum(axis=2), 150), (0, 0), 2.3)
+
+    best, out = cost(flow), flow.copy()
+    others = [(cv2.warpAffine(flow, np.float32([[1, 0, x], [0, 1, y]]), (w, h), borderMode=cv2.BORDER_REPLICATE), 8) for x, y in SHIFTS]
+    for fl, dear in [(np.zeros_like(flow), 5)] + ([] if last is None else [(last, 1)]) + others:
+        c = cost(fl) + dear
+        m = c < best
+        best[m] = c[m]
+        out[m] = fl[m]
+    for _ in range(2):
+        out = np.dstack([cv2.medianBlur(out[..., 0], 5), cv2.medianBlur(out[..., 1], 5)])
+    return out, cv2.GaussianBlur(out, (0, 0), 0.7)
 
 
-def join_frames(tails, heads, dis, cut):
-    """The XF frames that carry a region's loop end over into its start. tails and heads: its frames right after the
-    loop's end and right after its start (uint8 RGB). Every frame is a morph: both poses are slid along the optical flow
-    towards a common middle, then blended, so a pose that differs moves across instead of showing twice. `cut` (a soft
-    mask, or None): birds, which the flow can't follow, just fade over."""
-    frames = []
-    for k in range(XF):
-        a = (k + 1) / (XF + 1)
-        ta, hd = tails[k].astype(np.float32), heads[k].astype(np.float32)
-        wa, wb = warp_pair(ta, hd, a, dis)
-        d = cv2.GaussianBlur(np.abs(wa - wb).mean(axis=2), (0, 0), 2)
-        u = smoothstep(10, 35, d)[..., None]  # a little disagreement: switch within a few frames
-        ae = a * (1 - u) + smoothstep(0.3, 0.7, a) * u
-        f = wa * (1 - ae) + wb * ae
-        if cut is not None:
-            f = f * (1 - cut) + (ta * (1 - a) + hd * a) * cut
-        frames.append(np.clip(f, 0, 255).astype(np.uint8))
-    return frames
+def detail(f, ref, refs, soft, dis, grid, guess):
+    """A frame of the clip at the picture's full size, with the picture's own line work: the still, slid along the
+    optical flow between the frame and the still, gives the fine detail; the clip gives everything broader (and all of
+    it where the two disagree: leaves that turned over, a bird's wing). soft: the still as soft as the clip. guess: the
+    frame before's small flows. Returns the frame, the flow and the small flows."""
+    h, w = ref.shape[:2]
+    up = cv2.resize(f, (w, h), interpolation=cv2.INTER_LANCZOS4).astype(np.float32)
+    sw, sh = refs.shape[1], refs.shape[0]
+    fs = cv2.resize(f, (sw, sh), interpolation=cv2.INTER_CUBIC)
+    small = dis.calc(cv2.cvtColor(fs, cv2.COLOR_RGB2GRAY), refs, None if guess is None else guess[0].copy())
+    last, sharp = sharpen_flow(small, fs, soft, None if guess is None else guess[1])
+    flow = cv2.resize(sharp, (w, h), interpolation=cv2.INTER_LINEAR) * (w / sw)
+    slid = cv2.remap(ref, grid[0] + flow[..., 0], grid[1] + flow[..., 1], cv2.INTER_CUBIC, borderMode=cv2.BORDER_REFLECT)
+    s = 1.4 * h / f.shape[0]
+    ls, lu = cv2.GaussianBlur(slid, (0, 0), s), cv2.GaussianBlur(up, (0, 0), s)
+    err = cv2.GaussianBlur(np.abs(ls - lu).max(axis=2), (0, 0), 2)
+    # and how alike the two look, stroke for stroke: where the flow got lost (lavender swaying past its own spikes) the
+    # slid line work is a scramble that only matches on average
+    m = cv2.GaussianBlur(slid, (0, 0), 0.8 * s).mean(axis=2), cv2.GaussianBlur(up, (0, 0), 0.4 * s).mean(axis=2)
+    m = [x - cv2.GaussianBlur(x, (0, 0), 5 * s) for x in m]
+    va, vb, vab = [cv2.GaussianBlur(x, (0, 0), 1.8 * s) for x in (m[0] * m[0], m[1] * m[1], m[0] * m[1])]
+    like = (vab + 25) / (np.sqrt(va * vb) + 25)
+    k = (1 - smoothstep(12, 46, err)) * smoothstep(0.68, 0.9, like)
+    k = cv2.morphologyEx(k, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (15, 15)))  # no stray islands of it
+    k = cv2.GaussianBlur(k, (0, 0), 1.5)[..., None]
+    up += (up - cv2.GaussianBlur(up, (0, 0), 0.8 * s)) * 0.6  # a little crisper where the clip is on its own
+    return np.clip(up + (lu - up + slid - ls) * k, 0, 255), flow, (small, last)
 
 
 def render(src_img: Path, raw: Path, scene: str, theme: str, make_sinks):
-    """Resample, colour-match, loop and re-cloud the raw clip, and lay the nature of every frame over the still."""
+    """The whole clip over the still, at the still's sharpness, with the held things on top."""
     still = cv2.cvtColor(cv2.imread(str(src_img), cv2.IMREAD_COLOR), cv2.COLOR_BGR2RGB)
     sh, sw = still.shape[:2]
     w, h = probe(raw)
-    ar = sw / sh
-    # The picture's shape at the clip's resolution: squeezed across (the hero) or a hair shorter.
-    tw, th = (round(h * ar), h) if w / h > ar else (w, round(w / ar))
+    tw = WIDTH["wide"]
+    th = round(tw * sh / sw)
     unit = th / 1440
     ref = cv2.resize(still, (tw, th), interpolation=cv2.INTER_AREA).astype(np.float32)
-    zone = nature_zone(scene, theme, (th, tw))
-    lab, count = regions_of(zone, scene, theme)
-    quarter = (tw // 4, th // 4)
-    refq = cv2.resize(ref, quarter, interpolation=cv2.INTER_AREA)
-    # pass 1: every frame, colour-matched to the still. The overall gain comes from the first frame, which is the still;
-    # the generator's colours also wander a little: where a frame is within a few levels of the still nothing moved, so
-    # the difference there, smoothed, is the local colour error.
+    cw, ch = w, round(w * sh / sw)  # the clip in the picture's shape (the hero went to the model stretched to 16:9)
+    refc = cv2.resize(still, (cw, ch), interpolation=cv2.INTER_AREA).astype(np.float32)
+    refs = cv2.cvtColor(cv2.resize(refc, (1280, round(1280 * sh / sw)), interpolation=cv2.INTER_AREA).astype(np.uint8), cv2.COLOR_RGB2GRAY)
+    quarter = (cw // 4, ch // 4)
+    refq = cv2.resize(refc, quarter, interpolation=cv2.INTER_AREA)
     TMP.mkdir(parents=True, exist_ok=True)
-    store = TMP / f"{src_img.stem}.frames"
-    gw = 480
-    gh = round(gw * th / tw)
-    grey, far, gain, n = [], None, None, 0
-    with open(store, "wb") as fh:
-        for f in frames_of(raw):
-            g = cv2.resize(f, (tw, th), interpolation=cv2.INTER_AREA).astype(np.float32)
-            if gain is None:
-                gain = ref.reshape(-1, 3).mean(0) / np.maximum(g.reshape(-1, 3).mean(0), 1)
-                far = np.zeros((th, tw), np.float32)
-            g *= gain
-            off = refq - cv2.resize(g, quarter, interpolation=cv2.INTER_AREA)
-            calm = (np.abs(off).max(axis=2) < 7).astype(np.float32)
-            num = cv2.GaussianBlur(off * calm[..., None], (0, 0), 12 * unit)
-            den = cv2.GaussianBlur(calm, (0, 0), 12 * unit)[..., None]
-            g += cv2.resize(num / (den + 0.05), (tw, th), interpolation=cv2.INTER_LINEAR)
-            g = np.clip(g + 0.5, 0, 255).astype(np.uint8)
-            fh.write(g.tobytes())
-            if n % 2 == 0:
-                far = np.maximum(far, cv2.GaussianBlur(np.abs(g.astype(np.float32) - ref).max(axis=2), (0, 0), 1.5 * unit))
-            grey.append(cv2.resize(cv2.cvtColor(g, cv2.COLOR_RGB2GRAY), (gw, gh), interpolation=cv2.INTER_AREA))
-            n += 1
-    frames = np.memmap(store, np.uint8, "r", shape=(n, th, tw, 3))
-    # where the nature moves at all; elsewhere in its zone the picture is the still too, so the edge between the two
-    # always lies where there is hardly a difference. Eased off towards the zone's edges, and over the last pixels next
-    # to a held thing (the clip's own character reaches a little past the still's outline).
-    held_px = held_mask(scene, (th, tw)).astype(np.uint8)
-    moved = cv2.dilate(far, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2 * round(4 * unit) + 1,) * 2))
-    show = cv2.GaussianBlur(smoothstep(7, 16, moved), (0, 0), 4 * unit)
-    away = cv2.distanceTransform(zone.astype(np.uint8), cv2.DIST_L2, 5) / unit
-    show *= smoothstep(2, 7, away)
-    # the held things, 2 px grown with a 2 px feather
+    frames, gain = [], None
+    far = np.zeros((ch, cw), np.float32)
+    for f in frames_of(raw):
+        g = cv2.resize(f, (cw, ch), interpolation=cv2.INTER_CUBIC).astype(np.float32)
+        if gain is None:
+            gain = refc.reshape(-1, 3).mean(0) / np.maximum(g.reshape(-1, 3).mean(0), 1)
+        g *= gain
+        # the generator's colours wander a little: where a frame is near the still nothing moved, so the difference
+        # there, smoothed, is the local colour error
+        off = refq - cv2.resize(g, quarter, interpolation=cv2.INTER_AREA)
+        calm = (np.abs(off).max(axis=2) < 12).astype(np.float32)
+        num = cv2.GaussianBlur(off * calm[..., None], (0, 0), 8)
+        den = cv2.GaussianBlur(calm, (0, 0), 8)[..., None]
+        g += cv2.resize(num / (den + 0.05), (cw, ch), interpolation=cv2.INTER_LINEAR)
+        g = np.clip(g + 0.5, 0, 255).astype(np.uint8)
+        frames.append(g)
+    # the first and the last frame are the same picture
+    L = len(frames) - 1
+    base = cv2.GaussianBlur(frames[0].astype(np.float32), (0, 0), 1)
+    for g in frames[2::2]:
+        d = np.abs(cv2.GaussianBlur(g.astype(np.float32), (0, 0), 1) - base).max(axis=2)
+        far = np.maximum(far, cv2.GaussianBlur(d, (0, 0), 1.2))
+    # where the clip moves; elsewhere it is the still too, so nothing rigid ever shimmers. Wide and soft, so no part
+    # of the nature is cut off: the edge always lies where there is hardly a difference.
+    size = 2 * round(cw / 110) + 1
+    moved = moving(far)
+    moved = cv2.dilate(moved, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (size, size)))
+    show = cv2.GaussianBlur(cv2.resize(moved.astype(np.float32), (tw, th), interpolation=cv2.INTER_LINEAR), (0, 0), 7 * unit)
+    held_px = held_mask(scene, (th, tw), theme).astype(np.uint8)
     reach = cv2.distanceTransform(1 - held_px, cv2.DIST_L2, 5) / unit
-    held = np.clip((4 - reach) / 2, 0, 1).astype(np.float32)
+    held = np.clip((3.5 - reach) / 2, 0, 1).astype(np.float32)
+    free = show * (1 - held)
     clouds = Clouds(ref, scene, theme)
-    # what can change at all, for the sinks: the rest is the still, resampled straight from the picture
-    change = show.copy()
+    change = free.copy()
     for z in clouds.zones:
         x0, y0, x1, y1 = z["box"]
-        change[y0:y1, x0:x1] = np.maximum(change[y0:y1, x0:x1], z["zw"])
-    change *= 1 - held
-    weight = cv2.resize(show * (1 - held), (gw, gh), interpolation=cv2.INTER_AREA)
-    labs = cv2.resize(lab.astype(np.int16), (gw, gh), interpolation=cv2.INTER_NEAREST)
-    loop = json.loads(LOOPS.read_text(encoding="utf8")).get(src_img.stem) if os.environ.get("WEB_SCENE_VIDEO_SAME_LOOPS") else None
-    if not loop or "regions" not in loop:
-        loop = find_loops(np.stack(grey).astype(np.float32), weight, labs, count)
-    L = loop["length"]
-    dis = cv2.DISOpticalFlow_create(cv2.DISOPTICAL_FLOW_PRESET_MEDIUM)
-    birds = polygons(NATURE[scene].get("birds", []), (th, tw)).astype(np.float32)
-    parts = []
-    # each region's share of a pixel: where two of them touch they blend over a few pixels
-    total = np.full((th, tw), 1e-4, np.float32)
-    shares = {}
-    for q in loop["regions"]:
-        shares[q] = cv2.GaussianBlur((lab == int(q)).astype(np.float32), (0, 0), 5 * unit)
-        total += shares[q]
-    for q, pk in loop["regions"].items():
-        share = shares.pop(q) / total
-        m = (share > 0.01) & (show > 0.002)
-        ys, xs = np.nonzero(m)
-        if not len(ys):
-            continue
-        pad = 24
-        y0, y1, x0, x1 = max(0, ys.min() - pad), min(th, ys.max() + pad + 1), max(0, xs.min() - pad), min(tw, xs.max() + pad + 1)
-        i, j = pk["i"], pk["i"] + L
-        cut = birds[y0:y1, x0:x1]
-        cut = cv2.GaussianBlur(cut, (0, 0), 6 * unit)[..., None] if cut.any() else None
-        joined = join_frames([np.array(frames[j + k, y0:y1, x0:x1]) for k in range(XF)],
-                             [np.array(frames[i + k, y0:y1, x0:x1]) for k in range(XF)], dis, cut)
-        a = (show[y0:y1, x0:x1] * share[y0:y1, x0:x1])[..., None]
-        parts.append((i, pk["phase"], y0, y1, x0, x1, a, joined))
-    print(f"  {raw.name}: {w}x{h} -> {tw}x{th}; loop of {L} frames ({L / FPS:.2f} s) in {len(parts)} regions "
-          f"{[(p[0], p[1]) for p in parts]}; match {loop['match']}; dip {loop['dip_025s']:.0%} / {loop['dip_05s']:.0%}; moving "
-          f"{float((show * (1 - held) > 0.5).mean()):.0%} of the picture; drift {clouds.d:.1f} px; gain {np.round(gain, 3).tolist()}", flush=True)
-    sinks = make_sinks((th, tw))
+        change[y0:y1, x0:x1] = np.maximum(change[y0:y1, x0:x1], z["zw"] * (1 - held[y0:y1, x0:x1]))
+    print(f"  {raw.name}: {w}x{h} -> {tw}x{th}; loop of {L} frames ({L / FPS:.2f} s); moving {float((free > 0.5).mean()):.0%} "
+          f"of the picture; drift {clouds.d:.1f} px; gain {np.round(gain, 3).tolist()}", flush=True)
+    sinks = make_sinks((th, tw), theme)
     for s in sinks:
         s.keep(still, ref, change)
+    soft = cv2.resize(refc, (refs.shape[1], refs.shape[0]), interpolation=cv2.INTER_CUBIC)
+    dis = cv2.DISOpticalFlow_create(cv2.DISOPTICAL_FLOW_PRESET_MEDIUM)
+    gy, gx = np.mgrid[0:th, 0:tw].astype(np.float32)
+    grid = (gx, gy)
+    body = cv2.GaussianBlur(cv2.dilate(held_px.astype(np.float32), np.ones((5, 5), np.uint8)), (0, 0), 1)
+    f0, _, _ = detail(frames[0], ref, refs, soft, dis, grid, None)
+    f1, _, _ = detail(frames[L], ref, refs, soft, dis, grid, None)
+    small = None
     for t in range(L):
-        # the still everywhere but in the nature; the clouds drift over that; the held things on top of it all
-        g = ref.copy()
-        for i, ph, y0, y1, x0, x1, a, joined in parts:
-            k = (t + ph) % L
-            patch = joined[k] if k < XF else frames[i + k, y0:y1, x0:x1]
-            g[y0:y1, x0:x1] += (patch.astype(np.float32) - ref[y0:y1, x0:x1]) * a
+        f, flow, small = detail(frames[t], ref, refs, soft, dis, grid, small)
+        left = L - t
+        if left < CLOSE_XF:  # the last frames run into the first one
+            f = f + (f0 - f1) * smoothstep(0, 1, (CLOSE_XF - left) / CLOSE_XF)
+        # what belongs to a person or an object in the picture but has moved out of its outline in the clip (hair, a
+        # skirt, a bag): the picture's own background stands there instead
+        strayed = cv2.remap(body, gx + flow[..., 0], gy + flow[..., 1], cv2.INTER_LINEAR) > 0.4
+        strayed = cv2.dilate(strayed.astype(np.uint8), cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (11, 11)))
+        strayed = cv2.GaussianBlur(strayed.astype(np.float32), (0, 0), 2.5)
+        g = ref + (f - ref) * (show * (1 - strayed))[..., None]
         clouds.apply(g, t / L)
         g += (ref - g) * held[..., None]
         np.clip(g, 0, 255, out=g)
         for s in sinks:
-            s.write(g)
+            s.write(g, (gx + flow[..., 0] * show, gy + flow[..., 1] * show))
     for s in sinks:
         s.close()
-    frames._mmap.close()
-    store.unlink()
-    loop["drift_px"] = round(clouds.d, 1)
-    loop["drift_css_px_at_1440"] = round(DRIFT * 1440, 1)
-    return loop
+    return {"length": L, "seconds": round(L / FPS, 2), "drift_px": round(clouds.d, 1), "moving": round(float((free > 0.5).mean()), 3)}
 
 
 encode_only = sys.argv[1] == "--encode-only"
@@ -906,6 +781,14 @@ raw_dir = None if encode_only else Path(sys.argv[2] if render_only else sys.argv
 only = set(sys.argv[3:] if render_only else sys.argv[2:])
 slots = SCREENS["slots"]
 
+
+
+def foreground_alpha(slot, cfg, shape, theme):
+    """(the foreground cut-out's alpha over the whole picture, 0..255; the top of its box), or None."""
+    if "foreground" not in cfg:
+        return None
+    a = cv2.imread(str(ROOT / f"web/public/marketing/art/{slot}-fg-wide-{theme}-1920.webp"), cv2.IMREAD_UNCHANGED)[..., 3]
+    return cv2.resize(a, (shape[1], shape[0]), interpolation=cv2.INTER_AREA).astype(np.float32), cfg["foreground"][1]
 
 
 def read_manifest():
@@ -938,7 +821,8 @@ for slot, cfg in slots.items():
                 names[f"{spot}-{theme}"] = ("spot", scfg["wide"])
         if not encode_only:
             touched[src.stem] = render(src, raw_dir / f"{src.stem}.mp4", scene, theme,
-                                     lambda shape: [Sink(n, k, b, shape) for n, (k, b) in names.items()])
+                                     lambda shape, theme: [Sink(n, k, b, shape, foreground_alpha(slot, cfg, shape, theme) if k in ("wide", "mobile") else None)
+                                                           for n, (k, b) in names.items()])
         if render_only:
             continue
         done = {n: encode(n) for n in names}

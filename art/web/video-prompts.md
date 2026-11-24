@@ -35,3 +35,25 @@ down." instead of the last-frame sentence.
 - Pricing, Light: as before, and "the boy with raised fists keeps his arms up and sways a little".
 - Footer, Dusk: as before, and the friends "wave their hands gently and keep waving".
 - Inner pages, Light: as before, and the boy on the bicycle "waves his hand slowly and evenly the whole time".
+
+## Round 10 (Seedance 2.5, 480p, 5 s, first and last frame, `aspect_ratio: auto`)
+
+Wind first, then what stays still ("everything frozen" first takes the wind away):
+
+> Start exactly on the first frame image and end exactly on the same image; do not redraw, reframe, crop or zoom it.
+> Hand-drawn 2D animation of {place} on a breezy {summer day | evening at dusk}. Locked-off tripod camera.
+>
+> A steady {summer | evening} breeze blows through the whole {place} without ever stopping, just as strong in the last
+> second as in the first: the tree crowns at both sides sway softly from side to side, a short way, several times, their
+> leaf clusters rustling in place; the smaller trees, hedges and bushes in the distance sway and rustle just as clearly;
+> every tulip and daisy in every bed leans and springs back on its bending stem again and again; the grass waves;
+> {leaf shadows, pond, reeds, lavender, fireflies, butterflies}; the two birds flap and glide. Natural, continuous motion
+> from the first frame to the last.
+>
+> The {n} people are the only still thing, a frozen photograph inside the moving {place}: faces, eyes, hair, hands,
+> clothes, phones, bags, hats do not move at all. The clouds hang motionless. [The light does not change.] {the scene's
+> objects} are rigid. Nothing new appears and nobody leaves.
+
+Features Dusk and footer Light drew wind as white ribbons; their second prompts say "the plants never stop moving"
+instead of naming a breeze, and "absolutely no wind lines, no streaks, no ribbons, no trails, no swirls, no flying
+leaves, no new birds".
