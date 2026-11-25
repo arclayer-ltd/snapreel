@@ -50,6 +50,16 @@ on:
         description: iOS version to test on, e.g. 16.4 (downloaded if needed; empty = newest installed)
         type: string
         default: ""
+      device:
+        # Another simulator for the screenshots, e.g. "iPhone SE (3rd generation)" (empty = 375x812).
+        description: Simulator for the screenshots
+        type: string
+        default: ""
+      text_size:
+        # Dynamic Type for the screenshots, e.g. accessibility-extra-extra-extra-large (empty = large).
+        description: Text size for the screenshots
+        type: string
+        default: ""
       build:
         description: Run the build, screenshots and TestFlight job
         type: boolean
@@ -74,6 +84,8 @@ jobs:
       BROADCAST_PROFILE: Snapreel Broadcast App Store
       LIVE_ACTIVITY_PROFILE: Snapreel Live Activity App Store
       BUILD_NUMBER: ${{ github.run_number }}
+      SCREENSHOT_DEVICE: ${{ inputs.device }}
+      SCREENSHOT_TEXT_SIZE: ${{ inputs.text_size }}
     steps:
       - uses: actions/checkout@v4
 
@@ -310,7 +322,9 @@ jobs:
       - name: Test
         run: |
           ONLY=()
-          for NAME in ${{ inputs.test_only }}; do ONLY+=("-only-testing:SnapreelTests/$NAME"); done
+          for NAME in ${{ inputs.test_only }}; do
+            if [[ "$NAME" == Snapreel* ]]; then ONLY+=("-only-testing:$NAME"); else ONLY+=("-only-testing:SnapreelTests/$NAME"); fi
+          done
           set +e
           xcodebuild test -project Snapreel.xcodeproj -scheme Snapreel -configuration Debug \
             -destination "id=$UDID" -derivedDataPath build -resultBundlePath ci-out/tests.xcresult \
@@ -321,6 +335,9 @@ jobs:
           grep -E "error:|PERF\||BEEPS\||NOTE\||Test Case|Executed" ci-out/tests.log | sed -E 's#^/Users/runner/work/[^/]+/[^/]+/##' > ci-out/tests-summary.txt || true
           cat ci-out/tests-summary.txt
           { echo "### Tests: exit $STATUS"; echo '```'; tail -c 60000 ci-out/tests-summary.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          # Screenshots the UI tests took.
+          mkdir -p ci-out/attachments
+          xcrun xcresulttool export attachments --path ci-out/tests.xcresult --output-path ci-out/attachments > /dev/null 2>&1 || true
           [ "$STATUS" = "0" ] || tail -30 ci-out/tests.log
           exit $STATUS
 

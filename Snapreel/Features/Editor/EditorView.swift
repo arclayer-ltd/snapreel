@@ -316,6 +316,7 @@ private struct EditorTimeLabel: View {
             // Never under the play button in the middle.
             .frame(maxWidth: 118, alignment: .leading)
             .accessibilityLabel("\(Format.clock(now)) of \(Format.clock(model.duration))")
+            .accessibilityIdentifier("editor.time")
     }
 }
 

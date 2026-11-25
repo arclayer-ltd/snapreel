@@ -269,6 +269,7 @@ final class EditorTimelineView: UIView, UIScrollViewDelegate, UIGestureRecognize
         super.init(frame: .zero)
         backgroundColor = UIColor(Color.srStage)
         clipsToBounds = true
+        accessibilityIdentifier = "editor.timeline"
 
         scroll.showsHorizontalScrollIndicator = false
         scroll.showsVerticalScrollIndicator = false
