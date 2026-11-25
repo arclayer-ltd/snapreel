@@ -45,7 +45,7 @@ jobs:
               if s.get("cloud", "stub") == "stub":
                   phone.update(ca=os.environ["W"] + "/stub/ca.pem", control="http://127.0.0.1:8899")
               json.dump(phone, open("%s/phone-%d.json" % (os.environ["W"], i), "w"))
-          print("PHONES=%d" % len(s["phones"]))
+          open(os.environ["W"] + "/sids.txt", "w").write("".join(p["sid"] + "\n" for p in s["phones"]))
           PY
       - name: Find the newest Xcode and the iOS asked for
         run: |
@@ -69,31 +69,6 @@ jobs:
           echo "BUILD_XCODE=$XCODE" >> "$GITHUB_ENV"
           xcodebuild -version
 
-      - name: Start the phones (in the background)
-        if: ${{ env.KIND != 'build' }}
-        run: |
-          WDA=https://github.com/appium/WebDriverAgent/releases/download/v16.15.3/WebDriverAgentRunner-Build-Sim-arm64.zip
-          i=0
-          while [ $i -lt "$PHONES" ]; do
-            SID=$(python3 -c "import json,sys;print(json.load(open(sys.argv[1]))['sid'])" "$W/phone-$i.json")
-            echo "$SID" >> "$W/sids.txt"
-            SCRIPT=""; [ -f "rig/steps-$SID.txt" ] && SCRIPT="$PWD/rig/steps-$SID.txt"
-            ( if [ ! -f "$W/runtime.done" ]; then
-                echo '{}' > "$W/say.json"
-                python3 rig/scripts/ui-rig/agent.py --sid "$SID" --options "$W/say.json" --work "$W" --say "downloading the iOS 16.4 simulator" || true
-              fi
-              while [ ! -f "$W/runtime.done" ]; do sleep 1; done
-              cd "$W" && exec nohup python3 "$GITHUB_WORKSPACE/rig/scripts/ui-rig/agent.py" --sid "$SID" --options "$W/phone-$i.json" \
-                --work "$W/phone-$i" --app "$W/app/Snapreel.app" --wda "$W/wda/WebDriverAgentRunner-Runner.app" \
-                --wait-for "$W/app.ready" --script "$SCRIPT" > "$W/agent-$SID.log" 2>&1 < /dev/null ) &
-            i=$((i + 1))
-          done
-          (
-            cd "$W" && curl -sL --retry 5 -o wda.zip "$WDA" \
-              && echo "02f22b68338bd9c63b30626bb0c639f9e7d6fb260d3b9e30e72c3eb2dd710e1e  wda.zip" | shasum -a 256 -c \
-              && mkdir -p wda && unzip -qo wda.zip -d wda && touch wda.ready
-          )
-
       - uses: actions/checkout@v4
         with: { path: src, ref: "${{ fromJSON(github.event.head_commit.message).app_ref }}", persist-credentials: false }
 
@@ -104,12 +79,38 @@ jobs:
       - name: The app (stored build, or build it)
         id: app
         run: |
-          if [ "$IOS" = "16.4" ]; then while [ ! -f "$W/runtime.done" ]; do sleep 1; done; fi
+          # Before the phones start: building and booting at once is slower than one after the other.
           set -o pipefail
-          if ! DEVELOPER_DIR="$BUILD_XCODE/Contents/Developer" bash rig/scripts/ui-rig/build_app.sh src "$W/app" 2>&1 | tee "$W/build-out.txt"; then
-            tail -40 "$W/build-out.txt" > "$W/app.ready.failed"; sleep 20; exit 1
+          echo '{}' > "$W/say.json"
+          say() { for SID in $(cat "$W/sids.txt" 2> /dev/null); do python3 rig/scripts/ui-rig/agent.py --sid "$SID" --options "$W/say.json" --work "$W" --say "$1" || true; done; }
+          say "fetching the app"
+          export DEVELOPER_DIR="$BUILD_XCODE/Contents/Developer"
+          if ! bash rig/scripts/ui-rig/build_app.sh src "$W/app" fetch; then
+            say "building the app (8 to 15 minutes; the build is kept for the next session)"
+            if ! bash rig/scripts/ui-rig/build_app.sh src "$W/app" build 2>&1 | tee "$W/build-out.txt"; then
+              echo '{"say_state": "failed"}' > "$W/say.json"
+              say "the app could not be built: $(tail -12 "$W/build-out.txt")"
+              exit 1
+            fi
           fi
-          touch "$W/app.ready"
+          [ "$IOS" = "16.4" ] && [ ! -f "$W/runtime.done" ] && say "downloading the iOS 16.4 simulator" || true
+
+      - name: Start the phones (in the background)
+        if: ${{ env.KIND != 'build' }}
+        run: |
+          WDA=https://github.com/appium/WebDriverAgent/releases/download/v16.15.3/WebDriverAgentRunner-Build-Sim-arm64.zip
+          i=0
+          for SID in $(cat "$W/sids.txt"); do
+            SCRIPT=""; [ -f "rig/steps-$SID.txt" ] && SCRIPT="$PWD/rig/steps-$SID.txt"
+            ( while [ ! -f "$W/runtime.done" ]; do sleep 1; done
+              cd "$W" && exec nohup python3 "$GITHUB_WORKSPACE/rig/scripts/ui-rig/agent.py" --sid "$SID" --options "$W/phone-$i.json" \
+                --work "$W/phone-$i" --app "$W/app/Snapreel.app" --wda "$W/wda/WebDriverAgentRunner-Runner.app" \
+                --wait-for "$W/wda.ready" --script "$SCRIPT" > "$W/agent-$SID.log" 2>&1 < /dev/null ) &
+            i=$((i + 1))
+          done
+          cd "$W" && curl -sL --retry 5 -o wda.zip "$WDA" \
+            && echo "02f22b68338bd9c63b30626bb0c639f9e7d6fb260d3b9e30e72c3eb2dd710e1e  wda.zip" | shasum -a 256 -c \
+            && mkdir -p wda && unzip -qo wda.zip -d wda && touch wda.ready
 
       - name: Store the new build
         if: ${{ steps.app.outputs.built == '1' }}

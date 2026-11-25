@@ -1,6 +1,7 @@
 #!/bin/bash
 # Puts the simulator build of the checked-out app into OUT/Snapreel.app: from the store if this exact source
-# was built before, else by building it. Usage: build_app.sh SOURCE_DIR OUT_DIR
+# was built before ("fetch", leaves 1 when there is none), or by building it ("build").
+# Usage: build_app.sh SOURCE_DIR OUT_DIR fetch|build
 # Writes key=... (and built=1 after a build) to $GITHUB_OUTPUT so the workflow can store a new build.
 set -uo pipefail
 SRC="$1"; mkdir -p "$2"; OUT=$(cd "$2" && pwd); HERE=$(cd "$(dirname "$0")" && pwd)
@@ -11,11 +12,14 @@ SDK=$(xcodebuild -version | awk 'NR == 1 { split($2, v, "."); print v[1] }')
 KEY="ui-app-v3-$TREE-x$SDK"
 echo "key=$KEY" >> "${GITHUB_OUTPUT:-/dev/null}"
 # The build made with the newest Xcode (the one the app ships from) is used on every runner when there is one.
-for STORED in "ui-app-v3-$TREE-x27" "$KEY"; do
-  if bash "$HERE/find_artifact.sh" "$STORED" "$OUT" && [ -f "$OUT/app.tgz" ]; then
-    tar -xzf "$OUT/app.tgz" -C "$OUT" && echo "using the stored build $STORED" && exit 0
-  fi
-done
+if [ "$3" = "fetch" ]; then
+  for STORED in "ui-app-v3-$TREE-x27" "$KEY"; do
+    if bash "$HERE/find_artifact.sh" "$STORED" "$OUT" && [ -f "$OUT/app.tgz" ]; then
+      tar -xzf "$OUT/app.tgz" -C "$OUT" && echo "using the stored build $STORED" && exit 0
+    fi
+  done
+  exit 1
+fi
 echo "building $KEY"
 # Signed to run locally, with the app's entitlements, so the keychain (sign-in) and the shared folder work.
 cd "$SRC"
