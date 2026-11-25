@@ -218,7 +218,7 @@ final class Uploader: ObservableObject {
     /// Waits until nothing needs Snapreel running, at most `seconds`.
     func settle(seconds: Double) async {
         let deadline = Date().addingTimeInterval(seconds)
-        repeat { try? await Task.sleep(nanoseconds: 200_000_000) } while isBusy && Date() < deadline
+        repeat { try? await Task.sleep(nanoseconds: 200_000_000) } while isBusy && Date() < deadline && !Task.isCancelled
     }
 
     func networkChanged(online: Bool) {
@@ -1314,7 +1314,8 @@ final class Uploader: ObservableObject {
         fail(id, (error as? LocalizedError)?.errorDescription ?? "Snapreel couldn't prepare the video.")
     }
 
-    private func pausePreparing() {
+    /// Stops making the web copy for now; what is done is kept.
+    func pausePreparing() {
         preparation?.cancel()
     }
 

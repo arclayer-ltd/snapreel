@@ -144,10 +144,12 @@ enum UploadBackground {
                 try? await Task.sleep(nanoseconds: 2_000_000_000)
                 await uploader.settle(seconds: 600)
                 if uploader.jobs.values.contains(where: \.isActive) { schedule() }
-                task.setTaskCompleted(success: true)
+                if !Task.isCancelled { task.setTaskCompleted(success: true) }
             }
             task.expirationHandler = {
                 work.cancel()
+                // What is encoded so far is kept; the next task or launch carries on.
+                Task { @MainActor in Uploader.shared.pausePreparing() }
                 task.setTaskCompleted(success: false)
             }
         }
