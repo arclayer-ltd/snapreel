@@ -95,8 +95,8 @@ enum ShareSheetPresenter {
         controller.onAppear = { session.shown() }
         presenter.present(controller, animated: true) { session.shown() }
         // iOS can refuse a presentation without saying so.
-        let limit = Date().addingTimeInterval(patience)
-        while !session.wasShown, Date() < limit {
+        // Counted in looks, not by the clock: a main thread busy loading the sheet must not use it up.
+        for _ in 0..<Int(patience * 10) where !session.wasShown {
             if controller.viewIfLoaded?.window != nil { return session.shown() }
             try? await Task.sleep(nanoseconds: 100_000_000)
             if UIApplication.shared.applicationState != .active { await BackgroundTime.waitUntilActive() }

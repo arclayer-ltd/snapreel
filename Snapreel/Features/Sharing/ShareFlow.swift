@@ -70,7 +70,7 @@ final class ShareFlow: ObservableObject {
         switch phase {
         case .idle: return false
         case .preparing: return true
-        case .opening: return Date().timeIntervalSince(openedAt) < ShareSheetPresenter.patience + 8
+        case .opening: return Date().timeIntervalSince(openedAt) < ShareSheetPresenter.patience * 2
         case .sheet: return sheet?.isOnScreen ?? false
         }
     }
