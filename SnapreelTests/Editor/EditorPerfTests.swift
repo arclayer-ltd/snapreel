@@ -14,6 +14,7 @@ final class EditorPerfTests: XCTestCase {
     func testThirtyMinutes() async throws { try await run(minutes: 30, audioShortBy: 93) }
 
     private var window: UIWindow?
+    private static var isWarm = false
 
     private func show(_ model: EditorModel, library: Library) {
         let view = EditorView(model: model, onClose: {}, onOpen: { _ in })
@@ -84,6 +85,17 @@ final class EditorPerfTests: XCTestCase {
         let url = try await TestMedia.long(minutes: minutes, audioShortBy: audioShortBy)
         let (library, id) = try await TestMedia.library(with: url)
         addTranscript(to: library, id: id, minutes: minutes)
+        // The first video a freshly started simulator plays takes seconds longer: not counted.
+        if !Self.isWarm {
+            Self.isWarm = true
+            let first = EditorModel(videoID: id, library: library)
+            show(first, library: library)
+            _ = await wait(30) { settled(first) }
+            first.teardown()
+            window?.isHidden = true
+            window = nil
+            try? await Task.sleep(nanoseconds: 1_000_000_000)
+        }
         let start = memoryMB()
         let peak = MemoryPeak()
 
