@@ -15,7 +15,8 @@ import SwiftUI
 /// same action that closes your own sheet or menu: presentation waits for that to finish.
 extension View {
     /// Presents the system share sheet with the recording's file (named after its title).
-    /// A completed share calls `library.recordShare`; "Save Video" from the sheet calls
+    /// While a file has to be finished first, a card shows how far it is, with Cancel. A completed
+    /// share calls `library.recordShare`; "Save Video" from the sheet calls
     /// `library.recordSavedToPhotos` instead.
     @MainActor
     func shareVideo(_ video: Binding<Video?>) -> some View {
@@ -49,6 +50,9 @@ enum PhotosSaveStage: Equatable {
     case permission
     /// Photos access was turned off; only the Settings app can change it.
     case denied
+    /// The file is being finished first (its sounds mixed, or a cut-off recording repaired).
+    /// 0...1, or nil while there is nothing to measure.
+    case preparing(Double?)
     /// The file is being added to the Photos library.
     case saving
     /// "Saved to Photos" with Open Photos.
@@ -62,7 +66,7 @@ enum PhotosSaveStage: Equatable {
     var asksQuestion: Bool {
         switch self {
         case .permission, .denied, .audioOnly, .failed: return true
-        case .saving, .saved: return false
+        case .preparing, .saving, .saved: return false
         }
     }
 }

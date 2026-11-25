@@ -9,6 +9,8 @@
 /* Begin PBXBuildFile section */
 		5C0000000000000000000001 /* SnapreelBroadcast.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 5A0000000000000000000002 /* SnapreelBroadcast.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		5C0000000000000000000002 /* SnapreelLiveActivity.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 5A0000000000000000000007 /* SnapreelLiveActivity.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		5C0000000000000000000003 /* BroadcastWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A000000000000000000000A /* BroadcastWriter.swift */; };
+		5C0000000000000000000004 /* SoundTimeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A000000000000000000000B /* SoundTimeline.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -60,6 +62,8 @@
 		5A0000000000000000000007 /* SnapreelLiveActivity.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = SnapreelLiveActivity.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		5A0000000000000000000008 /* SnapreelLiveActivity-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "SnapreelLiveActivity-Info.plist"; sourceTree = "<group>"; };
 		5A0000000000000000000009 /* SnapreelTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SnapreelTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		5A000000000000000000000A /* BroadcastWriter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = BroadcastWriter.swift; path = SnapreelBroadcast/BroadcastWriter.swift; sourceTree = SOURCE_ROOT; };
+		5A000000000000000000000B /* SoundTimeline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = SoundTimeline.swift; path = SnapreelBroadcast/SoundTimeline.swift; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -141,6 +145,8 @@
 				5A0000000000000000000005 /* Snapreel.entitlements */,
 				5A0000000000000000000006 /* SnapreelBroadcast.entitlements */,
 				5A0000000000000000000008 /* SnapreelLiveActivity-Info.plist */,
+				5A000000000000000000000A /* BroadcastWriter.swift */,
+				5A000000000000000000000B /* SoundTimeline.swift */,
 				5F0000000000000000000002 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -359,6 +365,8 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				5C0000000000000000000003 /* BroadcastWriter.swift in Sources */,
+				5C0000000000000000000004 /* SoundTimeline.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

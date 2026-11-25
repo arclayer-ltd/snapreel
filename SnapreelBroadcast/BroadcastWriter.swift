@@ -5,10 +5,12 @@ import ReplayKit
 
 /// Writes ReplayKit samples straight into a movie file in the App Group.
 ///
-/// Nothing is buffered: each sample is either appended at once or dropped, which keeps the
-/// extension well under its memory limit (about 50 MB). The movie is written with fragments
-/// every two seconds, so even if the extension is stopped by the system the file stays readable
-/// up to the last fragment. Every method is safe to call from any queue.
+/// Pictures are never buffered: each frame is either appended at once or dropped, which keeps the
+/// extension well under its memory limit (about 50 MB). Sound waits for the writer for up to a
+/// second and a half (under half a megabyte), and any sound that is lost becomes silence of the
+/// same length, so it stays in step with the picture (`SoundTimeline`). The movie is written with
+/// fragments every two seconds, so even if the extension is stopped by the system the file stays
+/// readable up to the last fragment. Every method is safe to call from any queue.
 ///
 /// Tracks: one H.264 video track, app audio as one AAC track and the microphone as a second AAC
 /// track. The app mixes the two audio tracks into one when it imports the recording.
@@ -40,8 +42,8 @@ final class BroadcastWriter {
     /// Latest end time appended to any track, in movie time.
     private var lastAppendedEnd = CMTime.invalid
     private var lastVideoTime = CMTime.invalid
-    private var lastAppAudioEnd = CMTime.invalid
-    private var lastMicAudioEnd = CMTime.invalid
+    private var appSound = SoundTrack()
+    private var micSound = SoundTrack()
     private var videoFrameCount = 0
     private var hasMicAudio = false
 
@@ -120,19 +122,9 @@ final class BroadcastWriter {
                 noteAppended(end: end)
             }
         case .audioApp:
-            guard let input = appAudioInput, input.isReadyForMoreMediaData else { return }
-            if lastAppAudioEnd.isValid && CMTimeCompare(time, lastAppAudioEnd) < 0 { return }
-            if input.append(adjusted) {
-                lastAppAudioEnd = end
-                noteAppended(end: end)
-            }
+            appendSound(adjusted, to: appAudioInput, track: &appSound)
         case .audioMic:
-            guard let input = micAudioInput, input.isReadyForMoreMediaData else { return }
-            if lastMicAudioEnd.isValid && CMTimeCompare(time, lastMicAudioEnd) < 0 { return }
-            if input.append(adjusted) {
-                lastMicAudioEnd = end
-                noteAppended(end: end)
-            }
+            appendSound(adjusted, to: micAudioInput, track: &micSound)
         @unknown default:
             return
         }
@@ -155,6 +147,69 @@ final class BroadcastWriter {
         return result
     }
 
+    // MARK: - Sound (called with the lock held)
+
+    /// One sound track's clock and the buffers waiting for the writer.
+    private struct SoundTrack {
+        var timeline = SoundTimeline()
+        var waiting: [CMSampleBuffer] = []
+        /// About 1.5 s of ReplayKit's buffers (1024 frames each, 23 ms).
+        static let mostWaiting = 64
+    }
+
+    private func appendSound(_ sample: CMSampleBuffer, to input: AVAssetWriterInput?, track: inout SoundTrack) {
+        guard let input else { return }
+        drain(&track, into: input)
+        if track.waiting.isEmpty, input.isReadyForMoreMediaData {
+            write(sample, to: input, track: &track)
+            return
+        }
+        // Not ready: keep a copy for a moment. When too much is waiting the oldest goes, and the
+        // silence written in its place keeps the rest in step.
+        if track.waiting.count >= SoundTrack.mostWaiting { track.waiting.removeFirst() }
+        if let copy = SoundBuffer.copy(sample) { track.waiting.append(copy) }
+    }
+
+    private func drain(_ track: inout SoundTrack, into input: AVAssetWriterInput) {
+        while !track.waiting.isEmpty, input.isReadyForMoreMediaData {
+            write(track.waiting.removeFirst(), to: input, track: &track)
+        }
+    }
+
+    private func write(_ sample: CMSampleBuffer, to input: AVAssetWriterInput, track: inout SoundTrack) {
+        let time = CMSampleBufferGetPresentationTimeStamp(sample)
+        guard let rate = SoundBuffer.sampleRate(of: sample) else {
+            // Not plain PCM (never seen from ReplayKit): as it is.
+            if input.append(sample) { noteAppended(end: time) }
+            return
+        }
+        switch track.timeline.step(forBufferAt: time.seconds) {
+        case .drop:
+            return
+        case .append:
+            break
+        case .fill(let gap):
+            var left = Int((gap * rate).rounded())
+            while left > 0 {
+                // If the writer fills up on the way, this buffer is lost too and the next one's
+                // gap includes it.
+                let piece = min(left, SoundBuffer.pieceFrames)
+                guard input.isReadyForMoreMediaData, let end = track.timeline.end else { return }
+                let start = CMTime(seconds: end, preferredTimescale: CMTimeScale(rate))
+                guard let silence = SoundBuffer.silence(like: sample, frames: piece, at: start),
+                      input.append(silence) else { return }
+                track.timeline.appended(seconds: Double(piece) / rate, at: end)
+                left -= piece
+            }
+            guard input.isReadyForMoreMediaData else { return }
+        }
+        if input.append(sample) {
+            let frames = CMSampleBufferGetNumSamples(sample)
+            track.timeline.appended(seconds: Double(frames) / rate, at: time.seconds)
+            noteAppended(end: CMTimeAdd(time, CMTime(value: CMTimeValue(frames), timescale: CMTimeScale(rate))))
+        }
+    }
+
     // MARK: - Private (called with the lock held)
 
     private func noteAppended(end: CMTime) {
@@ -172,6 +227,8 @@ final class BroadcastWriter {
             try? FileManager.default.removeItem(at: url)
             return .nothingRecorded
         }
+        if let appAudioInput { drain(&appSound, into: appAudioInput) }
+        if let micAudioInput { drain(&micSound, into: micAudioInput) }
         videoInput?.markAsFinished()
         appAudioInput?.markAsFinished()
         micAudioInput?.markAsFinished()
@@ -204,7 +261,7 @@ final class BroadcastWriter {
         let video = AVAssetWriterInput(mediaType: .video,
                                        outputSettings: Self.videoSettings(width: size.width, height: size.height))
         video.expectsMediaDataInRealTime = true
-        video.transform = Self.transform(for: Self.orientation(of: sample))
+        video.transform = Self.transform(for: Self.orientation(of: sample), width: size.width, height: size.height)
         guard writer.canAdd(video) else { return false }
         writer.add(video)
 
@@ -291,14 +348,22 @@ final class BroadcastWriter {
     }
 
     /// ReplayKit always delivers the screen in the phone's portrait pixel layout and says how the
-    /// content is turned. The track transform turns it upright when played. It is set from the
-    /// first frame: turning the phone during a recording keeps the starting orientation.
-    private static func transform(for orientation: CGImagePropertyOrientation) -> CGAffineTransform {
+    /// content is turned. The track transform turns it upright when played, and moves the turned
+    /// picture back to the origin: Apple's players do that by themselves, but apps that place the
+    /// picture with the transform as it is (some share extensions and editors) draw it off screen
+    /// without it. It is set from the first frame: turning the phone during a recording keeps the
+    /// starting orientation.
+    static func transform(for orientation: CGImagePropertyOrientation, width: Int, height: Int) -> CGAffineTransform {
+        // Exact quarter turns: `rotationAngle` leaves tiny remainders that some readers reject.
         switch orientation {
-        case .right, .rightMirrored: return CGAffineTransform(rotationAngle: .pi / 2)
-        case .left, .leftMirrored: return CGAffineTransform(rotationAngle: -.pi / 2)
-        case .down, .downMirrored: return CGAffineTransform(rotationAngle: .pi)
-        default: return .identity
+        case .right, .rightMirrored:
+            return CGAffineTransform(a: 0, b: 1, c: -1, d: 0, tx: CGFloat(height), ty: 0)
+        case .left, .leftMirrored:
+            return CGAffineTransform(a: 0, b: -1, c: 1, d: 0, tx: 0, ty: CGFloat(width))
+        case .down, .downMirrored:
+            return CGAffineTransform(a: -1, b: 0, c: 0, d: -1, tx: CGFloat(width), ty: CGFloat(height))
+        default:
+            return .identity
         }
     }
 }

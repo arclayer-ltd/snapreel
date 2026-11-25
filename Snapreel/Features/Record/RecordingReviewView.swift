@@ -98,7 +98,8 @@ struct RecordingReviewView: View {
             ReviewActionButton(systemImage: "character.cursor.ibeam", title: "Title", tint: Color.srStageText) {
                 editsTitle = true
             }
-            // Both wait for a screen recording's sound mix themselves (`.shareVideo`, `.saveToPhotos`).
+            // Both wait for a screen recording's sound mix themselves, with a progress card
+            // (`.shareVideo`, `.saveToPhotos`).
             ReviewActionButton(systemImage: "square.and.arrow.up", title: "Share", tint: Color.srStageText) {
                 shareTarget = library.video(video.id)
             }

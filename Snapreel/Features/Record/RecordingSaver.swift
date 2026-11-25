@@ -1,5 +1,6 @@
 import AVFoundation
 import Foundation
+import UIKit
 
 /// A finished capture or import waiting in `library.media.staging`.
 struct RecordingSaveRequest {
@@ -16,10 +17,11 @@ struct RecordingSaveRequest {
 ///
 /// Review comes first. A save is `.ready` as soon as the file is in the library (moved, never
 /// copied) and its length and size are read, which takes a fraction of a second. What can wait
-/// happens after review is up: a screen recording's two sound tracks are mixed into one (the
-/// slow part, it reads the whole movie), the thumbnail is made off the main thread, and the
-/// "saved" notification and transcript follow. Share and Save to Photos in review wait for that
-/// (`waitUntilFinished`). Builds up to 30 did all of it before review.
+/// happens after review is up: the thumbnail is made off the main thread, the file is put in order
+/// (a screen recording's two sound tracks become one, a cut-off recording gets one index; most
+/// files need neither), and the "saved" notification and transcript follow. Share and Save to Photos
+/// wait only for the file (`waitUntilFileSettled`), with its progress. Leaving Snapreel pauses the
+/// work; it carries on when Snapreel is back, also after the app was closed.
 @MainActor
 final class RecordingSaver {
     static let shared = RecordingSaver()
@@ -32,7 +34,33 @@ final class RecordingSaver {
     /// Staging files the recorder is writing right now; never treated as leftovers.
     var activeCaptureFiles = Set<String>()
 
+    /// Recordings whose file is still being saved or may still be replaced.
+    private var unsettled = Set<UUID>()
+    private var settleWaiters: [UUID: [CheckedContinuation<Void, Never>]] = [:]
+    /// How far putting a file in order is, 0...1.
+    private var tidyProgress: [UUID: Double] = [:]
+
     func isProcessing(_ id: UUID) -> Bool { inFlight.contains(id) }
+
+    /// True while the file in the library isn't there yet or is about to be replaced.
+    func isFileChanging(_ id: UUID) -> Bool { unsettled.contains(id) }
+
+    /// How far it is, 0...1; nil while there is nothing to measure.
+    func fileProgress(_ id: UUID) -> Double? { tidyProgress[id] }
+
+    /// Returns once the recording's file is the one to share, upload or keep (or saving failed).
+    func waitUntilFileSettled(_ id: UUID) async {
+        guard unsettled.contains(id) else { return }
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            settleWaiters[id, default: []].append(continuation)
+        }
+    }
+
+    private func settle(_ id: UUID) {
+        tidyProgress[id] = nil
+        guard unsettled.remove(id) != nil else { return }
+        for waiter in settleWaiters.removeValue(forKey: id) ?? [] { waiter.resume() }
+    }
 
     /// Returns once everything for `id` is done, including the work after review (a screen
     /// recording's sound mixing), so a shared or saved file is the finished one.
@@ -89,6 +117,7 @@ final class RecordingSaver {
         if let video = library.video(id) {
             try? FileManager.default.removeItem(at: library.media.staging.appendingPathComponent(video.fileName))
         }
+        TidyAttempts.clear(id)
         Notifier.shared.cancelScheduled(key: Self.reminderKey(id))
         library.delete(id)
     }
@@ -109,8 +138,10 @@ final class RecordingSaver {
     private func run(_ id: UUID, _ work: @escaping @MainActor () async -> Void) {
         guard !inFlight.contains(id) else { return }
         inFlight.insert(id)
+        unsettled.insert(id)
         Task { @MainActor in
             await work()
+            self.settle(id)
             self.inFlight.remove(id)
             for waiter in self.waiters.removeValue(forKey: id) ?? [] { waiter.resume() }
         }
@@ -194,13 +225,14 @@ final class RecordingSaver {
                 ReviewTiming.after(id, "thumbnail", seconds: Date().timeIntervalSince(started))
             }
         }
-        if video.kind == .screen {
+        if hasVideo {
             let started = Date()
-            if await mixAudioTracksIfNeeded(destination, id: id, library: library) {
-                ReviewTiming.after(id, "sound mixed", seconds: Date().timeIntervalSince(started))
+            if await tidy(destination, id: id, kind: video.kind, library: library) {
+                ReviewTiming.after(id, "file put in order", seconds: Date().timeIntervalSince(started))
                 library.update(id) { $0.fileSize = MediaInspector.fileSize(destination) }
             }
         }
+        settle(id)
         if let saved = library.video(id) {
             announce(saved, library: library)
             library.update(id) { $0.isFinishing = nil }
@@ -264,27 +296,70 @@ final class RecordingSaver {
         TranscriptService.shared.enqueue(videoID: video.id, library: library)
     }
 
-    /// Screen recordings arrive with app sound and microphone on separate tracks. Mix them into
-    /// one so every player, app and the transcript hear both. Keeps the original on any problem.
-    /// Runs after review is up (Snapreel's own players play both tracks meanwhile); the mixed
-    /// file is written in staging and swapped in, so a player holding the old one carries on.
-    /// True when the file was replaced.
-    private func mixAudioTracksIfNeeded(_ url: URL, id: UUID, library: Library) async -> Bool {
-        guard DiskSpace.hasRoom(for: MediaInspector.fileSize(url)) else { return false }
-        let mixed = library.media.staging.appendingPathComponent("\(id.uuidString)-mixed.mov")
-        let succeeded = await RecordingAudioMixer.mix(url, into: mixed) { _ in }
-        let fm = FileManager.default
-        guard succeeded, library.video(id) != nil, fm.fileExists(atPath: url.path) else {
-            try? fm.removeItem(at: mixed)
+    // MARK: - Putting the file in order
+
+    /// Screen recordings can arrive with phone sound and microphone on separate tracks, and any
+    /// recording that was cut off is in fragments. Writes such a file again, the picture copied as it
+    /// is, so every player, app and the transcript get all of it; keeps the original on any problem.
+    /// Runs after review is up (Snapreel's own players cope with either); the new file is written in
+    /// staging and swapped in, so a player holding the old one carries on. Only a file that needs it
+    /// is touched, and two sounds are only decoded when both can be heard. True when it was replaced.
+    private func tidy(_ url: URL, id: UUID, kind: RecordingKind, library: Library) async -> Bool {
+        guard let plan = try? await MoviePlan.make(for: url, isScreenRecording: kind == .screen), plan.needsRewrite else {
+            TidyAttempts.clear(id)
             return false
         }
-        do {
-            _ = try fm.replaceItemAt(url, withItemAt: mixed)
-            return true
-        } catch {
-            try? fm.removeItem(at: mixed)
-            return false
+        let written = library.media.staging.appendingPathComponent("\(id.uuidString)-mixed.mov")
+        let type: AVFileType = url.pathExtension.lowercased() == "mov" ? .mov : .mp4
+        while library.video(id) != nil {
+            // Not enough room now: the original stays, and sharing makes a finished copy when there is.
+            guard DiskSpace.hasRoom(for: MediaInspector.fileSize(url)) else { return false }
+            guard TidyAttempts.begin(id) else { return false }
+            let control = MovieRewriteControl { [weak self] value in
+                Task { @MainActor in
+                    guard let self, self.unsettled.contains(id) else { return }
+                    self.tidyProgress[id] = value
+                }
+            }
+            let background = BackgroundTime("Finishing a recording") { control.interrupt() }
+            var problem: MovieRewriteError?
+            do {
+                try await MovieRewrite.run(url, to: written, plan: plan, fileType: type, indexFirst: false, control: control)
+            } catch {
+                problem = error as? MovieRewriteError ?? .failed
+            }
+            let inBackground = UIApplication.shared.applicationState == .background
+            background.end()
+            if let problem {
+                // iOS ended the time in the background (or refused something there): start again when
+                // Snapreel is back, which doesn't count as a failed attempt.
+                guard problem == .interrupted || (problem == .failed && inBackground) else { return false }
+                TidyAttempts.undo(id)
+                tidyProgress[id] = nil
+                await BackgroundTime.waitUntilActive()
+                continue
+            }
+            let fm = FileManager.default
+            guard library.video(id) != nil, fm.fileExists(atPath: url.path), await isWhole(written, plan: plan) else {
+                try? fm.removeItem(at: written)
+                return false
+            }
+            do {
+                _ = try fm.replaceItemAt(url, withItemAt: written)
+                TidyAttempts.clear(id)
+                return true
+            } catch {
+                try? fm.removeItem(at: written)
+                return false
+            }
         }
+        return false
+    }
+
+    /// The new file plays for as long as the original, so nothing is lost by replacing it.
+    nonisolated private func isWhole(_ url: URL, plan: MoviePlan) async -> Bool {
+        guard let info = try? await MediaInspector.inspect(url) else { return false }
+        return info.duration >= plan.duration - 1
     }
 
     // MARK: - Leftovers
@@ -306,7 +381,9 @@ final class RecordingSaver {
             let modified = (try? file.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate ?? .distantPast
             guard now.timeIntervalSince(modified) > 120 else { continue }
             if name.contains("-mixed") {
-                try? fm.removeItem(at: file)
+                // Half-written by an app that was closed, unless it is being written right now.
+                let owner = UUID(uuidString: String(name.prefix(36)))
+                if owner.map({ !inFlight.contains($0) }) ?? true { try? fm.removeItem(at: file) }
                 continue
             }
             let ext = file.pathExtension.lowercased()
@@ -347,161 +424,32 @@ enum RecordingSaveError: Error, Equatable {
     }
 }
 
-/// Mixes every audio track of a movie into one AAC track and copies the video as it is (no
-/// re-encode), keeping the video's rotation.
-enum RecordingAudioMixer {
-    static func mix(_ source: URL, into destination: URL,
-                    progress: @escaping @MainActor (Double) -> Void) async -> Bool {
-        let asset = AVURLAsset(url: source)
-        do {
-            let videoTracks = try await asset.loadTracks(withMediaType: .video)
-            let audioTracks = try await asset.loadTracks(withMediaType: .audio)
-            var audible: [AVAssetTrack] = []
-            for track in audioTracks {
-                let range = try await track.load(.timeRange)
-                if range.duration.seconds > 0.1 { audible.append(track) }
-            }
-            guard let videoTrack = videoTracks.first, audible.count > 1 else { return false }
-            let duration = try await asset.load(.duration).seconds
-            let transform = try await videoTrack.load(.preferredTransform)
-            let formats = try await videoTrack.load(.formatDescriptions)
-            return try await copy(asset: asset, video: videoTrack, audio: audible, transform: transform,
-                                  videoFormat: formats.first, duration: duration,
-                                  destination: destination, progress: progress)
-        } catch {
-            try? FileManager.default.removeItem(at: destination)
-            return false
-        }
+/// How often putting a recording's file in order was started without getting to the end. After three
+/// times (the app closed or crashed each time) it is left as it is, so it can never go on forever.
+enum TidyAttempts {
+    static let most = 3
+    private static let key = "recording.tidyAttempts"
+    static var defaults: UserDefaults = .standard
+
+    /// Counts an attempt; false when there were too many.
+    static func begin(_ id: UUID) -> Bool {
+        let count = self.count(id)
+        guard count < most else { return false }
+        set(count + 1, id)
+        return true
     }
 
-    private static func copy(asset: AVURLAsset, video: AVAssetTrack, audio: [AVAssetTrack],
-                             transform: CGAffineTransform, videoFormat: CMFormatDescription?,
-                             duration: Double, destination: URL,
-                             progress: @escaping @MainActor (Double) -> Void) async throws -> Bool {
-        try? FileManager.default.removeItem(at: destination)
-        let reader = try AVAssetReader(asset: asset)
-        let videoOut = AVAssetReaderTrackOutput(track: video, outputSettings: nil)
-        videoOut.alwaysCopiesSampleData = false
-        let pcm: [String: Any] = [
-            AVFormatIDKey: kAudioFormatLinearPCM,
-            AVSampleRateKey: 44_100,
-            AVNumberOfChannelsKey: 2,
-            AVLinearPCMBitDepthKey: 16,
-            AVLinearPCMIsFloatKey: false,
-            AVLinearPCMIsBigEndianKey: false,
-            AVLinearPCMIsNonInterleaved: false,
-        ]
-        let audioOut = AVAssetReaderAudioMixOutput(audioTracks: audio, audioSettings: pcm)
-        audioOut.alwaysCopiesSampleData = false
-        guard reader.canAdd(videoOut), reader.canAdd(audioOut) else { return false }
-        reader.add(videoOut)
-        reader.add(audioOut)
+    /// The attempt was stopped by iOS, not by a problem.
+    static func undo(_ id: UUID) { set(max(0, count(id) - 1), id) }
+    static func clear(_ id: UUID) { set(0, id) }
 
-        let writer = try AVAssetWriter(outputURL: destination, fileType: .mov)
-        let videoIn = AVAssetWriterInput(mediaType: .video, outputSettings: nil, sourceFormatHint: videoFormat)
-        videoIn.transform = transform
-        let aac: [String: Any] = [
-            AVFormatIDKey: kAudioFormatMPEG4AAC,
-            AVSampleRateKey: 44_100,
-            AVNumberOfChannelsKey: 2,
-            AVEncoderBitRateKey: 160_000,
-        ]
-        let audioIn = AVAssetWriterInput(mediaType: .audio, outputSettings: aac)
-        guard writer.canAdd(videoIn), writer.canAdd(audioIn) else { return false }
-        writer.add(videoIn)
-        writer.add(audioIn)
+    static func count(_ id: UUID) -> Int { all[id.uuidString] ?? 0 }
 
-        guard reader.startReading() else { return false }
-        guard writer.startWriting() else {
-            reader.cancelReading()
-            return false
-        }
-        writer.startSession(atSourceTime: .zero)
+    private static var all: [String: Int] { defaults.dictionary(forKey: key) as? [String: Int] ?? [:] }
 
-        let total = max(duration, 0.1)
-        let job = MixJob(reader: reader, writer: writer, videoOut: videoOut, videoIn: videoIn,
-                         audioOut: audioOut, audioIn: audioIn)
-        return await withCheckedContinuation { (continuation: CheckedContinuation<Bool, Never>) in
-            DispatchQueue.global(qos: .userInitiated).async {
-                let succeeded = RecordingAudioMixer.copyLoop(job) { seconds in
-                    let fraction = min(1, seconds / total)
-                    Task { @MainActor in progress(fraction) }
-                }
-                continuation.resume(returning: succeeded)
-            }
-        }
-    }
-
-    /// The reader, writer and their tracks. Handed once to the copy loop, which is the only
-    /// code that touches them afterwards, so passing them across queues is safe.
-    private struct MixJob: @unchecked Sendable {
-        let reader: AVAssetReader
-        let writer: AVAssetWriter
-        let videoOut: AVAssetReaderOutput
-        let videoIn: AVAssetWriterInput
-        let audioOut: AVAssetReaderOutput
-        let audioIn: AVAssetWriterInput
-    }
-
-    /// Feeds both inputs in turn until both sources run out. Runs on a background queue.
-    /// Gives up if the writer fails or nothing moves for 15 seconds.
-    private static func copyLoop(_ job: MixJob, report: (Double) -> Void) -> Bool {
-        let reader = job.reader
-        let writer = job.writer
-        let videoOut = job.videoOut
-        let videoIn = job.videoIn
-        let audioOut = job.audioOut
-        let audioIn = job.audioIn
-        var videoDone = false
-        var audioDone = false
-        var idleSpins = 0
-        var lastReported = -1.0
-        while !(videoDone && audioDone) {
-            if writer.status != .writing || reader.status == .failed || reader.status == .cancelled { break }
-            var moved = false
-            if !videoDone && videoIn.isReadyForMoreMediaData {
-                if let sample = videoOut.copyNextSampleBuffer() {
-                    guard videoIn.append(sample) else { break }
-                    moved = true
-                    let seconds = CMSampleBufferGetPresentationTimeStamp(sample).seconds
-                    if seconds - lastReported >= 0.5 {
-                        lastReported = seconds
-                        report(seconds)
-                    }
-                } else {
-                    videoIn.markAsFinished()
-                    videoDone = true
-                    moved = true
-                }
-            }
-            if !audioDone && audioIn.isReadyForMoreMediaData {
-                if let sample = audioOut.copyNextSampleBuffer() {
-                    guard audioIn.append(sample) else { break }
-                    moved = true
-                } else {
-                    audioIn.markAsFinished()
-                    audioDone = true
-                    moved = true
-                }
-            }
-            if moved {
-                idleSpins = 0
-            } else {
-                idleSpins += 1
-                if idleSpins > 7_500 { break }
-                usleep(2_000)
-            }
-        }
-        guard videoDone, audioDone, reader.status == .completed, writer.status == .writing else {
-            reader.cancelReading()
-            writer.cancelWriting()
-            return false
-        }
-        let finished = DispatchSemaphore(value: 0)
-        writer.finishWriting {
-            finished.signal()
-        }
-        finished.wait()
-        return writer.status == .completed
+    private static func set(_ count: Int, _ id: UUID) {
+        var counts = all
+        counts[id.uuidString] = count > 0 ? count : nil
+        if counts != all { defaults.set(counts, forKey: key) }
     }
 }
