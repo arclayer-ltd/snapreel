@@ -137,6 +137,7 @@ jobs:
           path: |
             w/phone-*/out
             w/phone-*/app.log
+            w/phone-*/wda.log
             w/agent-*.log
             w/stub/stub.log
             w/runtime.log

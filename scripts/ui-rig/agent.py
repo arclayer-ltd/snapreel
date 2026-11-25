@@ -702,7 +702,11 @@ def main():
             driver.start()
         agent = Agent(driver, Steps(driver, os.path.join(args.work, "media"), control))
         for media in options.get("photos", []):
-            agent.steps.run("photo " + media)
+            live.status("adding the sample %s to Photos" % media)
+            try:
+                agent.steps.run("photo " + media)
+            except (StepError, subprocess.SubprocessError) as error:
+                live.state["missing"] = live.state.get("missing", "") + " %s not in Photos (%s)" % (media, error)
         if args.script:
             live.status("running the script", "batch")
             batch(agent, args.script, os.path.join(args.work, "out"), {})

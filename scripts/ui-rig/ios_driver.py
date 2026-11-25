@@ -100,6 +100,7 @@ class IOSDriver:
         self.hang_after = float(options.get("hang_after", 8))
         self.conn = None
         self.wda_stuck = False  # the touch driver is still waiting for a hung app
+        self.photos_ready = False
         self.away = False       # a hung app was left for another one
         self.hung = False       # the app's main thread was busy and not answering when last looked at
         os.makedirs(work, exist_ok=True)
@@ -197,19 +198,31 @@ class IOSDriver:
 
     def _start_wda(self):
         env = dict(os.environ, SIMCTL_CHILD_USE_PORT=str(self.port), SIMCTL_CHILD_MJPEG_SERVER_PORT=str(self.port + 1000))
+        problem = ""
         for attempt in range(4):
-            subprocess.run(["xcrun", "simctl", "launch", "--terminate-running-process", self.udid, WDA_BUNDLE],
-                           env=env, capture_output=True, timeout=120)
-            end = time.time() + 60
+            try:
+                out = subprocess.run(["xcrun", "simctl", "launch", "--terminate-running-process",
+                                      "--stdout=" + os.path.join(self.work, "wda.log"), "--stderr=" + os.path.join(self.work, "wda.log"),
+                                      self.udid, WDA_BUNDLE], env=env, capture_output=True, text=True, timeout=180)
+                if out.returncode:
+                    problem = "launch: " + out.stderr.strip()[-160:]
+            except subprocess.TimeoutExpired:
+                problem = "launch took over 3 minutes"
+            end = time.time() + (90 if attempt == 0 else 60)
             while time.time() < end:
                 try:
-                    self._http("GET", "/status", timeout=3)
+                    self._http("GET", "/status", timeout=5)
                     self._open_session()
+                    print("touch driver up (try %d)" % (attempt + 1), flush=True)
                     return
-                except (OSError, http.client.HTTPException, StepError, Hang):
+                except (OSError, http.client.HTTPException, StepError, Hang, KeyError) as error:
+                    problem = "%s: %s" % (type(error).__name__, error)
                     self._drop()
-                    time.sleep(0.5)
-        raise StepError("the touch driver did not start")
+                    time.sleep(1)
+            print("touch driver, try %d: %s" % (attempt + 1, problem), flush=True)
+            if not self.wda_stuck:
+                self.status("starting the touch driver, try %d (%s)" % (attempt + 2, problem[:160]))
+        raise StepError("the touch driver did not start (%s)" % problem)
 
     def _open_session(self):
         reply = self._http("POST", "/session", {"capabilities": {"alwaysMatch": {}}}, timeout=30)
@@ -758,7 +771,23 @@ class IOSDriver:
         return places
 
     def add_photo(self, path):
-        simctl("addmedia", self.udid, path, timeout=600)
+        if not self.photos_ready:
+            # A new simulator has no photo library until Photos has run; adding to it then can hang.
+            simctl("launch", self.udid, SYSTEM_APPS["photos"], check=False, timeout=120)
+            time.sleep(6)
+            simctl("terminate", self.udid, SYSTEM_APPS["photos"], check=False)
+            self.photos_ready = True
+        limit = 150 + os.path.getsize(path) / 4e6
+        for attempt in range(3):
+            try:
+                simctl("addmedia", self.udid, path, timeout=limit)
+                return
+            except subprocess.TimeoutExpired:
+                print("addmedia %s: no answer in %.0f s" % (path, limit), flush=True)
+                for daemon in ("com.apple.assetsd", "com.apple.photoanalysisd"):
+                    simctl("spawn", self.udid, "launchctl", "kickstart", "-k", "user/foreground/" + daemon, check=False)
+                time.sleep(3)
+        raise StepError("the phone's Photos did not take it; try again in a minute")
 
     # ---- health ----------------------------------------------------------------------------
 

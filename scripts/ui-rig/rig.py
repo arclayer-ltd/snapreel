@@ -204,6 +204,8 @@ def wait_ready(w, sids, minutes):
                 print("READY: %s is an %s with iOS %s, %s points, until %s" % (
                     sid, status.get("device"), status.get("ios"), "x".join(map(str, status.get("size", []))),
                     time.strftime("%H:%M", time.localtime(status.get("ends", 0)))), flush=True)
+                if status.get("missing"):
+                    print("but:%s; `rig.py -s %s photo NAME` tries again" % (status["missing"], sid))
             elif status.get("state") in ("failed", "ended"):
                 remember(sid, over=True)
                 die("session %s did not start: %s\nRun log: gh run list -R %s --branch ui-rig/%s" % (
