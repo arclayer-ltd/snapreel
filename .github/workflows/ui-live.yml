@@ -58,8 +58,7 @@ jobs:
           if [ "$IOS" = "16.4" ]; then
             # The iOS 16.4 simulator is a 6 GB download from Apple, about 2 minutes. It can hang, so each try gets 6 minutes.
             ( for BUILD in 16.4 20E247 16.4 20E247; do
-                perl -e 'alarm shift; exec @ARGV' 360 xcodebuild -downloadPlatform iOS -buildVersion $BUILD 2>&1 | tr '' '
-' | grep -v '%' > "$W/runtime.log"
+                perl -e 'alarm shift; exec @ARGV' 360 xcodebuild -downloadPlatform iOS -buildVersion $BUILD > "$W/runtime.log" 2>&1
                 xcrun simctl list runtimes | grep -q "iOS 16.4" && break
                 sleep 5
               done; touch "$W/runtime.done" ) > /dev/null 2>&1 &
