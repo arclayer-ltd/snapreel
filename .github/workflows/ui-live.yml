@@ -57,7 +57,12 @@ jobs:
           if [ "$IOS" = "16.4" ]; then
             # The iOS 16.4 simulator is a 7 GB download from Apple (about 2 minutes); Xcode 16.2 fetches and runs it.
             sudo xcode-select -s /Applications/Xcode_16.2.app
-            ( for i in 1 2 3; do xcodebuild -downloadPlatform iOS -buildVersion 20E247 > "$W/runtime.log" 2>&1; xcrun simctl list runtimes | grep -q "iOS 16.4" && break; sleep 5; done; touch "$W/runtime.done" ) &
+            # It sometimes hangs, so each try gets 5 minutes.
+            ( for i in 1 2 3 4; do
+                perl -e 'alarm shift; exec @ARGV' 300 xcodebuild -downloadPlatform iOS -buildVersion 20E247 > "$W/runtime.log" 2>&1
+                xcrun simctl list runtimes | grep -q "iOS 16.4" && break
+                sleep 5
+              done; touch "$W/runtime.done" ) &
           else
             sudo xcode-select -s "$XCODE"; touch "$W/runtime.done"
           fi
@@ -73,7 +78,11 @@ jobs:
             SID=$(python3 -c "import json,sys;print(json.load(open(sys.argv[1]))['sid'])" "$W/phone-$i.json")
             echo "$SID" >> "$W/sids.txt"
             SCRIPT=""; [ -f "rig/steps-$SID.txt" ] && SCRIPT="$PWD/rig/steps-$SID.txt"
-            ( while [ ! -f "$W/runtime.done" ]; do sleep 1; done
+            ( if [ ! -f "$W/runtime.done" ]; then
+                echo '{}' > "$W/say.json"
+                python3 rig/scripts/ui-rig/agent.py --sid "$SID" --options "$W/say.json" --work "$W" --say "downloading the iOS 16.4 simulator" || true
+              fi
+              while [ ! -f "$W/runtime.done" ]; do sleep 1; done
               cd "$W" && exec nohup python3 "$GITHUB_WORKSPACE/rig/scripts/ui-rig/agent.py" --sid "$SID" --options "$W/phone-$i.json" \
                 --work "$W/phone-$i" --app "$W/app/Snapreel.app" --wda "$W/wda/WebDriverAgentRunner-Runner.app" \
                 --wait-for "$W/app.ready" --script "$SCRIPT" > "$W/agent-$SID.log" 2>&1 < /dev/null ) &
@@ -129,6 +138,7 @@ jobs:
             w/phone-*/app.log
             w/agent-*.log
             w/stub/stub.log
+            w/runtime.log
           retention-days: 7
           if-no-files-found: ignore
 

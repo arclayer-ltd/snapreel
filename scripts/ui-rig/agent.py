@@ -41,8 +41,8 @@ class Steps:
     def run(self, line):
         try:
             words = shlex.split(line, comments=False)
-        except ValueError as error:
-            raise StepError("could not read the step (%s); put text with spaces in quotes" % error)
+        except ValueError:
+            words = line.split(None, 1)  # an apostrophe, as in: tap Don't save
         if not words:
             return ""
         verb, args = words[0].lower(), words[1:]
