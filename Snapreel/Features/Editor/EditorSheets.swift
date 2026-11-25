@@ -73,7 +73,8 @@ struct EditorTranscriptSheet: View {
         let fillers = model.fillers
         return VStack(spacing: 0) {
             ScrollView {
-                VStack(alignment: .leading, spacing: Space.s) {
+                // Lazy: an hour's transcript has a thousand sentences.
+                LazyVStack(alignment: .leading, spacing: Space.s) {
                     if !fillers.isEmpty {
                         Button {
                             Haptics.tap()
@@ -90,7 +91,7 @@ struct EditorTranscriptSheet: View {
                             .font(.srSubheadlineStrong)
                             .foregroundStyle(Color.srStageRed)
                             .padding(.horizontal, Space.m)
-                            .frame(height: 46)
+                            .frame(minHeight: 46)
                             .background(RoundedRectangle(cornerRadius: Radius.m, style: .continuous).fill(Color.srRedSoft))
                         }
                         .buttonStyle(PressScaleStyle(scale: 0.98))
@@ -174,9 +175,10 @@ struct EditorTranscriptSheet: View {
             Text("New length \(Format.clock(model.duration))")
         }
         .font(.srFootnote.weight(.semibold))
+        .minimumScaleFactor(0.7)
         .foregroundStyle(Color.srStageTextSecondary)
         .padding(.horizontal, Space.gutter)
-        .frame(height: 48)
+        .frame(minHeight: 48)
         .background(Color.srStageRaised.overlay(alignment: .top) { Rectangle().fill(Color.srStageLine).frame(height: 0.5) })
     }
 
@@ -193,7 +195,7 @@ struct EditorTranscriptSheet: View {
                     Text("These sound like ums and uhs. Untick any you want to keep.")
                         .font(.srFootnote)
                         .foregroundStyle(Color.srStageTextSecondary)
-                    VStack(spacing: 0) {
+                    LazyVStack(spacing: 0) {
                         ForEach(fillers) { filler in
                             fillerRow(filler, isOn: chosen.contains(filler.id)) {
                                 var next = chosen
@@ -288,6 +290,19 @@ struct EditorEmptyMessage<Action: View>: View {
     }
 }
 
+/// A sheet's content, scrolling when large text makes it taller than the sheet.
+struct EditorSheetScroll<Content: View>: View {
+    @ViewBuilder let content: () -> Content
+
+    var body: some View {
+        ScrollView {
+            VStack(spacing: Space.m) { content() }
+                .padding(.bottom, Space.s)
+        }
+        .scrollIndicators(.hidden)
+    }
+}
+
 // MARK: - Speed
 
 struct EditorSpeedSheet: View {
@@ -304,6 +319,7 @@ struct EditorSpeedSheet: View {
     var body: some View {
         VStack(spacing: Space.m) {
             SheetHeader(title: "Speed", trailingTitle: "Done", trailingAction: { model.sheet = nil }, onStage: true)
+            EditorSheetScroll {
             if model.selectedSegment != nil {
                 PillSwitch(options: [true, false], selection: $wholeVideo,
                            title: { $0 ? "Whole video" : "This part" })
@@ -336,7 +352,7 @@ struct EditorSpeedSheet: View {
                     .font(.srFootnote)
                     .foregroundStyle(Color.srStageTextTertiary)
             }
-            Spacer(minLength: 0)
+            }
         }
         .background(Color.srStageRaised.ignoresSafeArea())
     }
@@ -361,12 +377,13 @@ struct EditorExportSheet: View {
         VStack(spacing: Space.m) {
             SheetHeader(title: "Save a copy", leadingTitle: "Cancel",
                         leadingAction: { model.sheet = nil }, onStage: true)
+            EditorSheetScroll {
             if model.hasPicture {
                 VStack(spacing: Space.xs) {
                     PillSwitch(options: ExportQuality.allCases,
                                selection: Binding(get: { model.recipe.quality }, set: { model.setQuality($0) }),
                                title: { $0.label })
-                    Text(quality.helper)
+                    Text(helper(quality))
                         .font(.srFootnote)
                         .foregroundStyle(Color.srStageTextSecondary)
                         .multilineTextAlignment(.center)
@@ -380,7 +397,7 @@ struct EditorExportSheet: View {
                     let size = model.recipe.renderSize(source: model.pictureSize, quality: quality)
                     row("Picture", "\(Int(size.width)) × \(Int(size.height))")
                 }
-                row("Estimated size", "About \(Format.bytes(bytes))")
+                row("Estimated size", "Up to \(Format.bytes(bytes))")
                 row("Free on this iPhone", Format.bytes(max(0, model.availableBytes)), warns: !room)
             }
             .padding(.horizontal, Space.m)
@@ -395,8 +412,8 @@ struct EditorExportSheet: View {
                             .font(.srSubheadlineStrong)
                             .foregroundStyle(Color.srStageText)
                         Text(model.hasPicture && quality != .hd720
-                             ? "Free up space in Settings › General › iPhone Storage, or choose 720p for a smaller file."
-                             : "Free up space in Settings › General › iPhone Storage, then try again.")
+                             ? "Saving needs about \(Format.bytes(EditEstimate.spaceNeeded(for: bytes))) for a moment. Free up space in Settings › General › iPhone Storage, or choose 720p for a smaller file."
+                             : "Saving needs about \(Format.bytes(EditEstimate.spaceNeeded(for: bytes))) for a moment. Free up space in Settings › General › iPhone Storage, then try again.")
                             .font(.srFootnote)
                             .foregroundStyle(Color.srStageTextSecondary)
                             .fixedSize(horizontal: false, vertical: true)
@@ -414,7 +431,7 @@ struct EditorExportSheet: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.horizontal, Space.gutter)
             }
-            Spacer(minLength: 0)
+            }
             Button("Save") { model.startExport() }
                 .buttonStyle(.srPrimary)
                 .disabled(!room)
@@ -434,7 +451,15 @@ struct EditorExportSheet: View {
                 .fontWeight(.semibold)
         }
         .font(.srSubheadline)
-        .frame(height: 42)
+        .frame(minHeight: 42)
+    }
+
+    /// What the choice means for this recording: a 720-wide one is the same at 720p and Original.
+    private func helper(_ quality: ExportQuality) -> String {
+        guard quality != .original else { return quality.helper }
+        let size = model.recipe.renderSize(source: model.pictureSize, quality: quality)
+        let original = model.recipe.renderSize(source: model.pictureSize, quality: .original)
+        return size == original ? "The same size as your recording." : quality.helper
     }
 }
 
@@ -446,7 +471,7 @@ struct EditorDiscardSheet: View {
     let onKeepEditing: () -> Void
 
     var body: some View {
-        VStack(spacing: Space.m) {
+        EditorSheetScroll {
             VStack(spacing: Space.xs) {
                 Text("Leave the editor?")
                     .font(.srTitle3)
@@ -465,6 +490,7 @@ struct EditorDiscardSheet: View {
                     .buttonStyle(.srDestructive)
                 Button("Keep editing") { onKeepEditing() }
                     .buttonStyle(.srTertiary)
+                    .frame(minHeight: 44)
             }
         }
         .padding(.horizontal, Space.gutter)
@@ -482,7 +508,8 @@ struct EditorCaptionWordsSheet: View {
         VStack(spacing: 0) {
             SheetHeader(title: "Edit captions", trailingTitle: "Done", trailingAction: { model.sheet = nil }, onStage: true)
             ScrollView {
-                VStack(alignment: .leading, spacing: Space.s) {
+                // Lazy: each line is a text field, and a long recording has hundreds.
+                LazyVStack(alignment: .leading, spacing: Space.s) {
                     Text("Fix any word the transcript got wrong, or hide a line.")
                         .font(.srFootnote)
                         .foregroundStyle(Color.srStageTextSecondary)
@@ -532,9 +559,20 @@ private struct EditorCaptionLineRow: View {
                 .padding(.vertical, 8)
                 .background(RoundedRectangle(cornerRadius: Radius.m, style: .continuous).fill(Color.srStageControl))
                 .onChange(of: focused) { isFocused in
-                    if !isFocused && text != line.text { onCommit(text) }
+                    if !isFocused { commit() }
                 }
-                .onSubmit { onCommit(text) }
+                .onChange(of: text) { value in
+                    // Return ends the line instead of adding one.
+                    if value.contains("\n") {
+                        text = value.replacingOccurrences(of: "\n", with: " ").trimmingCharacters(in: .whitespaces)
+                        focused = false
+                    }
+                }
+                .onChange(of: line.text) { value in
+                    if !focused { text = value }
+                }
+                // Done, a swipe down or scrolling away while typing keeps what was typed.
+                .onDisappear { commit() }
             Button {
                 Haptics.selection()
                 onToggle()
@@ -542,10 +580,15 @@ private struct EditorCaptionLineRow: View {
                 Image(systemName: line.isHidden ? "eye.slash" : "eye")
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(line.isHidden ? Color.srStageTextTertiary : Color.srStageText)
-                    .frame(width: 36, height: 36)
+                    .frame(width: 44, height: 44)
+                    .contentShape(Rectangle())
             }
             .accessibilityLabel(line.isHidden ? "Show caption" : "Hide caption")
         }
+    }
+
+    private func commit() {
+        if text != line.text { onCommit(text) }
     }
 }
 
@@ -561,15 +604,19 @@ struct EditorRenderingView: View {
     let onDone: () -> Void
 
     @EnvironmentObject private var library: Library
+    @ObservedObject private var renderer: EditRenderer = .shared
 
     var body: some View {
-        ZStack {
+        ZStack(alignment: .topLeading) {
             Color.srStage.ignoresSafeArea()
-            if let video = library.video(videoID) {
-                content(video)
-            } else {
-                content(nil)
+            ViewThatFits(in: .vertical) {
+                content(library.video(videoID))
+                ScrollView { content(library.video(videoID)) }
             }
+            // Leaving doesn't stop the save.
+            CircleIconButton(systemName: "chevron.down", label: "Leave the editor", tone: .stage, size: 36) { onDone() }
+                .padding(.horizontal, Space.m)
+                .frame(height: 52)
         }
     }
 
@@ -614,7 +661,8 @@ struct EditorRenderingView: View {
             }
         }
         .frame(maxWidth: .infinity)
-        .frame(height: 260)
+        .frame(height: min(260, UIScreen.main.bounds.height * 0.3))
+        .padding(.top, 44)
         .clipShape(RoundedRectangle(cornerRadius: Radius.l, style: .continuous))
     }
 
@@ -632,14 +680,15 @@ struct EditorRenderingView: View {
             VStack(spacing: Space.xs) {
                 ProgressView(value: min(1, max(0, progress)))
                     .tint(Color.srRed)
-                Text("\(Int((progress * 100).rounded()))%")
+                Text(renderer.isPaused ? "Paused" : "\(Int((progress * 100).rounded()))%")
                     .font(.srTimerSmall)
                     .foregroundStyle(Color.srStageTextSecondary)
             }
-            Text("You can leave the editor. Saving carries on in your library.")
+            Text("You can leave the editor: saving carries on in your library. It pauses while you use another app and carries on when you come back.")
                 .font(.srFootnote)
                 .foregroundStyle(Color.srStageTextTertiary)
                 .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 0)
             Button("Cancel") { model.cancelExport(videoID) }
                 .buttonStyle(.srSecondary)

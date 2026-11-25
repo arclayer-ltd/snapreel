@@ -28,6 +28,8 @@ struct EditorView: View {
     @EnvironmentObject private var library: Library
     @ObservedObject private var transcripts: TranscriptService = .shared
     @State private var pageOffset: CGFloat = 0
+    @State private var isClosing = false
+    @GestureState private var isSwiping = false
     @State private var shareTarget: Video?
 
     var body: some View {
@@ -55,7 +57,14 @@ struct EditorView: View {
             phaseOverlay
                 .zIndex(3)
         }
+        // Controls keep their places; the largest accessibility sizes are for reading, and the sheets
+        // (which scroll) follow them.
+        .dynamicTypeSize(...DynamicTypeSize.accessibility1)
         .offset(y: pageOffset)
+        .onChange(of: isSwiping) { swiping in
+            // The system took the swipe away halfway (a call, Control Centre): the page springs back.
+            if !swiping, !isClosing, pageOffset != 0 { withAnimation(SwipeDismiss.springBack) { pageOffset = 0 } }
+        }
         .animation(Motion.quick, value: model.tool)
         .animation(Motion.quick, value: model.selection)
         .sheet(item: $model.sheet) { sheet in
@@ -83,8 +92,7 @@ struct EditorView: View {
                 }
                 .disabled(!model.isDirty)
                 Button(role: .destructive) {
-                    model.discardDraft()
-                    model.revertToOriginal()
+                    model.discardEdits()
                 } label: {
                     Label("Discard draft", systemImage: "trash")
                 }
@@ -95,7 +103,10 @@ struct EditorView: View {
                     .foregroundStyle(Color.srStageText)
                     .frame(width: 36, height: 36)
                     .background(Circle().fill(Color.srStageControl))
+                    .frame(width: 44, height: 44)
+                    .contentShape(Rectangle())
             }
+            .disabled(model.isRecordingVoice)
             .accessibilityLabel("More")
             Button {
                 Haptics.tap()
@@ -105,6 +116,7 @@ struct EditorView: View {
                 Text("Save")
             }
             .buttonStyle(.srPrimaryCompact)
+            .disabled(model.isRecordingVoice || model.isPreparing || model.loadFailed)
             .accessibilityHint("Saves the edit as a new recording")
         }
         .padding(.horizontal, Space.m)
@@ -114,10 +126,11 @@ struct EditorView: View {
     }
 
     private var swipeDown: some Gesture {
-        DragGesture(minimumDistance: 10)
+        DragGesture(minimumDistance: 10, coordinateSpace: .global)
+            .updating($isSwiping) { _, swiping, _ in swiping = true }
             .onChanged { value in
-                guard SwipeDismiss.isDownward(value) else { return }
-                pageOffset = value.translation.height
+                guard !isClosing else { return }
+                pageOffset = SwipeDismiss.isDownward(value) ? value.translation.height : 0
             }
             .onEnded { value in
                 if SwipeDismiss.isDownward(value) && SwipeDismiss.commits(value) {
@@ -129,6 +142,13 @@ struct EditorView: View {
     }
 
     private func requestClose() {
+        guard !isClosing else { return }
+        // A take being recorded stops, and waits with the other edits.
+        if model.isRecordingVoice {
+            model.stopVoice()
+            withAnimation(SwipeDismiss.springBack) { pageOffset = 0 }
+            return
+        }
         model.pause()
         switch model.phase {
         case .rendering, .restorePrompt:
@@ -148,6 +168,8 @@ struct EditorView: View {
     }
 
     private func close() {
+        guard !isClosing else { return }
+        isClosing = true
         withAnimation(SwipeDismiss.slideAway) { pageOffset = SwipeDismiss.offscreen }
         Task { @MainActor in
             try? await Task.sleep(nanoseconds: 200_000_000)
@@ -169,10 +191,7 @@ struct EditorView: View {
     private var transport: some View {
         ZStack {
             HStack(spacing: Space.xs) {
-                Text("\(Format.clock(model.playhead)) / \(Format.clock(model.duration))")
-                    .font(.srTimerSmall)
-                    .foregroundStyle(Color.srStageTextSecondary)
-                    .accessibilityLabel("\(Format.clock(model.playhead)) of \(Format.clock(model.duration))")
+                EditorTimeLabel(model: model, seconds: model.clock.seconds)
                 Spacer(minLength: 0)
                 historyButton("arrow.uturn.backward", label: "Undo", enabled: model.canUndo) { model.undo() }
                 historyButton("arrow.uturn.forward", label: "Redo", enabled: model.canRedo) { model.redo() }
@@ -184,13 +203,15 @@ struct EditorView: View {
                 Image(systemName: model.isPlaying ? "pause.fill" : "play.fill")
                     .font(.system(size: 20, weight: .semibold))
                     .foregroundStyle(Color.srStageText)
-                    .frame(width: 48, height: 44)
+                    .frame(width: 56, height: 46)
                     .contentShape(Rectangle())
             }
             .buttonStyle(PressScaleStyle())
+            .disabled(model.isRecordingVoice || model.isPreparing)
             .accessibilityLabel(model.isPlaying ? "Pause" : "Play")
         }
-        .padding(.horizontal, Space.m)
+        .padding(.leading, Space.m)
+        .padding(.trailing, Space.xs)
         .frame(height: 46)
     }
 
@@ -200,11 +221,11 @@ struct EditorView: View {
             Image(systemName: systemImage)
                 .font(.system(size: 16, weight: .semibold))
                 .foregroundStyle(enabled ? Color.srStageText : Color.srStageTextTertiary.opacity(0.6))
-                .frame(width: 38, height: 38)
+                .frame(width: 44, height: 44)
                 .contentShape(Rectangle())
         }
         .buttonStyle(PressScaleStyle())
-        .disabled(!enabled)
+        .disabled(!enabled || model.isRecordingVoice)
         .accessibilityLabel(label)
     }
 
@@ -219,7 +240,7 @@ struct EditorView: View {
                 .presentationDragIndicator(.visible)
         case .speed:
             EditorSpeedSheet(model: model)
-                .presentationDetents([.height(model.selectedSegment == nil ? 300 : 360)])
+                .presentationDetents([.height(model.selectedSegment == nil ? 300 : 360), .large])
                 .presentationDragIndicator(.visible)
         case .export:
             EditorExportSheet(model: model)
@@ -235,7 +256,7 @@ struct EditorView: View {
             }, onKeepEditing: {
                 model.sheet = nil
             })
-            .presentationDetents([.height(330)])
+            .presentationDetents([.height(330), .large])
             .presentationDragIndicator(.visible)
         case .captionWords:
             EditorCaptionWordsSheet(model: model)
@@ -270,11 +291,31 @@ struct EditorView: View {
                                 onOpen: { onOpen(id) },
                                 onShare: { shareTarget = library.video(id) },
                                 onDone: { close() })
+            .contentShape(Rectangle())
+            .gesture(swipeDown)
             .transition(.opacity)
         case .cancelled:
             EditorCancelledView { withAnimation(Motion.standard) { model.backToEditing() } }
                 .transition(.opacity)
         }
+    }
+}
+
+/// "0:12 / 9:00": follows whole seconds, so it isn't drawn again while nothing changes.
+private struct EditorTimeLabel: View {
+    @ObservedObject var model: EditorModel
+    @ObservedObject var seconds: EditorSeconds
+
+    var body: some View {
+        let now = Double(seconds.whole)
+        Text("\(Format.clock(now)) / \(Format.clock(model.duration))")
+            .font(.srTimerSmall)
+            .foregroundStyle(Color.srStageTextSecondary)
+            .lineLimit(1)
+            .minimumScaleFactor(0.7)
+            // Never under the play button in the middle.
+            .frame(maxWidth: 118, alignment: .leading)
+            .accessibilityLabel("\(Format.clock(now)) of \(Format.clock(model.duration))")
     }
 }
 
@@ -301,6 +342,8 @@ struct EditorBottomBar: View {
             EditorSectionBar(model: model)
         } else if let tool = model.tool {
             EditorToolPanel(model: model, tool: tool)
+                // Starts scrolled to the top, and typed state never leaks between tools.
+                .id(tool)
         } else {
             EditorToolBar(model: model)
         }
@@ -347,6 +390,10 @@ struct EditorToolButton: View {
                     .font(.system(size: 11, weight: .medium))
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
+            }
+            // Like a tab bar: the label doesn't grow, so holding it shows it large.
+            .accessibilityShowsLargeContentViewer {
+                Label(title, systemImage: systemImage)
             }
             .foregroundStyle(isOn ? Color.srStageRed : (isDestructive ? Color.srStageRed : Color.srStageText))
             .frame(width: 66, height: 64)
@@ -520,6 +567,7 @@ struct EditorTextEntry: View {
     var body: some View {
         ZStack {
             Color.black.opacity(0.9).ignoresSafeArea()
+                .accessibilityHidden(true)
                 .onTapGesture { model.commitTextEntry() }
             VStack(spacing: 0) {
                 HStack {
@@ -528,6 +576,7 @@ struct EditorTextEntry: View {
                     }
                     .font(.srBody)
                     .foregroundStyle(Color.white.opacity(0.85))
+                    .frame(minWidth: 44, minHeight: 44)
                     Spacer()
                     Button("Done") { model.commitTextEntry() }
                         .font(.srHeadline)
@@ -550,7 +599,12 @@ struct EditorTextEntry: View {
                 }
             }
         }
-        .onAppear { focused = true }
+        // On iOS 16 a field that asks for the keyboard while it is still appearing doesn't always get it.
+        .task {
+            focused = true
+            try? await Task.sleep(nanoseconds: 350_000_000)
+            if !Task.isCancelled { focused = true }
+        }
     }
 
     @ViewBuilder
@@ -568,7 +622,6 @@ struct EditorTextEntry: View {
                 .padding(.horizontal, entry.style == .box ? 14 : 4)
                 .padding(.vertical, 6)
                 .background(background(entry))
-                .submitLabel(.done)
                 .accessibilityLabel("Text")
         }
     }
@@ -611,8 +664,10 @@ struct EditorTextStyleRow: View {
                                 .font(.srSubheadlineStrong)
                                 .foregroundStyle(option == style ? selectedText : text)
                                 .padding(.horizontal, Space.s)
-                                .frame(height: 34)
+                                .frame(height: 36)
                                 .background(Capsule().fill(option == style ? selectedFill : fill))
+                                .frame(height: 44)
+                                .contentShape(Rectangle())
                         }
                         .buttonStyle(PressScaleStyle())
                         .accessibilityAddTraits(option == style ? .isSelected : [])
@@ -636,7 +691,7 @@ struct EditorColorDots: View {
     let onPick: (EditColor) -> Void
 
     var body: some View {
-        HStack(spacing: Space.s) {
+        HStack(spacing: Space.xs) {
             ForEach(EditColor.allCases) { option in
                 Button {
                     Haptics.selection()
@@ -652,8 +707,8 @@ struct EditorColorDots: View {
                         .padding(3)
                         .overlay(Circle().strokeBorder(option == selected ? (onDark ? Color.white : Color.srStageText) : .clear,
                                                        lineWidth: 2))
-                        .frame(width: 40, height: 40)
-                        .contentShape(Circle())
+                        .frame(maxWidth: 44, minHeight: 44)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(PressScaleStyle())
                 .accessibilityLabel(option.label)

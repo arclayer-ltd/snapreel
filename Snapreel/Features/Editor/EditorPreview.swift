@@ -28,12 +28,21 @@ struct EditorPreview: View {
                         EditorCropOverlay(model: model, size: rect.size)
                             .frame(width: rect.width, height: rect.height)
                             .offset(x: rect.minX, y: rect.minY)
-                    } else {
-                        EditorCanvas(model: model, size: rect.size)
+                    } else if !model.isTrimmingSection {
+                        EditorCanvas(model: model, moment: model.moment, size: rect.size)
                             .frame(width: rect.width, height: rect.height)
                             .offset(x: rect.minX, y: rect.minY)
                     }
+                    if model.isPreparing || model.loadFailed {
+                        EditorLoadingCard(failed: model.loadFailed)
+                            .frame(width: area.width, height: area.height)
+                            .offset(x: area.minX, y: area.minY)
+                            .allowsHitTesting(false)
+                    }
                 }
+                // Two fingers anywhere on the picture resize and turn the selected text or shape; a
+                // small one is too small to pinch itself.
+                .simultaneousGesture(EditorPinchGesture.gesture(model: model), including: model.selection.isPinchable ? .all : .subviews)
             } else {
                 EditorSoundArtwork(model: model)
                     .frame(width: area.width, height: area.height)
@@ -51,11 +60,17 @@ struct EditorPreview: View {
                 Image(uiImage: still)
                     .resizable()
                     .scaledToFit()
+                    .allowsHitTesting(false)
             }
             if !model.isStatic {
-                EditorPlayerView(player: model.player)
+                EditorStageRepresentable(playback: model.playback)
             }
         }
+        .accessibilityElement()
+        .accessibilityLabel("Video")
+        .accessibilityAddTraits(.isButton)
+        .accessibilityHint(model.isPlaying ? "Pauses" : "Plays")
+        .accessibilityAction { model.togglePlay() }
     }
 
     private func tapOutside() {
@@ -76,38 +91,67 @@ struct EditorPreview: View {
     }
 }
 
-/// The player's video layer.
-struct EditorPlayerView: UIViewRepresentable {
-    let player: AVPlayer
+/// Opening, or why it couldn't.
+private struct EditorLoadingCard: View {
+    let failed: Bool
 
-    func makeUIView(context: Context) -> EditorPlayerLayerView {
-        let view = EditorPlayerLayerView()
-        view.playerLayer.player = player
-        view.playerLayer.videoGravity = .resizeAspect
-        view.isUserInteractionEnabled = false
-        view.backgroundColor = .clear
-        return view
-    }
-
-    func updateUIView(_ uiView: EditorPlayerLayerView, context: Context) {
-        if uiView.playerLayer.player !== player { uiView.playerLayer.player = player }
+    var body: some View {
+        VStack(spacing: Space.s) {
+            if failed {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 22, weight: .semibold))
+                    .foregroundStyle(Color.srStageRed)
+                Text("This recording can't be opened for editing. Close the editor and play it to check it.")
+                    .font(.srSubheadline)
+                    .multilineTextAlignment(.center)
+            } else {
+                ProgressView()
+                Text("Opening…")
+                    .font(.srFootnote)
+            }
+        }
+        .foregroundStyle(Color.srStageText)
+        .padding(Space.m)
+        .background(RoundedRectangle(cornerRadius: Radius.l, style: .continuous).fill(Color.srStageRaised))
+        .frame(maxWidth: 280, maxHeight: .infinity)
     }
 }
 
-final class EditorPlayerLayerView: UIView {
-    override class var layerClass: AnyClass { AVPlayerLayer.self }
-    var playerLayer: AVPlayerLayer { layer as! AVPlayerLayer }
+extension Optional where Wrapped == EditorSelection {
+    var isPinchable: Bool {
+        switch self {
+        case .text?, .sticker?: return true
+        default: return false
+        }
+    }
+}
+
+/// Pinch and twist for the selected text or shape, from anywhere on the picture.
+enum EditorPinchGesture {
+    @MainActor
+    static func gesture(model: EditorModel) -> some Gesture {
+        MagnificationGesture(minimumScaleDelta: 0.02)
+            .simultaneously(with: RotationGesture(minimumAngleDelta: .degrees(3)))
+            .onChanged { value in model.pinch(scale: value.first.map(Double.init), degrees: value.second?.degrees) }
+            .onEnded { _ in model.endPinch() }
+    }
 }
 
 /// A voice recording's stand-in for the picture: its sound, following the appearance.
 struct EditorSoundArtwork: View {
     @ObservedObject var model: EditorModel
+    @ObservedObject var clock: EditorClock
+
+    init(model: EditorModel) {
+        self.model = model
+        self.clock = model.clock
+    }
 
     var body: some View {
         VStack(spacing: Space.m) {
             HStack(alignment: .center, spacing: 4) {
                 ForEach(0..<32, id: \.self) { index in
-                    let progress = model.duration > 0 ? model.playhead / model.duration : 0
+                    let progress = model.duration > 0 ? clock.time / model.duration : 0
                     let played = Double(index) / 32 <= progress
                     Capsule()
                         .fill(played ? Color.srRed : Color.srStageTextTertiary.opacity(0.5))
@@ -115,8 +159,10 @@ struct EditorSoundArtwork: View {
                 }
             }
             .frame(height: 80)
-            Text(Format.clock(model.playhead))
+            Text(Format.clock(clock.time))
                 .font(.srStat)
+                .minimumScaleFactor(0.5)
+                .lineLimit(1)
                 .foregroundStyle(Color.srStageText)
             Text(model.isPlaying ? "Tap to pause" : "Tap to play")
                 .font(.srFootnote)
@@ -125,10 +171,19 @@ struct EditorSoundArtwork: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(RoundedRectangle(cornerRadius: Radius.l, style: .continuous).fill(Color.srStageRaised))
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("Voice recording, \(Format.clock(model.playhead)) of \(Format.clock(model.duration))")
+        .accessibilityAddTraits(.isButton)
+        .accessibilityLabel("Voice recording, \(Format.clock(clock.time)) of \(Format.clock(model.duration))")
     }
 
+    /// The recording's own loudness, kept sections only; a pattern until it has been read.
     private func level(_ index: Int) -> CGFloat {
+        if let levels = model.levels["source"], !levels.isEmpty {
+            let from = model.recipe.sourceTime(forOutput: model.duration * Double(index) / 32)
+            let to = model.recipe.sourceTime(forOutput: model.duration * Double(index + 1) / 32)
+            let a = min(levels.count - 1, max(0, Int(from * EditorLevels.perSecond)))
+            let b = min(levels.count, max(a + 1, Int(to * EditorLevels.perSecond)))
+            return 0.08 + 0.92 * CGFloat(levels[a..<max(a + 1, b)].max() ?? 0)
+        }
         let x = Double(index) + Double(abs(model.source.id.hashValue % 11))
         return CGFloat(0.2 + 0.6 * abs(sin(x * 0.8)) * abs(cos(x * 0.27)))
     }
@@ -139,31 +194,30 @@ struct EditorSoundArtwork: View {
 /// Text, shapes, blur boxes and the caption at the playhead, in picture coordinates.
 struct EditorCanvas: View {
     @ObservedObject var model: EditorModel
+    /// Changes only when something appears or goes, so playing costs nothing here.
+    @ObservedObject var moment: EditorMomentStore
     let size: CGSize
 
     var body: some View {
-        let t = model.playhead
+        let shown = moment.value.overlays
         ZStack(alignment: .topLeading) {
             Color.clear.allowsHitTesting(false)
-            if let captions = model.recipe.captions,
-               let line = model.captionLines.first(where: { !$0.isHidden && t >= $0.start && t <= $0.end }) {
-                EditCaptionOverlayView(text: line.text, style: captions.style, frame: size)
+            if let captions = model.recipe.captions, let caption = moment.value.caption {
+                EditCaptionOverlayView(text: caption, style: captions.style, frame: size)
                     .position(x: EditCaptionOverlayView.center.x * size.width, y: EditCaptionOverlayView.center.y * size.height)
                     .allowsHitTesting(false)
             }
             ForEach(model.recipe.blurs) { blur in
-                if model.selection == .blur(blur.id) || (model.tool == .blur && t >= blur.start && t <= blur.end) {
+                if model.selection == .blur(blur.id) || (model.tool == .blur && shown.contains(blur.id)) {
                     EditorBlurBox(model: model, blur: blur, size: size, isSelected: model.selection == .blur(blur.id))
                 }
             }
             ForEach(model.recipe.stickers) { item in
-                if model.selection == .sticker(item.id) || (t >= item.start && t <= item.end) {
+                if model.selection == .sticker(item.id) || shown.contains(item.id) {
                     EditorMovable(isSelected: model.selection == .sticker(item.id), center: item.center, size: size,
-                                  scale: item.scale, rotation: item.rotation, allowsRotation: item.kind != .circle,
+                                  label: item.kind == .emoji ? (item.emoji ?? "Emoji") : item.kind.label,
                                   onSelect: { model.selectOverlay(.sticker(item.id)) },
-                                  onChange: { center, scale, rotation in
-                                      model.liveMove(.sticker(item.id), center: center, scale: scale, rotation: rotation)
-                                  },
+                                  onChange: { center in model.liveMove(.sticker(item.id), center: center) },
                                   onEnd: { model.endLiveChange() },
                                   onDelete: { model.deleteSticker(item.id) },
                                   onEdit: nil) {
@@ -172,13 +226,11 @@ struct EditorCanvas: View {
                 }
             }
             ForEach(model.recipe.texts) { item in
-                if model.selection == .text(item.id) || (t >= item.start && t <= item.end) {
+                if model.selection == .text(item.id) || shown.contains(item.id) {
                     EditorMovable(isSelected: model.selection == .text(item.id), center: item.center, size: size,
-                                  scale: item.scale, rotation: 0, allowsRotation: false,
+                                  label: item.text,
                                   onSelect: { model.selectOverlay(.text(item.id)) },
-                                  onChange: { center, scale, _ in
-                                      model.liveMove(.text(item.id), center: center, scale: scale)
-                                  },
+                                  onChange: { center in model.liveMove(.text(item.id), center: center) },
                                   onEnd: { model.endLiveChange() },
                                   onDelete: { model.deleteText(item.id) },
                                   onEdit: { model.editText(item) }) {
@@ -188,28 +240,28 @@ struct EditorCanvas: View {
             }
         }
         .frame(width: size.width, height: size.height)
+        // Laid out in picture units, so the person's text size must not change them.
+        .dynamicTypeSize(.large)
     }
 }
 
-/// Drag to move, pinch to resize, twist to turn; a selected item shows its outline and a
-/// delete button.
+/// Drag to move (two fingers anywhere on the picture resize and turn it); a selected item shows
+/// its outline and a delete button, and tapping selected text again edits it.
 struct EditorMovable<Content: View>: View {
     let isSelected: Bool
     let center: CGPoint
     let size: CGSize
-    let scale: Double
-    let rotation: Double
-    let allowsRotation: Bool
+    let label: String
     let onSelect: () -> Void
-    let onChange: (CGPoint?, Double?, Double?) -> Void
+    let onChange: (CGPoint) -> Void
     let onEnd: () -> Void
     let onDelete: () -> Void
     let onEdit: (() -> Void)?
     @ViewBuilder let content: () -> Content
 
     @State private var startCenter: CGPoint?
-    @State private var startScale: Double?
-    @State private var startRotation: Double?
+    /// Resets by itself, also when the system takes the touch away (a call, a second gesture).
+    @GestureState private var isDragging = false
 
     var body: some View {
         content()
@@ -221,56 +273,58 @@ struct EditorMovable<Content: View>: View {
                         .shadow(color: .black.opacity(0.5), radius: 1)
                 }
             }
+            // At least a fingertip to grab, however small the item.
+            .background(Color.clear.frame(minWidth: 44, minHeight: 44).contentShape(Rectangle()))
+            .contentShape(Rectangle().inset(by: -8))
+            .onTapGesture {
+                Haptics.selection()
+                if isSelected, let onEdit { onEdit() } else { onSelect() }
+            }
+            .gesture(drag)
             .overlay(alignment: .topLeading) {
                 if isSelected {
-                    Button {
-                        Haptics.tap()
-                        onDelete()
-                    } label: {
-                        Image(systemName: "xmark")
-                            .font(.system(size: 10, weight: .bold))
-                            .foregroundStyle(Color.srInk)
-                            .frame(width: 22, height: 22)
-                            .background(Circle().fill(Color.white))
-                            .shadow(color: .black.opacity(0.3), radius: 2)
-                            .frame(width: 36, height: 36)
-                            .contentShape(Rectangle())
-                    }
-                    .offset(x: -18, y: -18)
-                    .accessibilityLabel("Delete")
+                    corner("xmark", label: "Delete") { onDelete() }
+                        .offset(x: -22, y: -22)
                 }
             }
             .overlay(alignment: .topTrailing) {
                 if isSelected, let onEdit {
-                    Button {
-                        Haptics.tap()
-                        onEdit()
-                    } label: {
-                        Image(systemName: "pencil")
-                            .font(.system(size: 10, weight: .bold))
-                            .foregroundStyle(Color.srInk)
-                            .frame(width: 22, height: 22)
-                            .background(Circle().fill(Color.white))
-                            .shadow(color: .black.opacity(0.3), radius: 2)
-                            .frame(width: 36, height: 36)
-                            .contentShape(Rectangle())
-                    }
-                    .offset(x: 18, y: -18)
-                    .accessibilityLabel("Edit text")
+                    corner("pencil", label: "Edit text") { onEdit() }
+                        .offset(x: 22, y: -22)
                 }
             }
-            .contentShape(Rectangle())
-            .onTapGesture(count: 2) { onEdit?() }
-            .onTapGesture {
-                Haptics.selection()
-                onSelect()
-            }
-            .gesture(drag.simultaneously(with: pinch.simultaneously(with: twist)))
+            .accessibilityElement(children: .contain)
+            .accessibilityLabel(label)
+            .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
+            .accessibilityAction { onSelect() }
             .position(x: center.x * size.width, y: center.y * size.height)
+            .onChange(of: isDragging) { dragging in
+                if !dragging { finish() }
+            }
     }
 
+    private func corner(_ systemImage: String, label: String, action: @escaping () -> Void) -> some View {
+        Button {
+            Haptics.tap()
+            action()
+        } label: {
+            Image(systemName: systemImage)
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(Color.srInk)
+                .frame(width: 24, height: 24)
+                .background(Circle().fill(Color.white))
+                .shadow(color: .black.opacity(0.3), radius: 2)
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
+        }
+        .accessibilityLabel(label)
+    }
+
+    // Measured on the screen, not on the item: an item that moves with the finger would measure
+    // the drag against itself and shake.
     private var drag: some Gesture {
-        DragGesture(minimumDistance: 2)
+        DragGesture(minimumDistance: 3, coordinateSpace: .global)
+            .updating($isDragging) { _, dragging, _ in dragging = true }
             .onChanged { value in
                 if startCenter == nil {
                     startCenter = center
@@ -278,37 +332,15 @@ struct EditorMovable<Content: View>: View {
                 }
                 let origin = startCenter ?? center
                 onChange(CGPoint(x: origin.x + value.translation.width / max(1, size.width),
-                                 y: origin.y + value.translation.height / max(1, size.height)), nil, nil)
+                                 y: origin.y + value.translation.height / max(1, size.height)))
             }
-            .onEnded { _ in
-                startCenter = nil
-                onEnd()
-            }
+            .onEnded { _ in finish() }
     }
 
-    private var pinch: some Gesture {
-        MagnificationGesture()
-            .onChanged { value in
-                if startScale == nil { startScale = scale }
-                onChange(nil, (startScale ?? scale) * Double(value), nil)
-            }
-            .onEnded { _ in
-                startScale = nil
-                onEnd()
-            }
-    }
-
-    private var twist: some Gesture {
-        RotationGesture()
-            .onChanged { angle in
-                guard allowsRotation else { return }
-                if startRotation == nil { startRotation = rotation }
-                onChange(nil, nil, (startRotation ?? rotation) + angle.degrees)
-            }
-            .onEnded { _ in
-                startRotation = nil
-                onEnd()
-            }
+    private func finish() {
+        guard startCenter != nil else { return }
+        startCenter = nil
+        onEnd()
     }
 }
 
@@ -320,6 +352,7 @@ struct EditorBlurBox: View {
     let isSelected: Bool
 
     @State private var startRect: CGRect?
+    @GestureState private var isDragging = false
 
     var body: some View {
         let rect = CGRect(x: blur.rect.minX * size.width, y: blur.rect.minY * size.height,
@@ -337,9 +370,9 @@ struct EditorBlurBox: View {
                     .fill(Color.white)
                     .frame(width: 18, height: 18)
                     .shadow(color: .black.opacity(0.4), radius: 2)
-                    .frame(width: 40, height: 40)
+                    .frame(width: 46, height: 46)
                     .contentShape(Rectangle())
-                    .offset(x: 20, y: 20)
+                    .offset(x: 23, y: 23)
                     .gesture(resize)
                     .accessibilityLabel("Resize blur")
             }
@@ -355,18 +388,28 @@ struct EditorBlurBox: View {
                         .foregroundStyle(Color.srInk)
                         .frame(width: 22, height: 22)
                         .background(Circle().fill(Color.white))
-                        .frame(width: 36, height: 36)
+                        .frame(width: 44, height: 44)
                         .contentShape(Rectangle())
                 }
-                .offset(x: -18, y: -18)
+                .offset(x: -22, y: -22)
                 .accessibilityLabel("Delete blur")
             }
         }
         .position(x: rect.midX, y: rect.midY)
+        .onChange(of: isDragging) { dragging in
+            if !dragging { finish() }
+        }
+    }
+
+    private func finish() {
+        guard startRect != nil else { return }
+        startRect = nil
+        model.endLiveChange()
     }
 
     private var move: some Gesture {
-        DragGesture(minimumDistance: 2)
+        DragGesture(minimumDistance: 2, coordinateSpace: .global)
+            .updating($isDragging) { _, dragging, _ in dragging = true }
             .onChanged { value in
                 if startRect == nil {
                     startRect = blur.rect
@@ -378,14 +421,12 @@ struct EditorBlurBox: View {
                 next.origin.y += value.translation.height / max(1, size.height)
                 model.liveMove(.blur(blur.id), rect: next)
             }
-            .onEnded { _ in
-                startRect = nil
-                model.endLiveChange()
-            }
+            .onEnded { _ in finish() }
     }
 
     private var resize: some Gesture {
-        DragGesture(minimumDistance: 1)
+        DragGesture(minimumDistance: 1, coordinateSpace: .global)
+            .updating($isDragging) { _, dragging, _ in dragging = true }
             .onChanged { value in
                 if startRect == nil { startRect = blur.rect }
                 guard let start = startRect else { return }
@@ -394,10 +435,7 @@ struct EditorBlurBox: View {
                 next.size.height = start.height + value.translation.height / max(1, size.height)
                 model.liveMove(.blur(blur.id), rect: next)
             }
-            .onEnded { _ in
-                startRect = nil
-                model.endLiveChange()
-            }
+            .onEnded { _ in finish() }
     }
 }
 
@@ -410,6 +448,9 @@ struct EditorCropOverlay: View {
     let size: CGSize
 
     @State private var startRect: CGRect?
+    @State private var isPinching = false
+    @GestureState private var isDragging = false
+    @GestureState private var isScaling = false
 
     private var displayRect: CGRect { model.geometry.toDisplay(model.recipe.crop.rect) }
     private var shownPixels: CGSize { model.geometry.displaySize(model.pictureSize) }
@@ -455,10 +496,25 @@ struct EditorCropOverlay: View {
             }
         }
         .frame(width: size.width, height: size.height)
+        .contentShape(Rectangle().inset(by: -22))
         .simultaneousGesture(pinch)
+        .onChange(of: isDragging) { dragging in
+            if !dragging, !isPinching { finish() }
+        }
+        .onChange(of: isScaling) { scaling in
+            if !scaling { finish() }
+        }
         .accessibilityElement()
         .accessibilityLabel("Crop box")
-        .accessibilityHint("Drag to move, drag a corner to resize")
+        .accessibilityValue("\(Int((displayRect.width * 100).rounded())) by \(Int((displayRect.height * 100).rounded())) percent of the picture")
+        .accessibilityHint("Drag to move, drag a corner to resize. The shapes below set it for you.")
+    }
+
+    private func finish() {
+        guard startRect != nil else { return }
+        startRect = nil
+        isPinching = false
+        model.endLiveChange()
     }
 
     enum Corner: CaseIterable {
@@ -496,8 +552,10 @@ struct EditorCropOverlay: View {
     }
 
     private var move: some Gesture {
-        DragGesture(minimumDistance: 1)
+        DragGesture(minimumDistance: 1, coordinateSpace: .global)
+            .updating($isDragging) { _, dragging, _ in dragging = true }
             .onChanged { value in
+                guard !isPinching else { return }
                 if startRect == nil { startRect = displayRect }
                 guard let start = startRect else { return }
                 var next = start
@@ -505,15 +563,14 @@ struct EditorCropOverlay: View {
                 next.origin.y = min(max(0, start.minY + value.translation.height / max(1, size.height)), 1 - start.height)
                 model.setDisplayCrop(next, live: true)
             }
-            .onEnded { _ in
-                startRect = nil
-                model.endLiveChange()
-            }
+            .onEnded { _ in if !isPinching { finish() } }
     }
 
     private func resize(_ corner: Corner) -> some Gesture {
-        DragGesture(minimumDistance: 1)
+        DragGesture(minimumDistance: 1, coordinateSpace: .global)
+            .updating($isDragging) { _, dragging, _ in dragging = true }
             .onChanged { value in
+                guard !isPinching else { return }
                 if startRect == nil {
                     startRect = displayRect
                     if model.recipe.crop.aspect == .original { model.liveChange { $0.crop.aspect = .free } }
@@ -523,17 +580,21 @@ struct EditorCropOverlay: View {
                 let dy = value.translation.height / max(1, size.height)
                 model.setDisplayCrop(resized(start, corner: corner, dx: dx, dy: dy), live: true)
             }
-            .onEnded { _ in
-                startRect = nil
-                model.endLiveChange()
-            }
+            .onEnded { _ in if !isPinching { finish() } }
     }
 
     private var pinch: some Gesture {
         MagnificationGesture()
+            .updating($isScaling) { _, scaling, _ in scaling = true }
             .onChanged { scale in
-                if startRect == nil { startRect = displayRect }
+                if !isPinching {
+                    // Takes over from the one-finger move that started first.
+                    isPinching = true
+                    startRect = displayRect
+                    model.beginLiveChange()
+                }
                 guard let start = startRect else { return }
+                if model.recipe.crop.aspect == .original { model.liveChange { $0.crop.aspect = .free } }
                 let width = min(1, max(0.1, start.width * scale))
                 let height = min(1, max(0.1, start.height * scale))
                 let ratio = model.recipe.crop.aspect.ratio
@@ -548,10 +609,7 @@ struct EditorCropOverlay: View {
                 next.origin.y = min(max(0, next.minY), 1 - next.height)
                 model.setDisplayCrop(next, live: true)
             }
-            .onEnded { _ in
-                startRect = nil
-                model.endLiveChange()
-            }
+            .onEnded { _ in finish() }
     }
 
     /// The crop with one corner moved, kept inside the picture and, for a fixed shape, in shape.

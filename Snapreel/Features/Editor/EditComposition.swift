@@ -17,16 +17,16 @@ struct EditSource {
     /// Pixel size as shown (turned upright).
     let uprightSize: CGSize
     let orientation: CGImagePropertyOrientation
-    /// Frames a second of the picture (screen recordings are 60, camera ones 30).
+    /// Average frames a second of the picture. Screen recordings are uneven (about 37 on average,
+    /// on a 60 a second clock); camera ones are an even 30.
     let frameRate: Float
+    /// Bits a second of the stored picture, 0 when unknown.
+    let videoBitRate: Double
+    let codec: CMVideoCodecType
+    /// HLG or PQ: turned into ordinary colours when the picture is drawn again.
+    let isHDR: Bool
 
     var hasVideo: Bool { videoTrack != nil }
-
-    /// Frame rate for the saved edit: the recording's own, between 24 and 60.
-    var exportFrameRate: Int32 {
-        guard frameRate.isFinite, frameRate > 1 else { return 30 }
-        return Int32(min(60, max(24, frameRate.rounded())))
-    }
 
     static func load(_ url: URL) async throws -> EditSource {
         let asset = AVURLAsset(url: url, options: [AVURLAssetPreferPreciseDurationAndTimingKey: true])
@@ -46,11 +46,19 @@ struct EditSource {
         var transform = CGAffineTransform.identity
         var videoRange = CMTimeRange(start: .zero, duration: CMTime(seconds: max(duration, 0), preferredTimescale: 600))
         var frameRate: Float = 30
+        var bitRate: Float = 0
+        var codec: CMVideoCodecType = kCMVideoCodecType_H264
+        var isHDR = false
         if let track = videoTracks.first {
             naturalSize = try await track.load(.naturalSize)
             transform = try await track.load(.preferredTransform)
             videoRange = try await track.load(.timeRange)
             frameRate = try await track.load(.nominalFrameRate)
+            bitRate = try await track.load(.estimatedDataRate)
+            isHDR = try await track.load(.mediaCharacteristics).contains(.containsHDRVideo)
+            if let format = try await track.load(.formatDescriptions).first {
+                codec = CMFormatDescriptionGetMediaSubType(format)
+            }
         }
         let turned = CGRect(origin: .zero, size: naturalSize).applying(transform)
         return EditSource(url: url, asset: asset, videoTrack: videoTracks.first, videoRange: videoRange,
@@ -58,7 +66,8 @@ struct EditSource {
                           duration: duration.isFinite ? duration : 0,
                           naturalSize: naturalSize, transform: transform,
                           uprightSize: CGSize(width: abs(turned.width), height: abs(turned.height)),
-                          orientation: Self.orientation(of: transform), frameRate: frameRate)
+                          orientation: Self.orientation(of: transform), frameRate: frameRate,
+                          videoBitRate: bitRate.isFinite ? Double(bitRate) : 0, codec: codec, isHDR: isHDR)
     }
 
     /// The EXIF-style orientation that turns the stored picture upright.
@@ -78,7 +87,7 @@ struct EditSource {
     }
 }
 
-/// A picture to burn in over the edited video (text, shape, caption), made once per export.
+/// A picture to burn in over the edited video (text, shape, caption).
 struct EditOverlayImage {
     let image: CIImage
     /// Output seconds.
@@ -88,44 +97,45 @@ struct EditOverlayImage {
     let center: CGPoint
 }
 
-/// What a build is for.
-enum EditBuildPurpose {
-    /// The editor's player. `fullFrame` shows the whole picture for the crop tool;
-    /// `originalSound` plays the sound without noise reduction (before/after).
-    case preview(fullFrame: Bool, originalSound: Bool)
-    /// The new recording, with its overlays burned in.
-    case export(quality: ExportQuality, overlays: [EditOverlayImage])
+/// What the preview shows besides the edit itself.
+struct EditPreviewOptions {
+    /// The whole picture, for the crop tool.
+    var fullFrame = false
+    /// The sound without noise reduction (before/after).
+    var originalSound = false
 }
 
 struct EditBuild {
     let composition: AVMutableComposition
     let audioMix: AVAudioMix?
-    let videoComposition: AVVideoComposition?
-    let renderSize: CGSize
-    let duration: Double
+    /// The edited recording's picture and sound tracks (nil when it has none).
+    let videoTrackID: CMPersistentTrackID?
+    let audioTrackIDs: [CMPersistentTrackID]
+    let voiceTrackIDs: [CMPersistentTrackID]
+    let duration: CMTime
 }
 
 enum EditCompositionBuilder {
-    /// Longest side of the preview picture; full quality is only needed on export.
-    static let previewShortSide: CGFloat = 720
+    /// Fine enough for 60 a second pictures and for cuts between frames, so cuts never add up to a
+    /// drift between what the recipe says and what plays.
+    static let timescale: CMTimeScale = 90_000
+    /// How much of the last picture is held when the sound goes on after it.
+    private static let heldFrame = CMTime(value: 1, timescale: 60)
 
     static func build(recipe: EditRecipe, source: EditSource, editFolder: URL, cleanedAudio: URL?,
-                      purpose: EditBuildPurpose) async throws -> EditBuild {
+                      originalSound: Bool) async throws -> EditBuild {
         let composition = AVMutableComposition()
-        let timescale: CMTimeScale = 600
         let videoOut = source.videoTrack != nil
             ? composition.addMutableTrack(withMediaType: .video, preferredTrackID: kCMPersistentTrackID_Invalid)
             : nil
 
         // The recording's sound, or its cleaned-up copy (same clock as the recording).
         var audioSources = Array(zip(source.audioTracks, source.audioRanges))
-        var playsOriginalSound = false
-        if case .preview(_, let original) = purpose { playsOriginalSound = original }
-        if recipe.audio.reducesNoise, !playsOriginalSound, let cleanedAudio,
+        if recipe.audio.reducesNoise, !originalSound, let cleanedAudio,
            FileManager.default.fileExists(atPath: cleanedAudio.path) {
             let cleaned = AVURLAsset(url: cleanedAudio)
-            if let track = try await cleaned.loadTracks(withMediaType: .audio).first {
-                let range = try await track.load(.timeRange)
+            if let track = try? await cleaned.loadTracks(withMediaType: .audio).first,
+               let range = try? await track.load(.timeRange) {
                 audioSources = [(track, range)]
             }
         }
@@ -133,33 +143,27 @@ enum EditCompositionBuilder {
             composition.addMutableTrack(withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid)
         }
 
-        var cursor = CMTime.zero
-        for segment in recipe.segments {
+        var outputSeconds = 0.0
+        for segment in recipe.playedSegments {
+            let speed = max(0.25, min(4, segment.speed))
             let start = CMTime(seconds: max(0, segment.start), preferredTimescale: timescale)
-            let end = CMTime(seconds: min(segment.end, source.duration), preferredTimescale: timescale)
+            let end = CMTime(seconds: min(segment.end, max(source.duration, 0)), preferredTimescale: timescale)
             guard end > start else { continue }
             let range = CMTimeRange(start: start, end: end)
+            // Positions come from the recipe's own clock, so rounding never adds up over many cuts.
+            let at = CMTime(seconds: outputSeconds, preferredTimescale: timescale)
+            outputSeconds += (end - start).seconds / speed
+            let length = CMTime(seconds: outputSeconds, preferredTimescale: timescale) - at
+            let placement = Placement(range: range, at: at, length: length)
             if let videoOut, let videoIn = source.videoTrack {
-                let clipped = range.intersection(source.videoRange)
-                if clipped.duration > .zero {
-                    try videoOut.insertTimeRange(clipped, of: videoIn, at: cursor + (clipped.start - range.start))
-                }
+                try insertPicture(placement, of: videoIn, available: source.videoRange, into: videoOut)
             }
             for (index, pair) in audioSources.enumerated() where index < audioOut.count {
-                let clipped = range.intersection(pair.1)
-                if clipped.duration > .zero {
-                    try audioOut[index].insertTimeRange(clipped, of: pair.0, at: cursor + (clipped.start - range.start))
-                }
+                try insert(placement, of: pair.0, available: pair.1, into: audioOut[index])
             }
-            let speed = max(0.25, min(4, segment.speed))
-            let scaled = CMTimeMultiplyByFloat64(range.duration, multiplier: 1 / speed)
-            if abs(speed - 1) > 0.001 {
-                composition.scaleTimeRange(CMTimeRange(start: cursor, duration: range.duration), toDuration: scaled)
-            }
-            cursor = cursor + scaled
         }
         videoOut?.preferredTransform = source.transform
-        let total = cursor
+        let total = CMTime(seconds: outputSeconds, preferredTimescale: timescale)
 
         // Narration, mixed over the recording.
         var voiceOut: [AVMutableCompositionTrack] = []
@@ -167,68 +171,101 @@ enum EditCompositionBuilder {
             let url = editFolder.appendingPathComponent(clip.fileName)
             guard FileManager.default.fileExists(atPath: url.path) else { continue }
             let asset = AVURLAsset(url: url)
-            guard let track = try await asset.loadTracks(withMediaType: .audio).first else { continue }
-            let available = try await track.load(.timeRange)
+            guard let track = try? await asset.loadTracks(withMediaType: .audio).first,
+                  let available = try? await track.load(.timeRange) else { continue }
             let at = CMTime(seconds: clip.start, preferredTimescale: timescale)
             guard at < total else { continue }
-            let length = CMTimeMinimum(CMTimeMinimum(available.duration, CMTime(seconds: clip.duration, preferredTimescale: timescale)),
+            let lead = CMTime(seconds: max(0, clip.lead ?? 0), preferredTimescale: timescale)
+            let length = CMTimeMinimum(CMTimeMinimum(available.duration - lead,
+                                                     CMTime(seconds: clip.duration, preferredTimescale: timescale)),
                                        total - at)
             guard length > .zero,
                   let out = composition.addMutableTrack(withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid) else { continue }
-            try out.insertTimeRange(CMTimeRange(start: available.start, duration: length), of: track, at: at)
+            try out.insertTimeRange(CMTimeRange(start: available.start + lead, duration: length), of: track, at: at)
             voiceOut.append(out)
         }
 
-        let mix = audioMix(recipe: recipe, original: audioOut, voice: voiceOut, total: total)
+        // A track with nothing in it (all the kept sections are past the end of a short sound)
+        // makes playing and saving fail.
+        let filledAudio = audioOut.filter { !$0.segments.isEmpty }
+        for track in audioOut where track.segments.isEmpty { composition.removeTrack(track) }
 
-        // Picture.
-        var videoComposition: AVVideoComposition?
-        var renderSize = CGSize.zero
-        if videoOut != nil {
-            switch purpose {
-            case .preview(let fullFrame, _):
-                let needsPipeline = fullFrame ? (recipe.quarterTurns != 0 || recipe.flipped)
-                    : (!recipe.crop.isFullFrame || recipe.quarterTurns != 0 || recipe.flipped || !recipe.blurs.isEmpty)
-                var shown = recipe
-                if fullFrame { shown.crop = EditCrop() }
-                renderSize = shown.renderSize(source: source.uprightSize, quality: .hd720)
-                if needsPipeline {
-                    let pipeline = EditFramePipeline(recipe: shown, source: source, renderSize: renderSize,
-                                                     showsBlur: !fullFrame, overlays: [])
-                    videoComposition = makeVideoComposition(composition, pipeline: pipeline, renderSize: renderSize,
-                                                            frameRate: 30)
-                }
-            case .export(let quality, let overlays):
-                renderSize = recipe.renderSize(source: source.uprightSize, quality: quality)
-                let pipeline = EditFramePipeline(recipe: recipe, source: source, renderSize: renderSize,
-                                                 showsBlur: true, overlays: overlays)
-                videoComposition = makeVideoComposition(composition, pipeline: pipeline, renderSize: renderSize,
-                                                        frameRate: source.exportFrameRate)
-            }
+        return EditBuild(composition: composition,
+                         audioMix: audioMix(recipe: recipe, original: filledAudio.map(\.trackID),
+                                            voice: voiceOut.map(\.trackID), total: total),
+                         videoTrackID: videoOut?.trackID,
+                         audioTrackIDs: filledAudio.map(\.trackID),
+                         voiceTrackIDs: voiceOut.map(\.trackID),
+                         duration: total)
+    }
+
+    /// Where a kept section lands in the edit.
+    private struct Placement {
+        /// In the recording.
+        let range: CMTimeRange
+        /// In the edit.
+        let at: CMTime
+        let length: CMTime
+
+        /// The edit's time for a moment of the recording inside `range`.
+        func output(_ time: CMTime) -> CMTime {
+            if time <= range.start { return at }
+            if time >= range.end { return at + length }
+            if range.duration == length { return at + (time - range.start) }
+            return at + CMTimeMultiplyByFloat64(length, multiplier: (time - range.start).seconds / range.duration.seconds)
         }
-        return EditBuild(composition: composition, audioMix: mix, videoComposition: videoComposition,
-                         renderSize: renderSize, duration: total.seconds)
     }
 
-    private static func makeVideoComposition(_ composition: AVMutableComposition, pipeline: EditFramePipeline,
-                                             renderSize: CGSize, frameRate: Int32) -> AVVideoComposition {
-        let videoComposition = AVMutableVideoComposition(asset: composition, applyingCIFiltersWithHandler: { request in
-            let frame = pipeline.render(request.sourceImage, at: request.compositionTime.seconds)
-            request.finish(with: frame, context: pipeline.context)
-        })
-        videoComposition.renderSize = renderSize
-        videoComposition.frameDuration = CMTime(value: 1, timescale: frameRate)
-        return videoComposition
+    private static func insert(_ placement: Placement, of track: AVAssetTrack, available: CMTimeRange,
+                               into out: AVMutableCompositionTrack) throws {
+        let clipped = placement.range.intersection(available)
+        guard clipped.duration > .zero else { return }
+        try insert(clipped, of: track, from: placement.output(clipped.start), to: placement.output(clipped.end), into: out)
     }
 
-    private static func audioMix(recipe: EditRecipe, original: [AVMutableCompositionTrack],
-                                 voice: [AVMutableCompositionTrack], total: CMTime) -> AVAudioMix? {
+    /// `range` of `track` from `from` to `to` in the edit, played faster or slower to fit.
+    private static func insert(_ range: CMTimeRange, of track: AVAssetTrack, from: CMTime, to: CMTime,
+                               into out: AVMutableCompositionTrack) throws {
+        guard to > from else { return }
+        try out.insertTimeRange(range, of: track, at: from)
+        if range.duration != to - from {
+            out.scaleTimeRange(CMTimeRange(start: from, duration: range.duration), toDuration: to - from)
+        }
+    }
+
+    /// The picture, holding its first or last frame where the sound goes on without it (players do
+    /// the same; without this the edit would turn black there).
+    private static func insertPicture(_ placement: Placement, of track: AVAssetTrack, available: CMTimeRange,
+                                      into out: AVMutableCompositionTrack) throws {
+        let range = placement.range
+        let frame = CMTimeMinimum(heldFrame, available.duration)
+        if range.start < available.start {
+            try insert(CMTimeRange(start: available.start, duration: frame), of: track, from: placement.at,
+                       to: placement.output(CMTimeMinimum(available.start, range.end)), into: out)
+        }
+        try insert(placement, of: track, available: available, into: out)
+        if range.end > available.end {
+            try insert(CMTimeRange(start: available.end - frame, duration: frame), of: track,
+                       from: placement.output(CMTimeMaximum(available.end, range.start)), to: placement.at + placement.length, into: out)
+        }
+    }
+
+    // MARK: - Sound
+
+    /// Levels and fades. Made on its own, so changing the volume never rebuilds what is playing.
+    static func audioMix(recipe: EditRecipe, build: EditBuild) -> AVAudioMix? {
+        audioMix(recipe: recipe, original: build.audioTrackIDs, voice: build.voiceTrackIDs, total: build.duration)
+    }
+
+    private static func audioMix(recipe: EditRecipe, original: [CMPersistentTrackID], voice: [CMPersistentTrackID],
+                                 total: CMTime) -> AVAudioMix? {
         guard !original.isEmpty || !voice.isEmpty else { return nil }
-        let fade = CMTime(seconds: min(EditAudio.fadeLength, total.seconds / 3), preferredTimescale: 600)
+        let fade = CMTime(seconds: min(EditAudio.fadeLength, total.seconds / 3), preferredTimescale: timescale)
         var parameters: [AVMutableAudioMixInputParameters] = []
         let level = recipe.audio.muted ? 0 : Float(max(0, min(1, recipe.audio.volume)))
-        for track in original {
-            let input = AVMutableAudioMixInputParameters(track: track)
+        for id in original {
+            let input = AVMutableAudioMixInputParameters()
+            input.trackID = id
             input.audioTimePitchAlgorithm = .spectral
             if recipe.audio.fadeIn && level > 0 && fade > .zero {
                 input.setVolumeRamp(fromStartVolume: 0, toEndVolume: level, timeRange: CMTimeRange(start: .zero, duration: fade))
@@ -242,8 +279,9 @@ enum EditCompositionBuilder {
             parameters.append(input)
         }
         let voiceLevel = Float(max(0, min(1, recipe.audio.voiceVolume)))
-        for track in voice {
-            let input = AVMutableAudioMixInputParameters(track: track)
+        for id in voice {
+            let input = AVMutableAudioMixInputParameters()
+            input.trackID = id
             input.audioTimePitchAlgorithm = .spectral
             input.setVolume(voiceLevel, at: .zero)
             parameters.append(input)
@@ -252,51 +290,164 @@ enum EditCompositionBuilder {
         mix.inputParameters = parameters
         return mix
     }
+
+    // MARK: - Picture
+
+    /// The player's picture when the recording is shown cropped, turned, mirrored or blurred; nil
+    /// when it plays as it is. Made on its own, so moving the crop never rebuilds what is playing.
+    static func previewVideoComposition(recipe: EditRecipe, source: EditSource, build: EditBuild,
+                                        fullFrame: Bool) -> AVVideoComposition? {
+        guard let trackID = build.videoTrackID else { return nil }
+        let turned = recipe.quarterTurns != 0 || recipe.flipped
+        guard turned || (!fullFrame && (!recipe.crop.isFullFrame || !recipe.blurs.isEmpty)) else { return nil }
+        var shown = recipe
+        if fullFrame { shown.crop = EditCrop() }
+        let size = shown.renderSize(source: source.uprightSize, quality: .hd720)
+        let pipeline = EditFramePipeline(recipe: shown, source: source, renderSize: size, showsBlur: !fullFrame)
+        let composition = AVMutableVideoComposition()
+        composition.customVideoCompositorClass = EditCompositor.self
+        composition.renderSize = size
+        composition.frameDuration = CMTime(value: 1, timescale: source.frameRate > 31 ? 60 : 30)
+        composition.instructions = [EditInstruction(timeRange: CMTimeRange(start: .zero, duration: build.duration),
+                                                    trackID: trackID, pipeline: pipeline)]
+        return composition
+    }
+}
+
+/// The whole edit, drawn by one pipeline.
+final class EditInstruction: NSObject, AVVideoCompositionInstructionProtocol {
+    let timeRange: CMTimeRange
+    let enablePostProcessing = false
+    let containsTweening = true
+    let requiredSourceTrackIDs: [NSValue]?
+    let passthroughTrackID = kCMPersistentTrackID_Invalid
+    let trackID: CMPersistentTrackID
+    let pipeline: EditFramePipeline
+
+    init(timeRange: CMTimeRange, trackID: CMPersistentTrackID, pipeline: EditFramePipeline) {
+        self.timeRange = timeRange
+        self.trackID = trackID
+        self.pipeline = pipeline
+        self.requiredSourceTrackIDs = [NSNumber(value: trackID)]
+    }
+}
+
+/// Draws the player's edited frames. It gets frames exactly as stored (unlike Core Image's own
+/// compositor), so the turn is applied once, by the pipeline, for every orientation.
+final class EditCompositor: NSObject, AVVideoCompositing {
+    let sourcePixelBufferAttributes: [String: Any]? = [
+        kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange,
+        kCVPixelBufferMetalCompatibilityKey as String: true,
+        kCVPixelBufferIOSurfacePropertiesKey as String: [String: Any](),
+    ]
+    let requiredPixelBufferAttributesForRenderContext: [String: Any] = [
+        kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
+        kCVPixelBufferMetalCompatibilityKey as String: true,
+        kCVPixelBufferIOSurfacePropertiesKey as String: [String: Any](),
+    ]
+    private let queue = DispatchQueue(label: "co.arclayer.snapreel.edit-preview", qos: .userInteractive)
+    private var lastFrame: CVPixelBuffer?
+    private let lock = NSLock()
+    private var cancelled = 0
+
+    func renderContextChanged(_ newRenderContext: AVVideoCompositionRenderContext) {}
+
+    func startRequest(_ request: AVAsynchronousVideoCompositionRequest) {
+        lock.lock()
+        let generation = cancelled
+        lock.unlock()
+        queue.async { [self] in
+            autoreleasepool {
+                lock.lock()
+                let current = generation == cancelled
+                lock.unlock()
+                guard current else {
+                    request.finishCancelledRequest()
+                    return
+                }
+                guard let instruction = request.videoCompositionInstruction as? EditInstruction,
+                      let output = request.renderContext.newPixelBuffer(),
+                      let source = request.sourceFrame(byTrackID: instruction.trackID) ?? lastFrame else {
+                    request.finish(with: AVError(.noImageAtTime))
+                    return
+                }
+                lastFrame = source
+                instruction.pipeline.render(source, at: request.compositionTime.seconds, into: output)
+                request.finish(withComposedVideoFrame: output)
+            }
+        }
+    }
+
+    func cancelAllPendingVideoCompositionRequests() {
+        lock.lock()
+        cancelled += 1
+        lock.unlock()
+    }
 }
 
 // MARK: - Frames
 
-/// Turns one source frame into one edited frame: upright, cropped, flipped and turned, blurred,
-/// scaled to the render size, with the overlays on top. Runs on AVFoundation's queue; holds
-/// only values that never change after it is made.
+/// The editor's drawing contexts, made once: each costs tens of milliseconds and several
+/// megabytes, which used to be paid on every change.
+enum EditGraphics {
+    /// Ordinary pictures: values go through as they are, which is fast and keeps the colours.
+    static let context = CIContext(options: [.workingColorSpace: NSNull(), .cacheIntermediates: false,
+                                             .name: "snapreel-edit"])
+    /// HDR pictures, turned into ordinary colours.
+    static let managedContext = CIContext(options: [.cacheIntermediates: false, .name: "snapreel-edit-hdr"])
+    static let sdrSpace = CGColorSpace(name: CGColorSpace.itur_709) ?? CGColorSpaceCreateDeviceRGB()
+}
+
+/// Turns one stored frame into one edited frame: upright, cropped, mirrored and turned, blurred,
+/// scaled to the render size, with the overlays on top. Holds only values that never change after
+/// it is made, so any queue can use it.
 final class EditFramePipeline {
-    let context = CIContext(options: [.cacheIntermediates: false])
     private let recipe: EditRecipe
-    private let naturalSize: CGSize
     private let orientation: CGImagePropertyOrientation
     private let renderSize: CGSize
     private let showsBlur: Bool
-    private let overlays: [EditOverlayImage]
+    private let isHDR: Bool
     private let background: CIImage
 
-    convenience init(recipe: EditRecipe, source: EditSource, renderSize: CGSize, showsBlur: Bool, overlays: [EditOverlayImage]) {
-        self.init(recipe: recipe, naturalSize: source.naturalSize, orientation: source.orientation,
-                  renderSize: renderSize, showsBlur: showsBlur, overlays: overlays)
-    }
-
-    init(recipe: EditRecipe, naturalSize: CGSize, orientation: CGImagePropertyOrientation, renderSize: CGSize,
-         showsBlur: Bool, overlays: [EditOverlayImage]) {
+    init(recipe: EditRecipe, source: EditSource, renderSize: CGSize, showsBlur: Bool) {
         self.recipe = recipe
-        self.naturalSize = naturalSize
-        self.orientation = orientation
+        self.orientation = source.orientation
+        self.isHDR = source.isHDR
         self.renderSize = renderSize
         self.showsBlur = showsBlur
-        self.overlays = overlays
         self.background = CIImage(color: CIColor(red: 0, green: 0, blue: 0)).cropped(to: CGRect(origin: .zero, size: renderSize))
     }
 
-    func render(_ source: CIImage, at time: Double) -> CIImage {
+    /// For a picture that is already upright (the poster).
+    init(recipe: EditRecipe, upright size: CGSize, showsBlur: Bool) {
+        self.recipe = recipe
+        self.orientation = .up
+        self.isHDR = false
+        self.renderSize = size
+        self.showsBlur = showsBlur
+        self.background = CIImage(color: CIColor(red: 0, green: 0, blue: 0)).cropped(to: CGRect(origin: .zero, size: size))
+    }
+
+    /// Draws the stored frame `source` as it looks at output time `time` into `output`.
+    func render(_ source: CVPixelBuffer, at time: Double, overlays: [EditOverlayImage] = [], into output: CVPixelBuffer) {
+        let bounds = CGRect(origin: .zero, size: renderSize)
+        if isHDR {
+            let image = CIImage(cvPixelBuffer: source, options: [.toneMapHDRtoSDR: true])
+            EditGraphics.managedContext.render(draw(image, at: time, overlays: overlays), to: output, bounds: bounds,
+                                               colorSpace: EditGraphics.sdrSpace)
+        } else {
+            let image = CIImage(cvPixelBuffer: source, options: [.colorSpace: NSNull()])
+            EditGraphics.context.render(draw(image, at: time, overlays: overlays), to: output, bounds: bounds, colorSpace: nil)
+            // Same colour labels as the recording, so players show the same colours.
+            CVBufferPropagateAttachments(source, output)
+        }
+    }
+
+    func draw(_ source: CIImage, at time: Double, overlays: [EditOverlayImage] = []) -> CIImage {
         var image = source.movedToOrigin()
 
-        // Upright. Whether AVFoundation already applied the track's turn shows in the size.
-        if orientation != .up {
-            let stored = abs(image.extent.width - naturalSize.width) < 2 && abs(image.extent.height - naturalSize.height) < 2
-            let sideways: [CGImagePropertyOrientation] = [.left, .right, .leftMirrored, .rightMirrored]
-            let turnsSides = sideways.contains(orientation)
-            if stored && (turnsSides ? naturalSize.width != naturalSize.height : true) {
-                image = image.oriented(orientation).movedToOrigin()
-            }
-        }
+        // Upright (frames arrive exactly as stored).
+        if orientation != .up { image = image.oriented(orientation).movedToOrigin() }
 
         // Crop (normalised, top-left origin; Core Image counts from the bottom).
         let crop = recipe.crop.rect
@@ -320,7 +471,7 @@ final class EditFramePipeline {
         if showsBlur {
             let width = image.extent.width, height = image.extent.height
             let sigma = max(6, min(width, height) * 0.03)
-            for blur in recipe.blurs where time >= blur.start && time <= blur.end {
+            for blur in recipe.blurs where Self.isActive(blur.start, blur.end, at: time) {
                 let rect = CGRect(x: blur.rect.minX * width, y: (1 - blur.rect.maxY) * height,
                                   width: blur.rect.width * width, height: blur.rect.height * height)
                 let blurred = image.clampedToExtent()
@@ -334,18 +485,27 @@ final class EditFramePipeline {
         // Render size.
         let sx = renderSize.width / max(1, image.extent.width)
         let sy = renderSize.height / max(1, image.extent.height)
-        image = image.transformed(by: CGAffineTransform(scaleX: sx, y: sy))
+        if abs(sx - 1) > 0.0001 || abs(sy - 1) > 0.0001 {
+            image = image.transformed(by: CGAffineTransform(scaleX: sx, y: sy))
+        }
 
         // Overlays.
-        for overlay in overlays where time >= overlay.start && time <= overlay.end {
+        for overlay in overlays where Self.isActive(overlay.start, overlay.end, at: time) {
             let size = overlay.image.extent.size
             let x = overlay.center.x * renderSize.width - size.width / 2
             let y = (1 - overlay.center.y) * renderSize.height - size.height / 2
-            image = overlay.image.movedToOrigin().transformed(by: CGAffineTransform(translationX: x, y: y))
+            image = overlay.image.movedToOrigin()
+                .transformed(by: CGAffineTransform(translationX: x.rounded(), y: y.rounded()))
                 .composited(over: image)
         }
 
         return image.composited(over: background).cropped(to: CGRect(origin: .zero, size: renderSize))
+    }
+
+    /// On screen at `time`: up to a frame early rather than late, so a blur never misses its first
+    /// frame.
+    static func isActive(_ start: Double, _ end: Double, at time: Double) -> Bool {
+        time >= start - 0.012 && time < end - 0.004
     }
 }
 

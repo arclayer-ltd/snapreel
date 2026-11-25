@@ -28,9 +28,10 @@ final class EditorPerfTests: XCTestCase {
         self.window = window
     }
 
-    private func playerLayer() -> AVPlayerLayer? {
+    /// The layer showing the player in front.
+    private func playerLayer(_ model: EditorModel) -> AVPlayerLayer? {
         func find(_ layer: CALayer) -> AVPlayerLayer? {
-            if let layer = layer as? AVPlayerLayer { return layer }
+            if let layer = layer as? AVPlayerLayer, layer.player === model.player { return layer }
             for child in layer.sublayers ?? [] {
                 if let found = find(child) { return found }
             }
@@ -52,7 +53,7 @@ final class EditorPerfTests: XCTestCase {
     /// The picture on screen is the edit's, at the playhead.
     private func settled(_ model: EditorModel) -> Bool {
         guard let item = model.player.currentItem, item.status == .readyToPlay,
-              playerLayer()?.isReadyForDisplay == true else { return false }
+              playerLayer(model)?.isReadyForDisplay == true else { return false }
         return abs(model.player.currentTime().seconds - model.playhead) < 0.1
     }
 
@@ -68,7 +69,7 @@ final class EditorPerfTests: XCTestCase {
         var last = CACurrentMediaTime()
         _ = await wait(5) {
             let now = CACurrentMediaTime()
-            if playerLayer()?.isReadyForDisplay != true { black += now - last }
+            if playerLayer(model)?.isReadyForDisplay != true { black += now - last }
             last = now
             let item = model.player.currentItem
             let changed = item !== before || item?.videoComposition !== composition || item?.audioMix !== mix
@@ -190,7 +191,7 @@ final class EditorPerfTests: XCTestCase {
     }
 
     private func filmstripDone(_ model: EditorModel) -> Bool {
-        model.filmFrames.count >= Int(min(48, max(8, model.recipe.sourceDuration / 2))) - 1
+        model.filmstrip.hasOverview
     }
 
     private func addTranscript(to library: Library, id: UUID, minutes: Int) {

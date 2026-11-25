@@ -9,7 +9,8 @@ struct EditorToolPanel: View {
     var body: some View {
         VStack(spacing: 0) {
             header
-            Group {
+            // A tall panel (large text, small screen) scrolls; the picture always keeps some room.
+            EditorPanelHeight(limit: UIScreen.main.bounds.height * 0.4) {
                 switch tool {
                 case .trim: EditorTrimPanel(model: model)
                 case .crop: EditorCropPanel(model: model)
@@ -43,18 +44,48 @@ struct EditorToolPanel: View {
                 Image(systemName: "checkmark")
                     .font(.system(size: 14, weight: .bold))
                     .foregroundStyle(Color.srOnInverse)
+                    .opacity(model.isRecordingVoice ? 0.4 : 1)
                     .frame(width: 34, height: 34)
                     .background(Circle().fill(Color.srInverse))
                     .frame(width: 44, height: 44)
                     .contentShape(Rectangle())
             }
             .buttonStyle(PressScaleStyle())
+            .disabled(model.isRecordingVoice)
             .accessibilityLabel("Done")
         }
         .padding(.leading, Space.gutter)
         .padding(.trailing, Space.xs)
         .frame(height: 46)
     }
+}
+
+/// Its content as it is, or scrolling when it is taller than `limit`.
+struct EditorPanelHeight<Content: View>: View {
+    let limit: CGFloat
+    @ViewBuilder let content: () -> Content
+
+    var body: some View {
+        ViewThatFits(in: .vertical) {
+            content()
+            ScrollView(.vertical) { content() }
+        }
+        .frame(maxHeight: limit)
+        .fixedSize(horizontal: false, vertical: true)
+    }
+}
+
+/// Text that names the playhead's time, drawn again only when the second changes.
+struct EditorPlayheadText: View {
+    @ObservedObject var seconds: EditorSeconds
+    let text: (String) -> String
+
+    init(_ model: EditorModel, _ text: @escaping (String) -> String) {
+        self.seconds = model.clock.seconds
+        self.text = text
+    }
+
+    var body: some View { Text(text(Format.clock(Double(seconds.whole)))) }
 }
 
 /// A small helper line under a panel's controls.
@@ -91,8 +122,10 @@ struct EditorPanelButton: View {
                 .minimumScaleFactor(0.75)
                 .foregroundStyle(prominent ? Color.white : (isDestructive ? Color.srStageRed : Color.srStageText))
                 .padding(.horizontal, Space.m)
-                .frame(height: 40)
+                .frame(minHeight: 40)
                 .background(Capsule().fill(prominent ? Color.srRed : Color.srStageControl))
+                .padding(.vertical, 2)
+                .contentShape(Rectangle())
         }
         .buttonStyle(PressScaleStyle())
         .disabled(!enabled)
@@ -128,12 +161,17 @@ struct EditorTrimPanel: View {
                 fact("Length", EditorText.precise(model.duration))
             }
             .padding(.horizontal, Space.gutter)
-            HStack(spacing: Space.s) {
-                EditorPanelButton(title: "Split at playhead", systemImage: "scissors") { model.splitAtPlayhead() }
-                Spacer(minLength: 0)
+            // The quick way on a long recording: no handle to drag across minutes of it.
+            HStack(spacing: Space.xs) {
+                EditorPanelButton(title: "Start here", systemImage: "arrow.right.to.line") { model.cutToPlayhead(.start) }
+                    .accessibilityHint("Cuts everything before the playhead")
+                EditorPanelButton(title: "Split", systemImage: "scissors") { model.splitAtPlayhead() }
+                    .accessibilityHint("Splits the clip at the playhead")
+                EditorPanelButton(title: "End here", systemImage: "arrow.left.to.line") { model.cutToPlayhead(.end) }
+                    .accessibilityHint("Cuts everything after the playhead")
             }
             .padding(.horizontal, Space.gutter)
-            EditorHint(text: "Drag the handles at either end to trim. Split, then tap a part to delete it or change its speed.")
+            EditorHint(text: "Drag the handles, or move the playhead and cut there. Split, then tap a part to delete it or change its speed.")
         }
     }
 
@@ -145,6 +183,8 @@ struct EditorTrimPanel: View {
             Text(value)
                 .font(.srTimer)
                 .foregroundStyle(Color.srStageText)
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, Space.s)
@@ -175,7 +215,11 @@ struct EditorCropPanel: View {
                     model.flip()
                 }
                 Spacer(minLength: 0)
-                Button("Reset") { model.resetCrop() }
+                Button { model.resetCrop() } label: {
+                    Text("Reset")
+                        .frame(minWidth: 44, minHeight: 44)
+                        .contentShape(Rectangle())
+                }
                     .font(.srSubheadlineStrong)
                     .foregroundStyle(Color.srStageTextSecondary)
                     .disabled(model.recipe.crop.isFullFrame && model.recipe.quarterTurns == 0 && !model.recipe.flipped)
@@ -301,7 +345,7 @@ struct EditorShapesPanel: View {
                         }
                     }
                     Spacer(minLength: 0)
-                    CircleIconButton(systemName: "trash", label: "Delete", tone: .stage, size: 36) {
+                    CircleIconButton(systemName: "trash", label: "Delete", tone: .stage, size: 44) {
                         model.deleteSticker(item.id)
                     }
                 }
@@ -451,7 +495,7 @@ struct EditorVoicePanel: View {
                     Text("Get ready…")
                         .font(.srHeadline)
                         .foregroundStyle(Color.srStageText)
-                    Text("Recording starts at \(Format.clock(model.playhead)).")
+                    EditorPlayheadText(model) { "Recording starts at \($0)." }
                         .font(.srFootnote)
                         .foregroundStyle(Color.srStageTextSecondary)
                 }
@@ -473,7 +517,7 @@ struct EditorVoicePanel: View {
                 VStack(alignment: .leading, spacing: 6) {
                     HStack(spacing: 6) {
                         Circle().fill(Color.srRed).frame(width: 8, height: 8)
-                        Text("Recording · \(Format.clock(model.recordingElapsed))")
+                        EditorPlayheadText(model) { _ in "Recording · \(Format.clock(model.recordingElapsed))" }
                             .font(.srTimer)
                             .foregroundStyle(Color.srStageText)
                     }
@@ -497,7 +541,8 @@ struct EditorVoicePanel: View {
                         .foregroundStyle(Color.srStageText)
                 }
                 HStack(spacing: Space.s) {
-                    CircleIconButton(systemName: "play.fill", label: "Play the take", tone: .stage, size: 40) {
+                    CircleIconButton(systemName: model.isPlaying ? "stop.fill" : "play.fill",
+                                     label: model.isPlaying ? "Stop" : "Play the take", tone: .stage, size: 44) {
                         model.playTake(take)
                     }
                     EditorPanelButton(title: "Re-record", systemImage: "arrow.counterclockwise") { model.rerecord(take) }
@@ -519,7 +564,7 @@ struct EditorVoicePanel: View {
             .buttonStyle(PressScaleStyle())
             .accessibilityLabel("Record voice-over")
             VStack(alignment: .leading, spacing: 3) {
-                Text("Record from \(Format.clock(model.playhead))")
+                EditorPlayheadText(model) { "Record from \($0)" }
                     .font(.srHeadline)
                     .foregroundStyle(Color.srStageText)
                 Text("Move the playhead to where you want to start. The video plays muted while you talk.")
@@ -607,6 +652,8 @@ struct EditorSoundPanel: View {
                         .foregroundStyle(audio.muted ? Color.srStageRed : Color.srStageText)
                         .frame(width: 36, height: 36)
                         .background(Circle().fill(Color.srStageControl))
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
                 }
                 .accessibilityLabel(audio.muted ? "Unmute recording" : "Mute recording")
                 VStack(alignment: .leading, spacing: 0) {
@@ -618,11 +665,14 @@ struct EditorSoundPanel: View {
                            in: 0...1, onEditingChanged: { editing in if !editing { model.endLiveChange() } })
                         .tint(Color.srRed)
                         .disabled(audio.muted)
+                        .accessibilityLabel("Recording's sound")
                 }
                 Text(audio.muted ? "Off" : "\(Int((audio.volume * 100).rounded()))%")
                     .font(.srTimerSmall)
                     .foregroundStyle(Color.srStageTextSecondary)
-                    .frame(width: 40, alignment: .trailing)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)
+                    .frame(width: 44, alignment: .trailing)
             }
             if !model.recipe.voiceClips.isEmpty {
                 HStack(spacing: Space.s) {
@@ -638,11 +688,14 @@ struct EditorSoundPanel: View {
                                               set: { model.setVoiceVolume($0, live: true) }),
                                in: 0...1, onEditingChanged: { editing in if !editing { model.endLiveChange() } })
                             .tint(Color.srRed)
+                            .accessibilityLabel("Voice-over volume")
                     }
                     Text("\(Int((audio.voiceVolume * 100).rounded()))%")
                         .font(.srTimerSmall)
                         .foregroundStyle(Color.srStageTextSecondary)
-                        .frame(width: 40, alignment: .trailing)
+                        .lineLimit(1)
+                    .minimumScaleFactor(0.6)
+                    .frame(width: 44, alignment: .trailing)
                 }
             }
             HStack(spacing: Space.xs) {
@@ -667,8 +720,10 @@ struct EditorSoundPanel: View {
             .font(.srSubheadlineStrong)
             .foregroundStyle(on ? Color.srOnInverse : Color.srStageText)
             .padding(.horizontal, Space.s)
-            .frame(height: 34)
+            .frame(minHeight: 36)
             .background(Capsule().fill(on ? Color.srInverse : Color.srStageControl))
+            .frame(minHeight: 44)
+            .contentShape(Rectangle())
         }
         .buttonStyle(PressScaleStyle())
         .accessibilityAddTraits(on ? .isSelected : [])
