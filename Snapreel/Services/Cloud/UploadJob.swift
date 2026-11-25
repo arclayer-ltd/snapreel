@@ -202,6 +202,22 @@ struct UploadJob: Codable, Hashable {
     }
 }
 
+/// A file's size and date, asked of the disk every time. `URL.resourceValues` keeps its first answer on the URL, so a
+/// file that was empty or missing a moment ago would stay so.
+enum FileFacts {
+    static func size(_ url: URL) -> Int64 {
+        (attributes(url)?[.size] as? NSNumber)?.int64Value ?? 0
+    }
+
+    static func modified(_ url: URL) -> Date? {
+        attributes(url)?[.modificationDate] as? Date
+    }
+
+    private static func attributes(_ url: URL) -> [FileAttributeKey: Any]? {
+        try? FileManager.default.attributesOfItem(atPath: url.path)
+    }
+}
+
 /// Where an upload is, for the share-link sheet, cards and the uploads list.
 enum UploadPhase: Equatable {
     case preparing

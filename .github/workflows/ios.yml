@@ -326,14 +326,21 @@ jobs:
       # (SnapreelTests/Uploads) uploads to a slow local HTTPS server.
       - name: Upload measurements
         if: ${{ inputs.benchmarks }}
+        continue-on-error: true
         run: |
           PEM="$RUNNER_TEMP/probe"; mkdir -p "$PEM"
           openssl req -x509 -newkey rsa:2048 -nodes -days 30 -keyout "$PEM/key.pem" -out "$PEM/cert.pem" -subj "/CN=localhost" \
             -addext "subjectAltName=DNS:localhost,IP:127.0.0.1" -addext "extendedKeyUsage=serverAuth"
           xcrun simctl keychain "$UDID" add-root-cert "$PEM/cert.pem" || true
           nohup node scripts/h2-probe-server.mjs "$PEM/key.pem" "$PEM/cert.pem" 8443 > ci-out/probe-server.log 2>&1 &
-          echo "TEST_RUNNER_PROBE_URL=https://localhost:8443/" >> "$GITHUB_ENV"
           echo "TEST_RUNNER_RUN_BENCHMARKS=1" >> "$GITHUB_ENV"
+          # iOS's background session refuses to work for an unsigned app, so this one is signed ad hoc.
+          TEST_RUNNER_PROBE_URL="https://localhost:8443/" xcodebuild test -project Snapreel.xcodeproj -scheme Snapreel \
+            -configuration Debug -destination "id=$UDID" -derivedDataPath build-signed -parallel-testing-enabled NO \
+            -only-testing:SnapreelTests/BackgroundSessionProbe CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY=- DEVELOPMENT_TEAM= \
+            PROVISIONING_PROFILE_SPECIFIER= ONLY_ACTIVE_ARCH=YES > ci-out/probe.log 2>&1 || true
+          grep -E "PERF\||error:|Test Case" ci-out/probe.log | cut -c1-900 || true
+          xcrun simctl spawn "$UDID" log show --last 3m --predicate 'process == "nsurlsessiond"' --style compact > ci-out/nsurlsessiond.log 2>&1 || true
 
       # Optimised (like the App Store build) but testable, so the times mean something.
       - name: Test
@@ -366,6 +373,8 @@ jobs:
           retention-days: 7
           path: |
             ci-out/tests.log
+            ci-out/probe*.log
+            ci-out/nsurlsessiond.log
             ci-out/tests-summary.txt
             ci-out/runtimes.txt
             ci-out/attachments

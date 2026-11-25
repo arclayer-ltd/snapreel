@@ -104,7 +104,7 @@ final class WebPreparer {
             poster = try? await WebExport.writePoster(from: job.source, isAudio: job.isAudio, title: job.title,
                                                       duration: job.duration, to: posterURL)
             if poster == nil { WebExport.writeStandIn(.poster, to: posterURL, title: job.title) }
-            update(.file(.poster, size: MediaInspector.fileSize(posterURL)))
+            update(.file(.poster, size: FileFacts.size(posterURL)))
         }
         try Task.checkCancellation()
         if !job.hasPreview {
@@ -113,10 +113,10 @@ final class WebPreparer {
                 try? await WebExport.writePreview(from: job.source, isAudio: job.isAudio,
                                                   card: poster ?? UIImage(contentsOfFile: posterURL.path), to: previewURL)
             }
-            if MediaInspector.fileSize(previewURL) == 0, let card = poster ?? UIImage(contentsOfFile: posterURL.path) {
+            if FileFacts.size(previewURL) == 0, let card = poster ?? UIImage(contentsOfFile: posterURL.path) {
                 try? await StillClip.write(card, seconds: 3, width: 480, to: previewURL)
             }
-            update(.file(.preview, size: MediaInspector.fileSize(previewURL)))
+            update(.file(.preview, size: FileFacts.size(previewURL)))
         }
     }
 
@@ -124,12 +124,12 @@ final class WebPreparer {
 
     private func prepareSound() async throws {
         let source = try sourceFacts()
-        if let state = loadState(), state.isComplete, matches(state, source), MediaInspector.fileSize(videoURL) == state.length {
+        if let state = loadState(), state.isComplete, matches(state, source), FileFacts.size(videoURL) == state.length {
             update(.videoDone(copyID: state.copyID, size: state.length, headerEnd: 0))
             return
         }
         try await WebExport.exportAudio(AVURLAsset(url: job.source), to: videoURL)
-        let size = MediaInspector.fileSize(videoURL)
+        let size = FileFacts.size(videoURL)
         guard size > 0 else { throw WebExport.Failure.cannotExport(nil) }
         var state = State(copyID: UUID().uuidString, sourceSize: source.size, sourceDate: source.date,
                           maxLongSide: job.maxLongSide, plan: WebPlan(), reserve: 0)
@@ -144,7 +144,7 @@ final class WebPreparer {
     private func prepareVideo() async throws {
         let source = try sourceFacts()
         let saved = loadState().flatMap { matches($0, source) ? $0 : nil }
-        if let saved, saved.isComplete, MediaInspector.fileSize(videoURL) == saved.length {
+        if let saved, saved.isComplete, FileFacts.size(videoURL) == saved.length {
             update(.videoDone(copyID: saved.copyID, size: saved.length, headerEnd: saved.reserve))
             return
         }
@@ -174,7 +174,7 @@ final class WebPreparer {
     }
 
     private func checkRoom(_ bytes: Int64) throws {
-        let have = MediaInspector.fileSize(videoURL)
+        let have = FileFacts.size(videoURL)
         guard DiskSpace.available + have > bytes + 80_000_000 else {
             throw WebExport.Failure.cannotExport("Your iPhone is too full to prepare the video. Free up about \(Format.bytes(bytes + 80_000_000)) and try again.")
         }
@@ -464,7 +464,7 @@ final class WebPreparer {
         if tracks.count == 1, let own = try await SoundReader.suitable(tracks[0]) {
             reader = try SoundReader(asset: asset, track: own, offset: 0, origin: origin)
         } else {
-            if state.audioOffset == nil || MediaInspector.fileSize(soundURL) == 0 {
+            if state.audioOffset == nil || FileFacts.size(soundURL) == 0 {
                 guard let offset = try await WebExport.encodeSound(asset, tracks: tracks, to: soundURL) else { return nil }
                 state.audioOffset = offset
                 save(state)
@@ -542,7 +542,7 @@ final class WebPreparer {
             if WebExport.isInterruption(error) || AppActivity.wasRecentlyInBackground { throw WebExport.Interrupted() }
             throw error
         }
-        let size = MediaInspector.fileSize(videoURL)
+        let size = FileFacts.size(videoURL)
         guard size > 0 else { throw WebExport.Failure.cannotExport(nil) }
         state.isComplete = true
         state.length = size
@@ -553,8 +553,9 @@ final class WebPreparer {
     // MARK: State
 
     private func sourceFacts() throws -> (size: Int64, date: Date) {
-        let values = try job.source.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey])
-        return (Int64(values.fileSize ?? 0), values.contentModificationDate ?? .distantPast)
+        let size = FileFacts.size(job.source)
+        guard size > 0 else { throw WebExport.Failure.cannotRead }
+        return (size, FileFacts.modified(job.source) ?? .distantPast)
     }
 
     private func matches(_ state: State, _ source: (size: Int64, date: Date)) -> Bool {
@@ -627,7 +628,7 @@ struct VideoFacts {
         end = range.end.seconds.isFinite ? range.end.seconds : firstFrame
         duration = max(0, end - firstFrame)
         guard duration > 0, encodedWidth > 0, encodedHeight > 0 else { throw WebExport.Failure.cannotRead }
-        if bitRate <= 0 { bitRate = Double(MediaInspector.fileSize(asset.url)) * 8 / duration }
+        if bitRate <= 0 { bitRate = Double(FileFacts.size(asset.url)) * 8 / duration }
         let total = try await asset.load(.duration).seconds
         shownDuration = max(duration, (total.isFinite ? total : end) - firstFrame)
     }

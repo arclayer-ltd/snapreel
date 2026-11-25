@@ -49,7 +49,7 @@ enum WebExport {
     static func exportAudio(_ asset: AVAsset, to destination: URL) async throws {
         try? FileManager.default.removeItem(at: destination)
         if (try? await run(asset, preset: AVAssetExportPresetPassthrough, to: destination)) != nil,
-           MediaInspector.fileSize(destination) > 0 { return }
+           FileFacts.size(destination) > 0 { return }
         try? FileManager.default.removeItem(at: destination)
         // Not AAC already: encode it. M4A is an MP4 file, so it keeps the .mp4 name.
         let m4a = destination.deletingPathExtension().appendingPathExtension("m4a")

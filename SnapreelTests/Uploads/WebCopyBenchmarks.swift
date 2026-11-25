@@ -52,7 +52,7 @@ final class WebCopyBenchmarks: XCTestCase {
 
     @MainActor private final class FirstBytes { var at: Date? }
 
-    private func mb(_ url: URL) -> Double { Double(MediaInspector.fileSize(url)) / 1_000_000 }
+    private func mb(_ url: URL) -> Double { Double(FileFacts.size(url)) / 1_000_000 }
 
     /// Build 47's `WebExport.exportVideo`, as it was.
     private static func build47(_ source: URL, to destination: URL, maxLongSide: Int) async throws {

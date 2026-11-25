@@ -55,12 +55,19 @@ final class UploaderTests: XCTestCase {
                                     expiresAt: nil, allowDownload: false, allowComments: true, allowReactions: true, cta: nil,
                                     width: 886, height: 1_918, sizeBytes: 1)
 
+    /// One process: an uploader from before a "relaunch" must not go on working behind the new one.
+    private final class Life { var alive = true }
+    private var life = Life()
+
     private func makeUploader() -> Uploader {
+        life.alive = false
+        let life = Life()
+        self.life = life
         let environment = UploadEnvironment(
             root: root,
             transfers: { self.server },
-            isConfigured: { true },
-            isSignedIn: { self.signedIn },
+            isConfigured: { life.alive },
+            isSignedIn: { self.signedIn && life.alive },
             token: { _ in
                 guard self.signedIn else { throw CloudError.signedOut }
                 return self.server.currentToken
@@ -529,11 +536,12 @@ final class UploaderTests: XCTestCase {
         await until("four pieces") { uploader!.jobs[self.id]?.parts.last?.pieces?.filter(\.done).count == 4 }
         uploader = nil
         server.fault = nil
-        let before = server.pieceRequests
         // Transfers of the old process are gone.
+        life.alive = false
         server.cancel(id)
         server.onFinish = nil
         try? await Task.sleep(nanoseconds: 30_000_000)
+        let before = server.pieceRequests
         let second = makeUploader()
         await untilEnded(second)
         expectDone(second)

@@ -85,7 +85,7 @@ final class WebMovieFile {
         let manager = FileManager.default
         if let resume, resume.records > 0,
            let saved = try? Data(contentsOf: tablesURL), saved.count >= resume.records * Record.byteCount,
-           MediaInspector.fileSize(url) >= resume.length {
+           FileFacts.size(url) >= resume.length {
             records = Self.decode(saved, count: resume.records)
             committedRecords = resume.records
             length = resume.length

@@ -92,7 +92,7 @@ final class BackgroundTransfers: UploadTransfers {
     func start(_ request: URLRequest, file: URL, tag: TransferTag) {
         let task = session.uploadTask(with: request, fromFile: file)
         task.taskDescription = tag.text
-        task.countOfBytesClientExpectsToSend = MediaInspector.fileSize(file)
+        task.countOfBytesClientExpectsToSend = FileFacts.size(file)
         task.countOfBytesClientExpectsToReceive = 2_048
         // Earlier pieces first; the small files before the video.
         task.priority = tag.part == .video ? URLSessionTask.defaultPriority : URLSessionTask.highPriority

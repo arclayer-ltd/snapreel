@@ -109,7 +109,7 @@ final class Uploader: ObservableObject {
         for id in jobs.keys {
             guard var job = jobs[id] else { continue }
             let folder = folder(for: id)
-            if job.upgrade(fileSize: { MediaInspector.fileSize(folder.appendingPathComponent($0.fileName)) }) { save(job) }
+            if job.upgrade(fileSize: { FileFacts.size(folder.appendingPathComponent($0.fileName)) }) { save(job) }
         }
     }
 
@@ -586,7 +586,7 @@ final class Uploader: ObservableObject {
                 stocked += 1
                 if stocked > Limits.stock || environment.freeDisk() < Limits.freeDisk * 2 || fillsAgain || queuesEverything { return }
                 let file = folder(for: job.videoID).appendingPathComponent(tag.fileName)
-                if piece.md5 != nil && MediaInspector.fileSize(file) == piece.size { continue }
+                if piece.md5 != nil && FileFacts.size(file) == piece.size { continue }
                 let work = Work(id: job.videoID, part: part, piece: piece, tag: tag, size: piece.size)
                 guard let md5 = try? await writePiece(work, to: file) else { return }
                 guard isCurrent(tag, in: jobs[job.videoID] ?? job) else { return }
@@ -600,7 +600,7 @@ final class Uploader: ObservableObject {
 
     /// The piece's own file, from the stock or written now.
     private func writePiece(_ work: Work, to file: URL) async throws -> String {
-        if let md5 = work.piece?.md5, MediaInspector.fileSize(file) == work.size { return md5 }
+        if let md5 = work.piece?.md5, FileFacts.size(file) == work.size { return md5 }
         let source = folder(for: work.id).appendingPathComponent(work.part.fileName)
         return try await Self.copyRange(of: source, start: work.piece?.start ?? 0, size: work.size, to: file)
     }
@@ -1204,7 +1204,7 @@ final class Uploader: ObservableObject {
     private func isReady(_ job: UploadJob, _ kind: UploadJob.Part.Kind) -> Bool {
         guard let index = job.index(of: kind) else { return false }
         let part = job.parts[index]
-        return part.isComplete || (part.size > 0 && MediaInspector.fileSize(folder(for: job.videoID).appendingPathComponent(part.fileName)) == part.size)
+        return part.isComplete || (part.size > 0 && FileFacts.size(folder(for: job.videoID).appendingPathComponent(part.fileName)) == part.size)
     }
 
     private func apply(_ update: PrepareUpdate, to id: UUID) {
@@ -1365,11 +1365,11 @@ final class Uploader: ObservableObject {
         var canGoOn = false
         for index in job.parts.indices where missing.contains(job.parts[index].fileName) {
             let file = folder.appendingPathComponent(job.parts[index].fileName)
-            if job.parts[index].kind != .video, MediaInspector.fileSize(file) == 0 {
+            if job.parts[index].kind != .video, FileFacts.size(file) == 0 {
                 // A server that insists on all three files: stand in for the one that couldn't be made.
                 environment.makeStandIn(job.parts[index].kind, file, job.title)
             }
-            let size = MediaInspector.fileSize(file)
+            let size = FileFacts.size(file)
             guard size > 0 else { continue }
             if job.parts[index].kind != .video { job.parts[index].size = size }
             job.parts[index].skipped = nil

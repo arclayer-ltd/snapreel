@@ -83,7 +83,7 @@ final class WebCopyTests: XCTestCase {
     private func boxes(_ url: URL) throws -> [(type: String, start: Int64, size: Int64)] {
         let handle = try FileHandle(forReadingFrom: url)
         defer { try? handle.close() }
-        let length = MediaInspector.fileSize(url)
+        let length = FileFacts.size(url)
         var found: [(String, Int64, Int64)] = []
         var at: Int64 = 0
         while at + 8 <= length {
@@ -156,12 +156,20 @@ final class WebCopyTests: XCTestCase {
         return (flash, beep)
     }
 
+    /// The beep stays where it was beside the flash.
+    private func checkSync(_ video: URL, like source: URL, file: StaticString = #filePath, line: UInt = #line) async throws {
+        let before = try await flashAndBeep(source), after = try await flashAndBeep(video)
+        let was = try XCTUnwrap(before.beep) - before.flash, isNow = try XCTUnwrap(after.beep) - after.flash
+        XCTAssertGreaterThan(after.flash, 0, file: file, line: line)
+        XCTAssertEqual(isNow, was, accuracy: 0.012, "sound moved", file: file, line: line)
+    }
+
     /// Checks everything a player needs.
     private func check(_ video: URL, _ seen: Seen, source: URL, keepAs name: String, file: StaticString = #filePath, line: UInt = #line) async throws {
         keep(video, as: name)
         XCTAssertNil(WebPreparer.lastFallback, file: file, line: line)
         let done = try XCTUnwrap(seen.done, file: file, line: line)
-        XCTAssertEqual(done.size, MediaInspector.fileSize(video), file: file, line: line)
+        XCTAssertEqual(done.size, FileFacts.size(video), file: file, line: line)
         // The index first, the media last, the room exactly filled.
         let parts = try boxes(video)
         XCTAssertEqual(parts.first?.type, "ftyp", file: file, line: line)
@@ -185,6 +193,33 @@ final class WebCopyTests: XCTestCase {
         XCTAssertGreaterThan(seen.files[.preview] ?? 0, 0, file: file, line: line)
     }
 
+    /// How AVFoundation times a track's first packets, next to where the sound is really heard.
+    func testHowSoundStarts() async throws {
+        let movie = folder.appendingPathComponent("m.mov"), m4a = folder.appendingPathComponent("m.m4a")
+        try await Maker(width: 320, height: 180, seconds: 5, bitRate: 300_000, frames: .even(30), soundSeconds: 5).write(to: movie)
+        let asset = AVURLAsset(url: movie)
+        let offset = try await WebExport.encodeSound(asset, tracks: try await asset.loadTracks(withMediaType: .audio), to: m4a)
+        for (name, url) in [("fragmented mov", movie), ("m4a", m4a)] {
+            let file = AVURLAsset(url: url)
+            let track = try await file.loadTracks(withMediaType: .audio)[0]
+            let reader = try AVAssetReader(asset: file)
+            let output = AVAssetReaderTrackOutput(track: track, outputSettings: nil)
+            reader.add(output)
+            reader.startReading()
+            var text = ""
+            for _ in 0..<3 {
+                guard let buffer = output.copyNextSampleBuffer() else { break }
+                let trim = CMGetAttachment(buffer, key: kCMSampleBufferAttachmentKey_TrimDurationAtStart, attachmentModeOut: nil)
+                text += " [n \(CMSampleBufferGetNumSamples(buffer)) pts \(CMSampleBufferGetPresentationTimeStamp(buffer).seconds) out \(CMSampleBufferGetOutputPresentationTimeStamp(buffer).seconds) dur \(CMSampleBufferGetDuration(buffer).seconds) trim \(trim.map { CMTimeMakeFromDictionary(($0 as! CFDictionary)).seconds } ?? 0)]"
+            }
+            let range = try await track.load(.timeRange)
+            let segments = try await track.load(.segments)
+            print("PERF|sound \(name): offset \(offset ?? -1) range \(range.start.seconds)+\(range.duration.seconds) segments \(segments.map { "\($0.timeMapping.source.start.seconds)->\($0.timeMapping.target.start.seconds) empty \($0.isEmpty)" })\(text)")
+        }
+        let (flash, beep) = try await flashAndBeep(movie)
+        print("PERF|sound in the recording: flash \(flash) beep \(beep ?? -1)")
+    }
+
     // MARK: - Copying
 
     func testScreenRecordingIsCopiedWithItsUnevenFramesAndShortSound() async throws {
@@ -199,11 +234,9 @@ final class WebCopyTests: XCTestCase {
         XCTAssertEqual(audio.count, 1)
         let sound = try await audio[0].load(.timeRange)
         XCTAssertEqual(sound.duration.seconds, 17, accuracy: 0.1)
-        let (flash, beep) = try await flashAndBeep(video)
-        XCTAssertEqual(flash, 2, accuracy: 0.05)
-        XCTAssertEqual(try XCTUnwrap(beep), 2, accuracy: 0.05)
+        try await checkSync(video, like: source)
         // Copying costs next to nothing: the same bytes plus the index.
-        XCTAssertLessThan(Double(MediaInspector.fileSize(video)), Double(MediaInspector.fileSize(source)) * 1.08)
+        XCTAssertLessThan(Double(FileFacts.size(video)), Double(FileFacts.size(source)) * 1.08)
     }
 
     func testReorderedFramesAreCopiedInOrder() async throws {
@@ -214,8 +247,7 @@ final class WebCopyTests: XCTestCase {
         let before = try await frameTimes(source), after = try await frameTimes(video)
         XCTAssertEqual(before.count, after.count)
         for (a, b) in zip(before, after) { XCTAssertEqual(a - before[0], b, accuracy: 0.002) }
-        let (flash, beep) = try await flashAndBeep(video)
-        XCTAssertEqual(flash, try XCTUnwrap(beep), accuracy: 0.05)
+        try await checkSync(video, like: source)
     }
 
     func testARecordingWithoutSound() async throws {
@@ -256,12 +288,14 @@ final class WebCopyTests: XCTestCase {
         XCTAssertEqual(size, CGSize(width: 592, height: 1_280))
         XCTAssertGreaterThanOrEqual(seen.final.count, 3, "sent in stretches")
         let after = try await frameTimes(video)
-        for (a, b) in zip(after, after.dropFirst()) { XCTAssertGreaterThan(b - a, 0.02) }
+        // At most 30 a second (a frame right before a pause may come early, so it is counted over half seconds).
+        for start in stride(from: 0.0, to: 43, by: 0.5) {
+            XCTAssertLessThanOrEqual(after.filter { $0 >= start && $0 < start + 0.5 }.count, 18, "at \(start)")
+        }
         let before = try await frameTimes(source)
         // The last change on screen is kept.
         XCTAssertEqual(try XCTUnwrap(after.last), try XCTUnwrap(before.last) - before[0], accuracy: 0.05)
-        let (flash, beep) = try await flashAndBeep(video)
-        XCTAssertEqual(flash, try XCTUnwrap(beep), accuracy: 0.06)
+        try await checkSync(video, like: source)
         let rate = try await track.load(.estimatedDataRate)
         XCTAssertLessThan(rate, 1_700_000)
     }
@@ -271,9 +305,8 @@ final class WebCopyTests: XCTestCase {
         try await Maker(width: 1_080, height: 1_920, seconds: 14, bitRate: 10_000_000, frames: .even(30), soundSeconds: 14, busy: true).write(to: source)
         let (seen, video) = try await prepare(source, screen: false, duration: 14)
         try await check(video, seen, source: source, keepAs: "encode-camera-1080p.mp4")
-        XCTAssertLessThan(Double(MediaInspector.fileSize(video)), Double(MediaInspector.fileSize(source)) * 0.75)
-        let (flash, beep) = try await flashAndBeep(video)
-        XCTAssertEqual(flash, try XCTUnwrap(beep), accuracy: 0.06)
+        XCTAssertLessThan(Double(FileFacts.size(video)), Double(FileFacts.size(source)) * 0.75)
+        try await checkSync(video, like: source)
     }
 
     func testSixtyFramesBecomeThirty() async throws {
@@ -292,8 +325,7 @@ final class WebCopyTests: XCTestCase {
         try await check(video, seen, source: source, keepAs: "copy-two-sounds.mp4")
         let audio = try await AVURLAsset(url: video).loadTracks(withMediaType: .audio)
         XCTAssertEqual(audio.count, 1)
-        let (flash, beep) = try await flashAndBeep(video)
-        XCTAssertEqual(flash, try XCTUnwrap(beep), accuracy: 0.06)
+        try await checkSync(video, like: source)
     }
 
     // MARK: - Stopping and carrying on
@@ -317,8 +349,7 @@ final class WebCopyTests: XCTestCase {
         try await check(video, joined, source: source, keepAs: "encode-resumed.mp4")
         let a = try await frameTimes(reference), b = try await frameTimes(video)
         XCTAssertEqual(Double(a.count), Double(b.count), accuracy: 3)
-        let (flash, beep) = try await flashAndBeep(video)
-        XCTAssertEqual(flash, try XCTUnwrap(beep), accuracy: 0.06)
+        try await checkSync(video, like: source)
         // Running again when it is done costs nothing.
         let (again, _) = try await prepare(source, long: 1_280, duration: 60, into: "parts")
         XCTAssertEqual(again.done?.copyID, last.done?.copyID)
@@ -359,11 +390,10 @@ final class WebCopyTests: XCTestCase {
     func testAVoiceRecording() async throws {
         let movie = folder.appendingPathComponent("voice-movie.mov"), source = folder.appendingPathComponent("voice.m4a")
         try await Maker(width: 320, height: 180, seconds: 9, bitRate: 300_000, frames: .even(30), soundSeconds: 9).write(to: movie)
-        try await WebExport.exportAudio(AVURLAsset(url: movie), to: source)
-        let soundOnly = folder.appendingPathComponent("voice-only.m4a")
-        let tracks = try await AVURLAsset(url: movie).loadTracks(withMediaType: .audio)
-        _ = try await WebExport.encodeSound(AVURLAsset(url: movie), tracks: tracks, to: soundOnly)
-        let (seen, video) = try await prepare(soundOnly, audio: true, duration: 9)
+        let asset = AVURLAsset(url: movie)
+        let tracks = try await asset.loadTracks(withMediaType: .audio)
+        _ = try await WebExport.encodeSound(asset, tracks: tracks, to: source)
+        let (seen, video) = try await prepare(source, audio: true, duration: 9)
         keep(video, as: "voice.mp4")
         XCTAssertGreaterThan(seen.done?.size ?? 0, 10_000)
         XCTAssertGreaterThan(seen.files[.poster] ?? 0, 0)
@@ -374,7 +404,7 @@ final class WebCopyTests: XCTestCase {
         for (kind, name) in [(UploadJob.Part.Kind.poster, "p.jpg"), (.preview, "p.mp4")] {
             let url = folder.appendingPathComponent(name)
             WebExport.writeStandIn(kind, to: url, title: "Something")
-            XCTAssertGreaterThan(MediaInspector.fileSize(url), 500)
+            XCTAssertGreaterThan(FileFacts.size(url), 500)
         }
     }
 }
