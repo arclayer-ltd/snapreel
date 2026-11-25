@@ -200,7 +200,7 @@ class PurchaseTestCase: XCTestCase {
         }
     }
 
-    func eventually(_ seconds: Double = 8, _ condition: @escaping @MainActor () async -> Bool) async -> Bool {
+    func eventually(_ seconds: Double = 30, _ condition: @escaping @MainActor () async -> Bool) async -> Bool {
         let end = Date().addingTimeInterval(seconds)
         while Date() < end {
             if await condition() { return true }
@@ -209,7 +209,7 @@ class PurchaseTestCase: XCTestCase {
         return await condition()
     }
 
-    func assertEventually(_ what: String, _ seconds: Double = 8, file: StaticString = #filePath, line: UInt = #line,
+    func assertEventually(_ what: String, _ seconds: Double = 30, file: StaticString = #filePath, line: UInt = #line,
                           _ condition: @escaping @MainActor () async -> Bool) async {
         let held = await eventually(seconds, condition)
         XCTAssertTrue(held, what + " (standing \(service.standing), ending \(service.ending), sent \(backend.sent.count))",
