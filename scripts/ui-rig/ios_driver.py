@@ -47,6 +47,13 @@ TEXT_SIZES = {
     "ax4": "accessibility-extra-extra-large", "ax5": "accessibility-extra-extra-extra-large",
 }
 
+# Background services the app never uses; without them a phone starts sooner and leaves the Mac's three cores to the app.
+IDLE_JOBS = ["assistantd", "searchd", "corespotlightd", "photoanalysisd", "mediaanalysisd", "triald", "suggestd", "duetexpertd",
+             "proactived", "healthd", "newsd", "weatherd", "ap.adprivacyd", "ap.promotedcontentd", "tipsd", "biomed",
+             "intelligenceplatformd", "generativeexperiencesd", "modelmanagerd", "knowledgeconstructiond", "siriknowledged",
+             "siriinferenced", "financed", "passd", "gamed", "homed", "sportsd", "stocksd", "milod", "routined", "navd",
+             "maps.destinationd", "itunescloudd", "bookdatastored", "remindd", "calaccessd", "appstored.updates"]
+
 PERMISSIONS = {
     "photos": "photos", "photos-add": "photos-add", "microphone": "microphone", "mic": "microphone",
     "camera": "camera", "speech": "speech-recognition", "all": "all", "contacts": "contacts",
@@ -163,18 +170,23 @@ class IOSDriver:
         raise StepError("no simulator could be made for %s (%s)" % (names, problem))
 
     def _boot(self):
-        for attempt in range(3):
-            self.status("starting %s, iOS %s%s" % (self.device, self.ios, " (again)" if attempt else ""))
-            subprocess.run(["xcrun", "simctl", "boot", self.udid], capture_output=True)
+        light = ["--disabledJob=com.apple." + job for job in IDLE_JOBS]
+        begun = time.time()
+        for attempt in range(4):
+            self.status("starting %s, iOS %s%s" % (self.device, self.ios, ", try %d" % (attempt + 1) if attempt else ""))
+            subprocess.run(["xcrun", "simctl", "boot", self.udid] + light, capture_output=True)
             try:
-                done = subprocess.run(["xcrun", "simctl", "bootstatus", self.udid, "-b"], capture_output=True, timeout=420)
+                done = subprocess.run(["xcrun", "simctl", "bootstatus", self.udid], capture_output=True, text=True, timeout=600)
+                print("boot try %d: %d after %.0f s: %s" % (attempt + 1, done.returncode, time.time() - begun,
+                                                            done.stdout.strip()[-300:]), flush=True)
                 if done.returncode == 0:
                     self._prepare()
                     return
-            except subprocess.TimeoutExpired:
-                pass
+            except subprocess.TimeoutExpired as error:
+                print("boot try %d: not up after 10 minutes: %s" % (attempt + 1, str(error.stdout)[-300:]), flush=True)
             subprocess.run(["xcrun", "simctl", "shutdown", self.udid], capture_output=True)
-            subprocess.run(["xcrun", "simctl", "erase", self.udid], capture_output=True)
+            if attempt == 1:  # shutting down keeps the first-start work already done; wiping loses it
+                subprocess.run(["xcrun", "simctl", "erase", self.udid], capture_output=True)
         raise StepError("the simulator did not start")
 
     def _prepare(self):
