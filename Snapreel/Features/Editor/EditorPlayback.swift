@@ -268,7 +268,9 @@ final class EditorFilmstrip {
     var onUpdate: (() -> Void)?
     private(set) var hasOverview = false
     /// The same picture everywhere (debug screenshots).
-    var still: CGImage?
+    var still: CGImage? {
+        didSet { onUpdate?() }
+    }
 
     func start(_ source: EditSource) {
         duration = source.duration
