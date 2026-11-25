@@ -57,7 +57,7 @@ of the steps; write "seen 2 of 2" or "seen 1 of 3".
 | Slow or heavy | `perf 10` above about 40% CPU while nothing moves; memory that only grows; work with no progress shown (the cloud phone itself is slow: compare with other screens before you call the app slow) |
 
 **Not faults** (the simulator cannot do them; note them once as "not testable"): the camera's picture, recording
-another app's screen, picture in picture, App Store purchases (the Pro page shows built-in prices and buying ends in an error; `plan pro` makes the practice account Pro), Sign in with Apple finishing, pushes from the
+another app's screen, picture in picture, App Store purchases (the Pro page shows built-in prices and buying asks for an Apple ID: always Cancel, never type one; `plan pro` makes the practice account Pro), Sign in with Apple finishing, pushes from the
 server, a real phone's speed. What the app *says* when one of these is missing is testable.
 
 Severity: **S1** crash, hang, lost work, cannot go on. **S2** a feature does not work or misleads, with a way
