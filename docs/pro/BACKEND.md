@@ -148,7 +148,14 @@ is the project ref and the secret the public `anon` key (`CloudConfig.anonKey`; 
 github.com/supabase/storage/issues/750); the session token decides what may be touched, so the bucket's policies apply
 (another person gets 403). Measured on 25 November 2026 from a PC on the owner's 4G hotspot in Bangladesh, same hour:
 
-MEASUREMENTS
+| File | TUS, 6 MB chunks | TUS, one request | S3, 1 at a time | S3, 3 at a time | S3, 6 at a time |
+|---|---|---|---|---|---|
+| 20 MB | 27.5 s (0.73 MB/s) | 30.5 s (0.66) | 28.1 s (0.71) | 31.5 s (0.63) | 40.1 s (0.50, one reset) |
+| 170 MB | 384 s (0.44, one drop) | | | 210 s (0.81) | |
+| 520 MB, connection cut every 90 s | | | | 863 s (0.60): finished, 27 pieces sent twice | |
+
+One connection already fills this uplink, so parallel pieces are not what makes it faster: the differences between the
+columns are mostly the radio from one minute to the next, and six at a time is worse.
 
 What decided it is not the speed of one good minute but what happens on a phone:
 
