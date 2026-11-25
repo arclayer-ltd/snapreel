@@ -647,6 +647,10 @@ struct EditorRenderingView: View {
                 Image(uiImage: still)
                     .resizable()
                     .scaledToFit()
+            } else if let frame = model.filmstrip.image(at: model.recipe.sourceTime(forOutput: 0), cell: 2) {
+                Image(decorative: frame, scale: 1)
+                    .resizable()
+                    .scaledToFit()
             } else if !model.hasPicture {
                 Image(systemName: "waveform")
                     .font(.system(size: 40, weight: .semibold))

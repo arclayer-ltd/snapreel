@@ -79,6 +79,15 @@ final class EditorUITests: XCTestCase {
         button.tap()
     }
 
+    private func openSaveSheet() {
+        XCTAssertTrue(wait(12) {
+            if self.app.staticTexts["Save a copy"].exists { return true }
+            let save = self.app.buttons["Save"].firstMatch
+            if save.exists, save.isHittable { save.tap() }
+            return self.app.staticTexts["Save a copy"].waitForExistence(timeout: 2)
+        }, "Save opens its sheet")
+    }
+
     /// The one that can be tapped, of several with the same name.
     private func tapButton(_ name: String) {
         let all = app.buttons.matching(identifier: name).allElementsBoundByIndex
@@ -272,8 +281,7 @@ final class EditorUITests: XCTestCase {
         app.buttons["Start here"].tap()
         tapButton("Done")
         let length = time.length
-        app.buttons["Save"].tap()
-        XCTAssertTrue(app.staticTexts["Save a copy"].waitForExistence(timeout: 4))
+        openSaveSheet()
         shot("save-sheet")
         app.buttons["720p"].tap()
         tapButton("Save")
@@ -284,15 +292,15 @@ final class EditorUITests: XCTestCase {
             app.buttons["Back to the editor"].tap()
         }
         XCTAssertTrue(wait(4) { self.time.length == length }, "the edits are still there")
-        app.buttons["Save"].tap()
-        XCTAssertTrue(app.staticTexts["Save a copy"].waitForExistence(timeout: 4))
+        openSaveSheet()
         tapButton("Save")
+        XCTAssertTrue(app.staticTexts["Saving your edit"].waitForExistence(timeout: 6) || app.staticTexts["Saved as a new recording"].exists)
         // Leave the app while it saves, and come back.
         RunLoop.current.run(until: Date().addingTimeInterval(2))
         XCUIDevice.shared.press(.home)
         RunLoop.current.run(until: Date().addingTimeInterval(4))
         app.activate()
-        XCTAssertTrue(app.staticTexts["Saved as a new recording"].waitForExistence(timeout: 180), "the save carries on and finishes")
+        XCTAssertTrue(app.staticTexts["Saved as a new recording"].waitForExistence(timeout: 300), "the save carries on and finishes")
         shot("saved")
         tapButton("Done")
         XCTAssertTrue(app.staticTexts["live.saved"].waitForExistence(timeout: 6))

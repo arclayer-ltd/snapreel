@@ -198,6 +198,7 @@ struct EditorTrimPanel: View {
             VStack(spacing: 4) {
                 Image(systemName: systemImage)
                     .font(.system(size: 16, weight: .semibold))
+                    .frame(height: 20)
                 Text(title)
                     .font(.srSubheadlineStrong)
                     .lineLimit(1)
