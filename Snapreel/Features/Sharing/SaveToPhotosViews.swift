@@ -223,7 +223,9 @@ struct SharingStatusCard: View {
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel(title)
                 .accessibilityValue(detail)
-                Spacer(minLength: Space.xs)
+                // All the width the button leaves, so the title only shrinks when it has to.
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .layoutPriority(1)
                 if let actionTitle, let action {
                     actionButton(actionTitle, action)
                 }
