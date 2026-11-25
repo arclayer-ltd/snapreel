@@ -128,13 +128,74 @@ Run the smoke test with the development values instead, which are the same: `ver
 ## Cron
 
 `web/vercel.json` schedules `GET /api/cron/daily` at 04:17 UTC (Hobby allows one run a day). It:
-- marks uploads with no progress for 48 hours `failed` (the watch page says so);
-- deletes the files of failed uploads after 7 days and of links 30 days past their expiry, keeping a tombstone;
+- repairs links still `uploading` or `failed` whose video is stored in full (only the app's last call was lost), and
+  clears empty poster and preview files;
+- marks uploads with no progress for 48 hours `failed` (the watch page says so; the phone can still finish them);
+- deletes the files of failed uploads after 30 days and of links 30 days past their expiry, keeping a tombstone;
 - purges tombstones 30 days after the link stopped (the slug then reads "not found");
 - expires subscriptions a day past `expires_at` that Apple never told us about;
 - clears rate-limit windows older than a day and alert dedupe rows older than 90 days.
 
-Run it by hand: `curl -H "Authorization: Bearer $CRON_SECRET" https://snapreel.video/api/cron/daily`.
+Run it by hand: `curl -H "Authorization: Bearer $CRON_SECRET" https://snapreel.video/api/cron/daily`. With
+`?repair=<user id>` it only repairs that person's links, at once.
+
+## Uploads
+
+How a recording gets from the phone to storage (`Snapreel/Services/Cloud/Uploader.swift`, `WebPreparer.swift`), and why.
+
+**Transport: S3 multipart through Storage's S3 endpoint, with the person's own session token.** No new key: the access key
+is the project ref and the secret the public `anon` key (`CloudConfig.anonKey`; publishable keys aren't accepted there yet,
+github.com/supabase/storage/issues/750); the session token decides what may be touched, so the bucket's policies apply
+(another person gets 403). Measured on 25 November 2026 from a PC on the owner's 4G hotspot in Bangladesh, same hour:
+
+MEASUREMENTS
+
+What decided it is not the speed of one good minute but what happens on a phone:
+
+| | TUS | S3 multipart | signed upload URL |
+|---|---|---|---|
+| With the app suspended | one chunk, then iOS must wake the app for the next, when it finds it convenient | every piece is queued at once | one request for the whole file |
+| A dropped connection | iOS repeats the old chunk at the old offset: 409, the app must be woken | iOS repeats that piece (5 MB) by itself | the whole file again |
+| A lost answer | ask for the offset | send the piece again, or nothing: its ETag is its MD5 | send everything again |
+| Order | strictly one after another, from the start | any, so what is encoded goes up while the rest is being made, and the index goes last | one file, when it is finished |
+| Valid for | the token's hour | the token's hour (a new token works with the same upload) | 2 hours |
+
+Signatures are in the query string: a header-signed request is refused when its date is 15 minutes old
+(`RequestTimeTooSkewed`), and a piece can wait longer than that. Unfinished uploads are aborted by Storage after 24 hours; the
+app then starts that file again. If the `anon` key is ever switched off, S3 answers `SignatureDoesNotMatch` or
+`InvalidAccessKeyId` and the app carries on with TUS by itself.
+
+**What the answers mean** (`UploadAnswer.swift`; each was provoked against the live project, `scripts/s3-upload.mjs` and
+`pro-smoke.sh` check most of them):
+
+| Answer | Meaning | The app |
+|---|---|---|
+| 400 `AccessDenied`, `"exp" claim timestamp check failed` (TUS, REST); 400 `ExpiredToken` (S3); 401 | the token ran out | refreshes once, drops transfers with the old token, goes on |
+| 409 `The resource already exists` / `KeyAlreadyExists` | the object is there. **TUS says this for ever when `x-upsert: true` is missing from the `PATCH`, even for a new upload**: that was build 47's endless loop | compares sizes: finished, or replaced |
+| 409 `Upload-Offset conflict` | TUS is at another offset | asks (`HEAD`), goes on from there |
+| 404 `NoSuchUpload` | finished earlier, aborted, or over 24 hours old | looks at the stored size: finished, or starts the file again (4 times at most) |
+| 400 `InvalidPart`, `EntityTooSmall` | the list doesn't match | starts the file again |
+| 403 `AccessDenied` (row-level security) | not allowed | new token twice, then stops |
+| 403 `SignatureDoesNotMatch`, `InvalidAccessKeyId` | the S3 key is refused | TUS |
+| 403 `RequestTimeTooSkewed` | the phone's clock is wrong | signs with the server's time |
+| 423, 429, 5xx, no answer | busy | pauses 2 s to 2 min, 10 times at most, then Try again |
+| no connection | | waits for it; a connection that keeps failing: 30 tries, then Try again |
+
+**Background.** Three pieces are under way while Snapreel is open (one already fills a 4G uplink; more only lose more when
+it drops). When it leaves the screen the rest is handed to the background URLSession at once: iOS's own process sends them
+with the app suspended, closed by iOS, or the phone locked. Pieces started later, by an app in the background, are sent at
+iOS's discretion, which is why they are written ahead and handed over first. Swiping Snapreel away in the app switcher stops
+them (iOS does that); they carry on at the next launch. Preparing needs Snapreel running: about half a minute after it
+leaves the screen, then it stops, keeps what is encoded, and goes on when Snapreel is open (or when iOS grants a
+processing task, `co.arclayer.snapreel.uploads.finish`).
+
+**The web copy.** `WebPlan` picks: copied as it is (H.264, fits, at most a quarter over the target) or encoded in hardware in
+stretches of 10 s. Targets: camera 5 Mbit/s at 1080p, 2.6 at 720p; screen recordings 2.6 and 1.35 (mostly still, sharp
+edges), by pixels to the power 0.8; less when two hours must fit in 2 GB. Re-encoding a recording that is already near its
+target would save little, cost minutes with Snapreel open, and blur text once more. `WebMovieFile` writes the MP4 itself:
+room for the index is reserved at the start and filled last, so every other byte is final once written and can go up at
+once; no second copy on a full phone; `prepare.json` and `samples.bin` let it carry on at the last stretch. Anything it can't
+do (and any file that doesn't pass the check at the end) goes through Apple's exporter.
 
 ## Sign-in email (Send Email hook)
 

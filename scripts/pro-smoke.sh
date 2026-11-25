@@ -288,6 +288,15 @@ check "$(j 'v.error + "/" + v.missing.join() + "/" + v.storedBytes')" "upload_in
 as_a POST /api/videos "$CREATE"
 expect 200 "asking to upload again when the video is stored"
 check "$(j 'v.status')" "ready" "repairs the link"
+# The daily cron repairs it too (only this user's links here), and clears an empty preview.
+as_a PATCH "/api/videos/$VID" '{"status":"failed"}'
+admin POST "/storage/v1/object/videos/$RPATH" "" -H "x-upsert: true" -H "content-type: video/mp4" --data-binary ""
+printf 'authorization: Bearer %s\n' "$(envget CRON_SECRET)" >"$TMP/cron.h"
+api GET "$BASE/api/cron/daily?repair=$UID_A" "" -H @"$TMP/cron.h"
+expect 200 "cron: repair one person's links"
+check "$(j 'v.uploadsRepaired + "/" + v.staleUploadsFailed')" "1/undefined" "cron repaired the stored upload and did nothing else"
+as_a GET "/api/videos/$VID"
+check "$(j 'v.status + "/" + v.sizeBytes')" "ready/$SIZE" "it is ready again"
 as_a PATCH "/api/videos/$VID" '{"status":"uploading"}'
 # A missing or empty preview doesn't hold the video back.
 admin DELETE "/storage/v1/object/videos" "{\"prefixes\":[\"$RPATH\"]}"

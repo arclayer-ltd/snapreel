@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import { env } from "@/lib/server/env";
-import { json, run, HttpError } from "@/lib/server/http";
+import { json, requireUuid, run, HttpError } from "@/lib/server/http";
 import { removeEmpty, removePrefix, videoPaths } from "@/lib/server/storage";
 import { db } from "@/lib/server/supabase";
 import { reconcileUpload } from "@/lib/server/videos";
@@ -30,14 +30,11 @@ export async function GET(req: Request) {
     const report: Record<string, number> = {};
 
     // Untouched for half an hour, so an upload that is just finishing isn't raced.
-    const unfinished = await supabase
-      .from("videos")
-      .select("*")
-      .in("status", ["uploading", "failed"])
-      .is("deleted_at", null)
-      .lt("updated_at", ago(30 * 60 * 1000))
-      .order("updated_at", { ascending: false })
-      .limit(300);
+    // `?repair=<user id>` runs only this step, for one person's links, at once (support, and the smoke test).
+    const repairFor = new URL(req.url).searchParams.get("repair");
+    let query = supabase.from("videos").select("*").in("status", ["uploading", "failed"]).is("deleted_at", null);
+    query = repairFor ? query.eq("owner_id", requireUuid(repairFor, "repair")) : query.lt("updated_at", ago(30 * 60 * 1000));
+    const unfinished = await query.order("updated_at", { ascending: false }).limit(300);
     if (unfinished.error) throw unfinished.error;
     report.uploadsRepaired = 0;
     report.emptyFilesCleared = 0;
@@ -49,6 +46,8 @@ export async function GET(req: Request) {
         console.warn("[cron] reconcile", video.id, error);
       }
     }
+
+    if (repairFor) return json({ ok: true, ...report });
 
     const stale = await supabase
       .from("videos")
