@@ -402,8 +402,9 @@ final class PurchaseService: ObservableObject {
             publish(bought)
         }
         _ = await deliver(verification)
-        await reload()
+        // StoreKit's own lists can take long to read (over a minute on a cold device): not in the way.
         Task { @MainActor in
+            await reload()
             await refreshRenewal()
             await refreshTrial()
         }
