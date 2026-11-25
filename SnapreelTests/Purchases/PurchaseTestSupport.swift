@@ -196,9 +196,12 @@ class PurchaseTestCase: XCTestCase {
         return count
     }
 
+    /// This test's transactions that haven't been finished. (On iOS 16, StoreKit can still list an
+    /// earlier test's for a while after the test store forgot them.)
     func unfinished() async -> Int {
+        let mine = Set(session.allTransactions().map { UInt64($0.identifier) })
         var count = 0
-        for await _ in Transaction.unfinished { count += 1 }
+        for await result in Transaction.unfinished where mine.contains(result.unsafePayloadValue.id) { count += 1 }
         return count
     }
 
