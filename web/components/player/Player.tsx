@@ -687,7 +687,8 @@ export function Player({
       <video
         ref={videoRef}
         className={`absolute inset-0 h-full w-full object-contain ${isAudio ? "opacity-0" : ""}`}
-        src={src ?? undefined}
+        // No poster (it can be missing): iOS only draws a first frame when asked for a moment after 0.
+        src={src ? (poster || isAudio ? src : `${src}#t=0.001`) : undefined}
         poster={poster ?? undefined}
         preload="metadata"
         playsInline
