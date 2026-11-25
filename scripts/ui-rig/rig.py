@@ -520,6 +520,9 @@ def cmd_reload(a):
     """For whoever works on the rig: sends this folder's files to a running session."""
     sid, w = which(a.session), wire()
     files = {n.split("/")[-1]: d for n, d in bundle().items() if n.startswith("scripts/ui-rig/")}
+    for name, data in files.items():
+        if name.endswith(".py"):
+            compile(data, name, "exec")  # a file that does not even parse would end the session
     files["req.json"] = json.dumps({"id": uuid.uuid4().hex, "reload": True, "steps": []}).encode()
     before = (read_status(w, sid) or {}).get("at", 0)
     w.push_fast("refs/rig/%s/in" % sid, files)

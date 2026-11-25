@@ -569,9 +569,9 @@ class IOSDriver:
     def _hidden_layers(self, found, layers):
         """Which of the overlapping layers a person cannot see: their words are not in the picture."""
         words = self._read_words()
-        if words is None:
-            return set()
-        hidden = set()
+        if words is None or len(words) < 2:
+            return set()  # no words read: nothing can be told from that
+        hidden, best = set(), (0, None)
         for layer in sorted(layers, reverse=True):  # inner ones first
             seen = missing = 0
             for e in found:
@@ -588,6 +588,15 @@ class IOSDriver:
                     missing += 1  # (an icon button's name is never in the picture)
             if missing >= 2 and seen <= missing * 0.4:
                 hidden.add(layer)
+            if seen > best[0]:
+                best = (seen, layer)
+        if all(hidden.intersection(e["layers"]) for e in found if e["layers"]):
+            # Something must be on screen: keep the layer whose words fit best, with the ones around it.
+            keep = {best[1]} if best[1] else set(hidden)
+            for e in found:
+                if best[1] in e["layers"]:
+                    keep.update(e["layers"])
+            hidden -= keep
         return hidden
 
     def _read_words(self):
@@ -606,7 +615,7 @@ class IOSDriver:
             self._raw_shot(path)
             self.ocr.stdin.write(path + "\n")
             self.ocr.stdin.flush()
-            if not select.select([self.ocr.stdout], [], [], 20)[0]:
+            if not select.select([self.ocr.stdout], [], [], 8)[0]:
                 raise OSError("no answer")
             width, height = self.size
             return [(t.lower(), x * width, y * height, w * width, h * height) for t, x, y, w, h in json.loads(self.ocr.stdout.readline())]

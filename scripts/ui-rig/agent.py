@@ -413,6 +413,14 @@ class Steps:
     def do_perf(self, a):
         return self.d.perf(min(seconds(a[0] if a else "", 5), 60))
 
+    def do_words(self, a):
+        """For whoever works on the rig: the words read from the picture, and each layer's share of them."""
+        words = self.d._read_words()
+        node = self.d._http("GET", "/session/%s/source%s" % (self.d.session, self.d.SOURCE), timeout=30)["value"]
+        found, layers = self.d._flatten(node)
+        return json.dumps([[w[0]] + [round(v) for v in w[1:]] for w in words or []]) + "\n" + "\n".join(
+            "%s %s %r %d,%d %dx%d" % (e["layers"], e["kind"], e["label"][:40], e["x"], e["y"], e["w"], e["h"]) for e in found)
+
     def do_mac(self, a):
         """For whoever works on the rig: what keeps the Mac busy."""
         if a and a[0] == "net":
