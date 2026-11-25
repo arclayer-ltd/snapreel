@@ -194,6 +194,14 @@ final class EditExporter: @unchecked Sendable {
         if isSuspended { throw EditExportFailure.interrupted }
     }
 
+    /// Keeps the copy so `cancel` can stop it. True when it was cancelled already.
+    private func hold(_ session: AVAssetExportSession?) -> Bool {
+        state.lock()
+        defer { state.unlock() }
+        exportSession = session
+        return isCancelled
+    }
+
     /// Blocks while suspended. Throws when cancelled.
     private func waitUntilRunning() throws {
         state.lock()
@@ -276,11 +284,7 @@ final class EditExporter: @unchecked Sendable {
         session.outputFileType = .mp4
         session.timeRange = range
         session.shouldOptimizeForNetworkUse = true
-        state.lock()
-        exportSession = session
-        let cancelled = isCancelled
-        state.unlock()
-        if cancelled { throw EditExportFailure.cancelled }
+        if hold(session) { throw EditExportFailure.cancelled }
         let ticker = Task { [report] in
             while !Task.isCancelled {
                 report(Double(session.progress))
@@ -291,11 +295,7 @@ final class EditExporter: @unchecked Sendable {
             session.exportAsynchronously { continuation.resume() }
         }
         ticker.cancel()
-        state.lock()
-        exportSession = nil
-        let stopped = isCancelled
-        state.unlock()
-        if stopped { throw EditExportFailure.cancelled }
+        if hold(nil) { throw EditExportFailure.cancelled }
         if session.status == .completed { return true }
         try? FileManager.default.removeItem(at: plan.output)
         if let error = session.error, DiskSpace.isOutOfSpace(error) { throw EditExportFailure.failed(error) }

@@ -315,7 +315,7 @@ enum EditCompositionBuilder {
 }
 
 /// The whole edit, drawn by one pipeline.
-final class EditInstruction: NSObject, AVVideoCompositionInstructionProtocol {
+final class EditInstruction: NSObject, AVVideoCompositionInstructionProtocol, @unchecked Sendable {
     let timeRange: CMTimeRange
     let enablePostProcessing = false
     let containsTweening = true
@@ -334,16 +334,16 @@ final class EditInstruction: NSObject, AVVideoCompositionInstructionProtocol {
 
 /// Draws the player's edited frames. It gets frames exactly as stored (unlike Core Image's own
 /// compositor), so the turn is applied once, by the pipeline, for every orientation.
-final class EditCompositor: NSObject, AVVideoCompositing {
-    let sourcePixelBufferAttributes: [String: Any]? = [
+final class EditCompositor: NSObject, AVVideoCompositing, @unchecked Sendable {
+    let sourcePixelBufferAttributes: [String: any Sendable]? = [
         kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange,
         kCVPixelBufferMetalCompatibilityKey as String: true,
-        kCVPixelBufferIOSurfacePropertiesKey as String: [String: Any](),
+        kCVPixelBufferIOSurfacePropertiesKey as String: [String: String](),
     ]
-    let requiredPixelBufferAttributesForRenderContext: [String: Any] = [
+    let requiredPixelBufferAttributesForRenderContext: [String: any Sendable] = [
         kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
         kCVPixelBufferMetalCompatibilityKey as String: true,
-        kCVPixelBufferIOSurfacePropertiesKey as String: [String: Any](),
+        kCVPixelBufferIOSurfacePropertiesKey as String: [String: String](),
     ]
     private let queue = DispatchQueue(label: "co.arclayer.snapreel.edit-preview", qos: .userInteractive)
     private var lastFrame: CVPixelBuffer?
