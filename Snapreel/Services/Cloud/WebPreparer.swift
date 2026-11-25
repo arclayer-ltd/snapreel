@@ -930,7 +930,11 @@ final class SoundReader {
         trim = trimmed.isNumeric ? CMTimeConvertScale(trimmed, timescale: rate, method: .roundHalfAwayFromZero).value : 0
         queue = try CompressedSample.split(first)
         firstPTS = queue.first?.pts ?? .zero
-        start = firstPTS.seconds + offset - origin
+        // Packets are timed in the file's own media time. What counts is where they are heard: the first buffer is heard
+        // from its output time on, once the encoder's delay is cut off, so its first packet starts that much earlier.
+        // (Measured on iOS 16.4: media time 0, delay 0.048 s, heard from 0.)
+        let heard = CMSampleBufferGetOutputPresentationTimeStamp(first)
+        start = (heard.isNumeric ? heard.seconds : firstPTS.seconds) - (trimmed.isNumeric ? trimmed.seconds : 0) + offset - origin
     }
 
     private func fill() throws {

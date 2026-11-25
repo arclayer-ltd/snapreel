@@ -577,6 +577,8 @@ final class UploaderTests: XCTestCase {
         start(uploader!)
         await until("the pause") { uploader!.pausedPreparing.contains(self.id) }
         XCTAssertEqual(uploader?.progress(for: id)?.isPaused, true)
+        // The poster is sent although the rest isn't made yet.
+        await until("the poster") { self.server.objects["user/video/poster.jpg"] != nil && self.server.activeTags.isEmpty }
         uploader = nil
         prepare = nil
         let second = makeUploader()

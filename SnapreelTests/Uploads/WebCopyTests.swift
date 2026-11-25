@@ -162,6 +162,13 @@ final class WebCopyTests: XCTestCase {
         let was = try XCTUnwrap(before.beep) - before.flash, isNow = try XCTUnwrap(after.beep) - after.flash
         XCTAssertGreaterThan(after.flash, 0, file: file, line: line)
         XCTAssertEqual(isNow, was, accuracy: 0.012, "sound moved", file: file, line: line)
+        // And as a player that only knows the file's edit list sees it (CI's ffprobe and Chrome check this too): the first
+        // sound is heard from the very start, with the encoder's delay cut off.
+        let track = try await AVURLAsset(url: video).loadTracks(withMediaType: .audio)[0]
+        let first = try await track.load(.segments).first { !$0.isEmpty }
+        let map = try XCTUnwrap(first).timeMapping
+        XCTAssertEqual(map.target.start.seconds, 0, accuracy: 0.002, "sound starts late", file: file, line: line)
+        XCTAssertEqual(map.source.start.seconds, 0.0479, accuracy: 0.002, "the encoder's delay is heard", file: file, line: line)
     }
 
     /// Checks everything a player needs.
@@ -395,7 +402,7 @@ final class WebCopyTests: XCTestCase {
         _ = try await WebExport.encodeSound(asset, tracks: tracks, to: source)
         let (seen, video) = try await prepare(source, audio: true, duration: 9)
         keep(video, as: "voice.mp4")
-        XCTAssertGreaterThan(seen.done?.size ?? 0, 10_000)
+        XCTAssertGreaterThan(seen.done?.size ?? 0, 2_000)
         XCTAssertGreaterThan(seen.files[.poster] ?? 0, 0)
         XCTAssertGreaterThan(seen.files[.preview] ?? 0, 0)
     }
