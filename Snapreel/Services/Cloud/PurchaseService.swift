@@ -577,12 +577,12 @@ final class PurchaseService: ObservableObject {
         #if DEBUG
         if debugPlans != nil { return }
         #endif
-        retryTask?.cancel()
-        retryTask = nil
-        retryCount = 0
         // Mid-purchase the app becomes active each time an Apple sheet closes: the purchase itself
         // reports what happened.
         guard activity == nil else { return }
+        retryTask?.cancel()
+        retryTask = nil
+        retryCount = 0
         await refreshEntitlements()
         if isPaywallOpen { await loadProducts() }
     }
