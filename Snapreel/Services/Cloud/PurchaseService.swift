@@ -161,8 +161,13 @@ final class PurchaseService: ObservableObject {
     var retryDelays: [Double] = [2, 4, 8, 15, 30, 60, 120, 300]
     /// Seconds in the foreground without Apple's answer before the paywall offers a way out.
     var slowAfter = 20
+    /// How long a purchase just made stands on Apple's word alone.
+    var settleTime: TimeInterval = 20
 
     private var held: Held?
+    /// Just bought: the store's own list of entitlements can be a moment behind.
+    private var fresh: (held: Held, at: Date)?
+    private var reloads = 0
     private var hasPaymentProblem = false
     private var answers: [UInt64: Answer] = [:]
     private var acceptedTransactions: Set<UInt64> = []
@@ -340,9 +345,8 @@ final class PurchaseService: ObservableObject {
 
         // What this Apple Account has already. Buying on top of a subscription gets Apple's "You're
         // already subscribed" at best, and for another Snapreel account's it would buy nothing.
-        let current = await currentHeld()
-        publish(current)
-        if let current {
+        await reload()
+        if let current = held {
             if !owns(current.transaction) || needsServer(current) {
                 let answer = await deliver(current.verification)
                 if case .other = answer { return .none } // the card for `standing` says it all
@@ -392,10 +396,13 @@ final class PurchaseService: ObservableObject {
     private func bought(_ verification: VerificationResult<Transaction>) async -> PurchaseEnding {
         pendingSince = nil
         if case .verified(let transaction) = verification, isRunning(transaction) {
-            publish(Held(verification: verification, transaction: transaction, expiry: transaction.expirationDate))
+            let bought = Held(verification: verification, transaction: transaction, expiry: transaction.expirationDate)
+            fresh = (bought, Date())
+            reloads += 1 // whatever is being read now is from before
+            publish(bought)
         }
         _ = await deliver(verification)
-        publish(await currentHeld() ?? held)
+        await reload()
         Task { @MainActor in
             await refreshRenewal()
             await refreshTrial()
@@ -469,10 +476,10 @@ final class PurchaseService: ObservableObject {
     func restore() async throws -> Bool {
         ending = .none
         answers = [:]
-        publish(await currentHeld())
+        await reload()
         if held == nil {
             try await syncAppStore()
-            publish(await currentHeld())
+            await reload()
         }
         await settle(force: true)
         await refreshRenewal()
@@ -543,17 +550,17 @@ final class PurchaseService: ObservableObject {
             .sink { [weak self] _ in Task { @MainActor in await self?.becameActive() } }
             .store(in: &observers)
         Task { @MainActor [weak self] in
-            guard let self else { return }
-            self.publish(await self.currentHeld())
+            await self?.reload()
         }
     }
 
     private func received(_ update: VerificationResult<Transaction>) async {
         let transaction = update.unsafePayloadValue
         guard CloudConfig.productIDs.contains(transaction.productID) else { return }
-        publish(await currentHeld())
+        if transaction.revocationDate != nil { fresh = nil }
+        await reload()
         let answer = await deliver(update)
-        publish(await currentHeld())
+        await reload()
         if transaction.revocationDate != nil { await backend.refreshPlan() }
         // An approval that came through, or an interrupted purchase that went on without us.
         let waited = ending == .pending || ending == .cancelled || pendingSince != nil
@@ -592,9 +599,17 @@ final class PurchaseService: ObservableObject {
         #if DEBUG
         if debugPlans != nil { return }
         #endif
-        publish(await currentHeld())
+        await reload()
         await settle(force: forceServer)
         await refreshRenewal()
+    }
+
+    /// Reads what this Apple Account has and shows it, unless a newer reading overtook this one.
+    private func reload() async {
+        reloads += 1
+        let mine = reloads
+        let current = await currentHeld()
+        if mine == reloads { publish(current) }
     }
 
     private func currentHeld() async -> Held? {
@@ -612,6 +627,9 @@ final class PurchaseService: ObservableObject {
             if best == nil || (expiry ?? .distantFuture) > (best?.expiry ?? .distantFuture) {
                 best = Held(verification: result, transaction: transaction, expiry: expiry)
             }
+        }
+        if best == nil, let fresh, Date().timeIntervalSince(fresh.at) < settleTime, isRunning(fresh.held.transaction) {
+            return fresh.held
         }
         return best
     }
@@ -849,7 +867,7 @@ final class PurchaseService: ObservableObject {
         retryTask?.cancel()
         retryTask = nil
         retryCount = 0
-        publish(await currentHeld())
+        await reload()
         await settle(force: true)
     }
 

@@ -488,6 +488,7 @@ final class PurchaseTests: PurchaseTestCase {
     }
 
     func testRunningOut() async throws {
+        service.settleTime = 0
         service.startListening()
         await service.purchase(yearly)
         backend.planOnServer = false
