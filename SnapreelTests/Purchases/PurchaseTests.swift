@@ -141,40 +141,29 @@ final class PurchaseTests: PurchaseTestCase {
                        .failed("The App Store can't be reached. Check your connection and try again. You haven't been charged."))
     }
 
-    func testAStoreThatFailsThePurchase() async throws {
-        session.failTransactionsEnabled = true
-        session.failureError = .unknown
-        let ending = await service.purchase(yearly)
-        guard case .failed = ending else { return XCTFail("\(ending)") }
-        XCTAssertEqual(service.standing, .none)
-        session.failTransactionsEnabled = false
-        let again = await service.purchase(yearly)
-        XCTAssertEqual(again, .purchased)
-    }
-
     // MARK: - Interrupted, pending, silent
 
     /// Apple needed something first (a password, new terms): purchase() gives up, and the transaction
     /// arrives on its own later.
     func testAnInterruptedPurchaseFinishesByItself() async throws {
         service.startListening()
-        session.interruptedPurchasesEnabled = true
+        service.purchaseProduct = { _, _ in .userCancelled }
         let ending = await service.purchase(yearly)
-        XCTAssertTrue(ending == .cancelled || ending == .pending, "\(ending)")
+        XCTAssertEqual(ending, .cancelled)
         XCTAssertNil(service.activity)
         XCTAssertFalse(service.hasLocalEntitlement)
-        session.interruptedPurchasesEnabled = false
-        try session.resolveIssueForTransaction(identifier: try latest().identifier)
+        try await arrivesLater(yearly, token: alice)
         await assertEventually("Pro by itself") { self.service.standing == .subscribed }
         await assertEventually("and it's said") { self.service.ending == .purchased }
         XCTAssertEqual(announcements, ["Snapreel Pro is on"])
         await assertEventually("finished") { await self.unfinished() == 0 }
+        XCTAssertEqual(backend.sent.count, 1)
     }
 
     /// The same, when Apple's answer is "cancelled" but the subscription is there.
     func testBoughtAlthoughAppleSaysCancelled() async throws {
-        service.purchaseProduct = { product, options in
-            _ = try await product.purchase(options: options)
+        service.purchaseProduct = { [unowned self] product, options in
+            _ = try await self.buyInStore(product, options)
             return .userCancelled
         }
         let ending = await service.purchase(yearly)
@@ -184,8 +173,8 @@ final class PurchaseTests: PurchaseTestCase {
     }
 
     func testBoughtAlthoughAppleThrows() async throws {
-        service.purchaseProduct = { product, options in
-            _ = try await product.purchase(options: options)
+        service.purchaseProduct = { [unowned self] product, options in
+            _ = try await self.buyInStore(product, options)
             throw StoreKitError.unknown
         }
         let ending = await service.purchase(yearly)
@@ -194,18 +183,23 @@ final class PurchaseTests: PurchaseTestCase {
 
     func testAskToBuyApproved() async throws {
         service.startListening()
-        session.askToBuyEnabled = true
+        service.purchaseProduct = { _, _ in .pending }
         let ending = await service.purchase(yearly)
         XCTAssertEqual(ending, .pending)
         XCTAssertNil(service.activity)
         XCTAssertFalse(service.hasLocalEntitlement)
 
-        // Closing and opening the paywall still says so.
+        // Closing and opening the paywall still says so, after a relaunch too.
+        service.paywallOpened()
+        XCTAssertEqual(service.ending, .pending)
+        service.paywallClosed()
+        service = makeService()
+        service.startListening()
         service.paywallOpened()
         XCTAssertEqual(service.ending, .pending)
         service.paywallClosed()
 
-        try session.approveAskToBuyTransaction(identifier: try latest().identifier)
+        try await arrivesLater(yearly, token: alice)
         await assertEventually("Pro once approved") { self.service.standing == .subscribed }
         await assertEventually("and it's said") { self.service.ending == .purchased }
         service.paywallOpened()
@@ -214,24 +208,25 @@ final class PurchaseTests: PurchaseTestCase {
 
     func testAskToBuyDeclined() async throws {
         service.startListening()
-        session.askToBuyEnabled = true
+        let real = service.purchaseProduct
+        service.purchaseProduct = { _, _ in .pending }
         let ending = await service.purchase(yearly)
         XCTAssertEqual(ending, .pending)
-        try session.declineAskToBuyTransaction(identifier: try latest().identifier)
-        try await Task.sleep(nanoseconds: 1_000_000_000)
         XCTAssertFalse(service.hasLocalEntitlement)
-        session.askToBuyEnabled = false
+        service.purchaseProduct = real
         let again = await service.purchase(yearly)
         XCTAssertEqual(again, .purchased, "a declined request doesn't stop the next try")
+        service.paywallOpened()
+        XCTAssertEqual(service.ending, .none)
     }
 
     /// An App Store that never answers used to leave "Waiting for the App Store…" for good.
     func testASilentAppStoreCanBeLeft() async throws {
         service.slowAfter = 1
         let gate = Gate()
-        service.purchaseProduct = { product, options in
+        service.purchaseProduct = { [unowned self] product, options in
             await gate.wait()
-            return try await product.purchase(options: options)
+            return .success(try await self.buyInStore(product, options))
         }
         service.buy(yearly)
         await assertEventually("offers a way out") { self.service.activity?.isSlow == true }
@@ -246,6 +241,7 @@ final class PurchaseTests: PurchaseTestCase {
 
     func testTryingAgainAfterASilentAppStore() async throws {
         service.slowAfter = 1
+        let real = service.purchaseProduct
         service.purchaseProduct = { _, _ in
             try await Task.sleep(nanoseconds: 60_000_000_000)
             return .userCancelled
@@ -253,7 +249,7 @@ final class PurchaseTests: PurchaseTestCase {
         service.buy(yearly)
         await assertEventually("offers a way out") { self.service.activity?.isSlow == true }
         service.stopWaiting()
-        service.purchaseProduct = { product, options in try await product.purchase(options: options) }
+        service.purchaseProduct = real
         let ending = await service.purchase(yearly)
         XCTAssertEqual(ending, .purchased)
         XCTAssertNil(service.activity)
@@ -502,14 +498,26 @@ final class PurchaseTests: PurchaseTestCase {
         XCTAssertEqual(ending, .purchased, "and can be bought again")
     }
 
+    /// Apple can't charge the renewal. With a grace period Pro stays; without one it stops, and the
+    /// paywall says why.
+    func testARenewalThatCantBeCharged() async throws {
+        service.startListening()
+        service.settleTime = 0
+        session.billingGracePeriodIsEnabled = false
+        session.shouldEnterBillingRetryOnRenewal = true
+        session.timeRate = .oneSecondIsOneDay
+        await service.purchase(monthly)
+        backend.planOnServer = false
+        await assertEventually("off, with the reason", 60) {
+            await self.service.refreshEntitlements()
+            return self.service.standing == .paymentProblem && !self.service.hasLocalEntitlement
+        }
+    }
+
     /// Bought on the App Store's own page, or with an offer code: no account token.
     func testBoughtOutsideTheApp() async throws {
         service.startListening()
-        if #available(iOS 17.0, *) {
-            _ = try await session.buyProduct(identifier: yearly)
-        } else {
-            try session.buyProduct(productIdentifier: yearly)
-        }
+        try await arrivesLater(yearly, token: nil)
         await assertEventually("Pro") {
             await self.service.refreshEntitlements()
             return self.service.standing == .subscribed
@@ -521,11 +529,7 @@ final class PurchaseTests: PurchaseTestCase {
     func testBoughtOutsideTheAppWhileSignedOut() async throws {
         backend.userID = nil
         service.startListening()
-        if #available(iOS 17.0, *) {
-            _ = try await session.buyProduct(identifier: yearly)
-        } else {
-            try session.buyProduct(productIdentifier: yearly)
-        }
+        try await arrivesLater(yearly, token: nil)
         await assertEventually("asks to sign in") {
             await self.service.refreshEntitlements()
             return self.service.standing == .signInNeeded

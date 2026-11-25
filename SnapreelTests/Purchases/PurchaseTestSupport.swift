@@ -133,10 +133,40 @@ class PurchaseTestCase: XCTestCase {
         service.retryDelays = [0.3]
         service.syncAppStore = {}
         service.purchaseProduct = { [weak self] product, options in
-            self?.sheets += 1
-            return try await product.purchase(options: options)
+            guard let self else { throw StoreKitError.unknown }
+            return .success(try await self.buyInStore(product, options))
         }
         return service
+    }
+
+    /// Apple's sheet, with the person tapping Subscribe.
+    ///
+    /// On the iOS 26 and 27 simulators `product.purchase()` leaves the test store and waits for a real
+    /// Apple Account to be typed in, so from iOS 17 on the test store makes the purchase. The
+    /// transaction is the same: signed, with the token, in `unfinished` and `currentEntitlements`, and
+    /// in `Transaction.updates` as well, as happens on iPhones.
+    func buyInStore(_ product: Product, _ options: Set<Product.PurchaseOption>) async throws -> VerificationResult<Transaction> {
+        sheets += 1
+        if #available(iOS 17.0, *) {
+            let bought = try await session.buyProduct(identifier: product.id, options: options)
+            for await result in Transaction.all where result.unsafePayloadValue.id == bought.id { return result }
+        } else if case .success(let result) = try await product.purchase(options: options) {
+            return result
+        }
+        throw StoreKitError.unknown
+    }
+
+    /// Bought without Snapreel: on the App Store's page, with an offer code, or a purchase that was
+    /// held up and went through later (`token` is whoever started it).
+    func arrivesLater(_ productID: String, token: UUID?) async throws {
+        if #available(iOS 17.0, *) {
+            _ = try await session.buyProduct(identifier: productID, options: token.map { [.appAccountToken($0)] } ?? [])
+        } else if let token {
+            let found = try await Product.products(for: [productID])
+            _ = try await XCTUnwrap(found.first).purchase(options: [.appAccountToken(token)])
+        } else {
+            try session.buyProduct(productIdentifier: productID)
+        }
     }
 
     func eventually(_ seconds: Double = 8, _ condition: @escaping @MainActor () async -> Bool) async -> Bool {
