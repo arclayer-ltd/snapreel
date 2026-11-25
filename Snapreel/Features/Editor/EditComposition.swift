@@ -230,12 +230,21 @@ enum EditCompositionBuilder {
     }
 
     /// `range` of `track` from `from` to `to` in the edit, played faster or slower to fit.
+    ///
+    /// Two things here would be heard: inserting a hair before the end of what is there already
+    /// splits it, and stretching a section by a rounding error runs all of its sound through the
+    /// pitch corrector. So sections that follow each other are joined end to end, and only a real
+    /// change of speed stretches.
     private static func insert(_ range: CMTimeRange, of track: AVAssetTrack, from: CMTime, to: CMTime,
                                into out: AVMutableCompositionTrack) throws {
-        guard to > from else { return }
-        try out.insertTimeRange(range, of: track, at: from)
-        if range.duration != to - from {
-            out.scaleTimeRange(CMTimeRange(start: from, duration: range.duration), toDuration: to - from)
+        guard to > from, range.duration > .zero else { return }
+        let end = out.segments.isEmpty ? CMTime.zero : out.timeRange.end
+        let at = (from - end).seconds < 0.02 ? end : from
+        try out.insertTimeRange(range, of: track, at: at)
+        let length = CMTimeMaximum(to - at, CMTime(value: 1, timescale: timescale))
+        let stretch = length.seconds / range.duration.seconds
+        if abs(stretch - 1) > 0.002 {
+            out.scaleTimeRange(CMTimeRange(start: at, duration: range.duration), toDuration: length)
         }
     }
 
