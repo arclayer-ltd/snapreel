@@ -111,9 +111,21 @@ def bundle(extra=None):
     return files
 
 
-def launch_job(name, settings, extra=None):
+def cancel_runs(w, title):
+    """Ends the run behind a session and removes its throwaway branch."""
+    for line in gh("run", "list", "-R", REPO, "--branch", "ui-rig/" + title, "--json", "databaseId,status", "--jq",
+                   '.[] | select(.status != "completed") | .databaseId', check=False).split():
+        gh("run", "cancel", line, "-R", REPO, check=False)
+        print("cancelled run " + line)
+    if w.ref("refs/heads/ui-rig/" + title):
+        w.delete("refs/heads/ui-rig/" + title)
+
+
+def launch_job(name, settings, extra=None, again=False):
     w = wire()
     ref = "refs/heads/ui-rig/" + name
+    if again and w.ref(ref):
+        cancel_runs(w, name)
     if w.ref(ref):
         die("a session called %s is already starting or running; choose another name or stop it" % name)
     w.push(ref, bundle(extra), json.dumps(settings))
@@ -161,7 +173,7 @@ def cmd_start(a):
             delete_refs(w, sid)
         w.push("refs/rig/%s/out/status" % sid, {"status.json": json.dumps(
             {"state": "queued", "note": "waiting for a free runner", "at": time.time(), "started": time.time()}).encode()}, "queued")
-    launch_job(settings["title"], settings)
+    launch_job(settings["title"], settings, again=a.again)
     for phone in phones:
         remember(phone["sid"], over=False, title=settings["title"], started=time.time(), count=0, kind=kind)
         print("session %s asked for (%s, app %s)" % (phone["sid"], phone["device"], a.app))
@@ -377,12 +389,7 @@ def stop_one(w, sid):
         else:
             # Not listening (still queued or starting): end its run instead, unless it hosts other phones.
             if "+" not in title:
-                for line in gh("run", "list", "-R", REPO, "--branch", "ui-rig/" + title, "--json", "databaseId,status", "--jq",
-                               '.[] | select(.status != "completed") | .databaseId', check=False).split():
-                    gh("run", "cancel", line, "-R", REPO, check=False)
-                    print("cancelled run " + line)
-                if w.ref("refs/heads/ui-rig/" + title):
-                    w.delete("refs/heads/ui-rig/" + title)
+                cancel_runs(w, title)
         delete_refs(w, sid)
     remember(sid, over=True)
     print("%s is stopped" % sid)
