@@ -287,17 +287,20 @@ jobs:
             xcodebuild -downloadPlatform iOS -buildVersion "$WANT" 2>&1 | tail -5 || true
           fi
           xcrun simctl list runtimes | tee ci-out/runtimes.txt
-          RUNTIME=$(xcrun simctl list runtimes -j | python3 -c '
+          RUNTIMES=$(xcrun simctl list runtimes -j | python3 -c '
           import json, sys
           want = sys.argv[1]
           rs = [r for r in json.load(sys.stdin)["runtimes"] if r["platform"] == "iOS" and r["isAvailable"]]
           if want: rs = [r for r in rs if r["version"].startswith(want)]
-          print(rs[-1]["identifier"] if rs else "")' "$WANT")
-          [ -n "$RUNTIME" ] || { echo "No iOS $WANT runtime available on this runner" | tee ci-out/no-runtime.txt; exit 1; }
-          for TYPE in "iPhone X" "iPhone 11 Pro" "iPhone 13 mini" "iPhone 14" "iPhone 17"; do
-            UDID=$(xcrun simctl create "Snapreel tests" "$TYPE" "$RUNTIME" 2>/dev/null) && break || UDID=""
+          print(*[r["identifier"] for r in reversed(rs)])' "$WANT")
+          [ -n "$RUNTIMES" ] || { echo "No iOS $WANT runtime available on this runner" | tee ci-out/no-runtime.txt; exit 1; }
+          UDID=""
+          for RUNTIME in $RUNTIMES; do
+            for TYPE in "iPhone X" "iPhone 11 Pro" "iPhone 13 mini" "iPhone 14" "iPhone 17"; do
+              UDID=$(xcrun simctl create "Snapreel tests" "$TYPE" "$RUNTIME" 2>/dev/null) && break 2 || UDID=""
+            done
           done
-          [ -n "$UDID" ] || { echo "No device could be created on $RUNTIME"; exit 1; }
+          [ -n "$UDID" ] || { echo "No device could be created"; exit 1; }
           echo "$TYPE on $RUNTIME: $UDID"
           xcrun simctl boot "$UDID" || true
           xcrun simctl bootstatus "$UDID" -b > /dev/null || true
