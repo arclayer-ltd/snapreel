@@ -136,7 +136,15 @@ class IOSDriver:
     def resume(self, state):
         self.__dict__.update(state)
         self.size = tuple(self.size)
-        self._open_session()
+        try:
+            self._open_session()
+        except (Hang, StepError, OSError, http.client.HTTPException, KeyError):
+            self._drop()
+            try:
+                self._start_wda()
+            except StepError as error:
+                print("the touch driver is not back yet: %s" % error, flush=True)
+                self.session, self.wda_stuck = self.session or "none", True
 
     def _trust(self):
         """The practice server's certificate (made on this runner a minute ago)."""
