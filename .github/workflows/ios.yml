@@ -318,7 +318,8 @@ jobs:
           xcrun simctl bootstatus "$UDID" -b > /dev/null || true
           echo "UDID=$UDID" >> "$GITHUB_ENV"
 
-      # Optimised (like the App Store build) but testable, so the times mean something.
+      # Optimised (like the App Store build) but testable, so the times mean something. Signed to run
+      # locally: iOS 16 simulators don't install an unsigned test runner.
       - name: Test
         run: |
           ONLY=()
@@ -330,7 +331,7 @@ jobs:
             -destination "id=$UDID" -derivedDataPath build -resultBundlePath ci-out/tests.xcresult \
             -parallel-testing-enabled NO ${ONLY[@]+"${ONLY[@]}"} \
             -test-timeouts-enabled YES -default-test-execution-time-allowance 420 -maximum-test-execution-time-allowance 5400 \
-            SWIFT_OPTIMIZATION_LEVEL=-O CODE_SIGNING_ALLOWED=NO ONLY_ACTIVE_ARCH=YES 2>&1 \
+            SWIFT_OPTIMIZATION_LEVEL=-O ONLY_ACTIVE_ARCH=YES \n            CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM= PROVISIONING_PROFILE_SPECIFIER= 2>&1 \
             | tee ci-out/tests.log | grep --line-buffered -E "error:|PERF\||BEEPS\||NOTE\||Test Case"
           STATUS=${PIPESTATUS[0]}
           set -e
