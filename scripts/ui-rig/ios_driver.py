@@ -1233,14 +1233,26 @@ class IOSDriver:
     def video_start(self):
         if self.video:
             raise StepError("a recording is already running")
-        path = os.path.join(self.work, "video-%d.mp4" % int(time.time()))
-        log = open(path + ".log", "w")
-        proc = subprocess.Popen(["xcrun", "simctl", "io", self.udid, "recordVideo", "--codec=h264", "--force", path],
-                                stdout=log, stderr=log)
-        end = time.time() + 10
-        while time.time() < end and "Recording started" not in open(path + ".log").read():
-            time.sleep(0.1)
-        self.video = (proc.pid, path)
+        said = ""
+        run("pkill", "-INT", "-f", "io %s recordVideo" % self.udid, check=False)  # one left over would block this one
+        time.sleep(2)
+        for codec in ("h264", "hevc"):
+            path = os.path.join(self.work, "video-%d.mp4" % int(time.time()))
+            log = open(path + ".log", "w")
+            proc = subprocess.Popen(["xcrun", "simctl", "io", self.udid, "recordVideo", "--codec=" + codec, "--force", path],
+                                    stdout=log, stderr=log, stdin=subprocess.DEVNULL, start_new_session=True)
+            end = time.time() + 25
+            while time.time() < end and proc.poll() is None:
+                with open(path + ".log") as f:
+                    if "Recording started" in f.read():
+                        self.video = (proc.pid, path)
+                        return
+                time.sleep(0.2)
+            with open(path + ".log") as f:
+                said = f.read().strip()[-300:]
+            if proc.poll() is None:
+                proc.kill()
+        raise StepError("the recording did not start (%s)" % said)
 
     def video_stop(self):
         if not self.video:
@@ -1267,6 +1279,11 @@ class IOSDriver:
                 run("pkill", "-9", "-x", "avconvert", check=False)
                 raise StepError("the recording is too long to send; record shorter pieces")
         if not os.path.exists(path):
+            try:
+                with open(path + ".log") as f:
+                    print("recording: " + f.read()[-400:], flush=True)
+            except OSError:
+                pass
             raise StepError("the recording was lost (the rig started its own side again meanwhile); start a new one")
         best = small if os.path.exists(small) and os.path.getsize(small) > 1000 else path
         with open(best, "rb") as f:
