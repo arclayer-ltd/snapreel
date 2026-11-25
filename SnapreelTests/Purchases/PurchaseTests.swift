@@ -147,12 +147,12 @@ final class PurchaseTests: PurchaseTestCase {
     /// arrives on its own later.
     func testAnInterruptedPurchaseFinishesByItself() async throws {
         service.startListening()
-        service.purchaseProduct = { _, _ in .userCancelled }
+        holdUp(.interrupted)
         let ending = await service.purchase(yearly)
-        XCTAssertEqual(ending, .cancelled)
+        XCTAssertTrue(ending == .cancelled || ending == .pending, "\(ending)")
         XCTAssertNil(service.activity)
         XCTAssertFalse(service.hasLocalEntitlement)
-        try await arrivesLater(yearly, token: alice)
+        try await letThrough(yearly)
         await assertEventually("Pro by itself") { self.service.standing == .subscribed }
         await assertEventually("and it's said") { self.service.ending == .purchased }
         XCTAssertEqual(announcements, ["Snapreel Pro is on"])
@@ -183,7 +183,7 @@ final class PurchaseTests: PurchaseTestCase {
 
     func testAskToBuyApproved() async throws {
         service.startListening()
-        service.purchaseProduct = { _, _ in .pending }
+        holdUp(.askToBuy)
         let ending = await service.purchase(yearly)
         XCTAssertEqual(ending, .pending)
         XCTAssertNil(service.activity)
@@ -199,7 +199,7 @@ final class PurchaseTests: PurchaseTestCase {
         XCTAssertEqual(service.ending, .pending)
         service.paywallClosed()
 
-        try await arrivesLater(yearly, token: alice)
+        try await letThrough(yearly)
         await assertEventually("Pro once approved") { self.service.standing == .subscribed }
         await assertEventually("and it's said") { self.service.ending == .purchased }
         service.paywallOpened()
@@ -209,10 +209,14 @@ final class PurchaseTests: PurchaseTestCase {
     func testAskToBuyDeclined() async throws {
         service.startListening()
         let real = service.purchaseProduct
-        service.purchaseProduct = { _, _ in .pending }
+        holdUp(.askToBuy)
         let ending = await service.purchase(yearly)
         XCTAssertEqual(ending, .pending)
         XCTAssertFalse(service.hasLocalEntitlement)
+        if #unavailable(iOS 17.0) {
+            try session.declineAskToBuyTransaction(identifier: try latest().identifier)
+            session.askToBuyEnabled = false
+        }
         service.purchaseProduct = real
         let again = await service.purchase(yearly)
         XCTAssertEqual(again, .purchased, "a declined request doesn't stop the next try")

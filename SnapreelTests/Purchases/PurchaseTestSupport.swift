@@ -156,6 +156,35 @@ class PurchaseTestCase: XCTestCase {
         throw StoreKitError.unknown
     }
 
+    enum HoldUp {
+        case interrupted
+        case askToBuy
+    }
+
+    /// The next purchase is held up. The real thing on iOS 16; after that the answer Apple would give.
+    func holdUp(_ reason: HoldUp) {
+        if #available(iOS 17.0, *) {
+            service.purchaseProduct = { _, _ in reason == .askToBuy ? .pending : .userCancelled }
+        } else {
+            session.interruptedPurchasesEnabled = reason == .interrupted
+            session.askToBuyEnabled = reason == .askToBuy
+            service.purchaseProduct = { product, options in try await product.purchase(options: options) }
+        }
+    }
+
+    /// It goes through after all: the issue is resolved, or the request approved.
+    func letThrough(_ productID: String) async throws {
+        if #available(iOS 17.0, *) {
+            try await arrivesLater(productID, token: backend.userID)
+        } else if session.askToBuyEnabled {
+            session.askToBuyEnabled = false
+            try session.approveAskToBuyTransaction(identifier: try latest().identifier)
+        } else {
+            session.interruptedPurchasesEnabled = false
+            try session.resolveIssueForTransaction(identifier: try latest().identifier)
+        }
+    }
+
     /// Bought without Snapreel: on the App Store's page, with an offer code, or a purchase that was
     /// held up and went through later (`token` is whoever started it).
     func arrivesLater(_ productID: String, token: UUID?) async throws {
