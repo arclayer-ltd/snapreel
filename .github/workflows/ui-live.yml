@@ -1,0 +1,214 @@
+name: UI rig
+
+# The test rig's runner side (scripts/ui-rig/README.md). Not started by hand: `rig.py` pushes a throwaway
+# branch ui-rig/<session> that holds only this file, scripts/ui-rig and the session's settings (as the commit
+# message, JSON), and this job deletes that branch when it ends. Nothing here uses a repository secret; the
+# job's own token is used for the app's source, the stored builds and the session's refs (refs/rig/<session>/*).
+run-name: "UI rig: ${{ fromJSON(github.event.head_commit.message).title }}"
+on:
+  push:
+    branches: ["ui-rig/**"]
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: ${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  phone:
+    if: ${{ !github.event.deleted && fromJSON(github.event.head_commit.message).job == 'phone' }}
+    runs-on: ${{ fromJSON(github.event.head_commit.message).runner }}
+    timeout-minutes: ${{ fromJSON(github.event.head_commit.message).timeout }}
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
+      GH_TOKEN: ${{ github.token }}
+      SESSION: ${{ github.event.head_commit.message }}
+      W: ${{ github.workspace }}/w
+    steps:
+      - uses: actions/checkout@v4
+        with: { path: rig, persist-credentials: false }
+
+      - name: Pick Xcode, read the session
+        run: |
+          mkdir -p "$W/app"
+          # The newest Xcode, but an older one when an iOS that needs downloading was asked for.
+          python3 - <<'PY' >> "$GITHUB_ENV"
+          import json, os
+          s = json.loads(os.environ["SESSION"])
+          print("APP_REF=%s" % s["app_ref"]); print("IOS=%s" % s.get("ios", "")); print("KIND=%s" % s.get("kind", "live"))
+          print("CLOUD=%s" % s.get("cloud", "stub"))
+          for i, phone in enumerate(s["phones"]):
+              phone.update(index=i, minutes=s["minutes"], idle=s["idle"], ios=s.get("ios", ""))
+              if s.get("cloud", "stub") == "stub":
+                  phone.update(ca=os.environ["W"] + "/stub/ca.pem", control="http://127.0.0.1:8899")
+              json.dump(phone, open("%s/phone-%d.json" % (os.environ["W"], i), "w"))
+          print("PHONES=%d" % len(s["phones"]))
+          PY
+      - name: Find the newest Xcode and the iOS asked for
+        run: |
+          XCODE=$(for app in /Applications/Xcode*.app; do
+              if echo "$app" | grep -qiE 'beta|_rc'; then continue; fi
+              v=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app/Contents/Info.plist" 2>/dev/null) || continue
+              echo "$v $app"
+            done | sort -t. -k1,1n -k2,2n -k3,3n | tail -1 | cut -d' ' -f2-)
+          if [ "$IOS" = "16.4" ]; then
+            # The iOS 16.4 simulator is a 7 GB download from Apple (about 2 minutes); Xcode 16.2 fetches and runs it.
+            sudo xcode-select -s /Applications/Xcode_16.2.app
+            ( for i in 1 2 3; do xcodebuild -downloadPlatform iOS -buildVersion 20E247 > "$W/runtime.log" 2>&1; xcrun simctl list runtimes | grep -q "iOS 16.4" && break; sleep 5; done; touch "$W/runtime.done" ) &
+          else
+            sudo xcode-select -s "$XCODE"; touch "$W/runtime.done"
+          fi
+          echo "BUILD_XCODE=$XCODE" >> "$GITHUB_ENV"
+          xcodebuild -version
+
+      - name: Start the phones (in the background)
+        if: ${{ env.KIND != 'build' }}
+        run: |
+          WDA=https://github.com/appium/WebDriverAgent/releases/download/v16.15.3/WebDriverAgentRunner-Build-Sim-arm64.zip
+          i=0
+          while [ $i -lt "$PHONES" ]; do
+            SID=$(python3 -c "import json,sys;print(json.load(open(sys.argv[1]))['sid'])" "$W/phone-$i.json")
+            echo "$SID" >> "$W/sids.txt"
+            SCRIPT=""; [ -f "rig/steps-$SID.txt" ] && SCRIPT="$PWD/rig/steps-$SID.txt"
+            ( while [ ! -f "$W/runtime.done" ]; do sleep 1; done
+              cd "$W" && exec nohup python3 "$GITHUB_WORKSPACE/rig/scripts/ui-rig/agent.py" --sid "$SID" --options "$W/phone-$i.json" \
+                --work "$W/phone-$i" --app "$W/app/Snapreel.app" --wda "$W/wda/WebDriverAgentRunner-Runner.app" \
+                --wait-for "$W/app.ready" --script "$SCRIPT" > "$W/agent-$SID.log" 2>&1 < /dev/null ) &
+            i=$((i + 1))
+          done
+          (
+            cd "$W" && curl -sL --retry 5 -o wda.zip "$WDA" \
+              && echo "02f22b68338bd9c63b30626bb0c639f9e7d6fb260d3b9e30e72c3eb2dd710e1e  wda.zip" | shasum -a 256 -c \
+              && mkdir -p wda && unzip -qo wda.zip -d wda && touch wda.ready
+          )
+
+      - uses: actions/checkout@v4
+        with: { path: src, ref: "${{ fromJSON(github.event.head_commit.message).app_ref }}", persist-credentials: false }
+
+      - name: Practice server
+        if: ${{ env.KIND != 'build' && env.CLOUD == 'stub' }}
+        run: bash rig/scripts/ui-rig/start_stub.sh src "$W/stub"
+
+      - name: The app (stored build, or build it)
+        id: app
+        run: |
+          if [ "$IOS" = "16.4" ]; then while [ ! -f "$W/runtime.done" ]; do sleep 1; done; fi
+          set -o pipefail
+          if ! DEVELOPER_DIR="$BUILD_XCODE/Contents/Developer" bash rig/scripts/ui-rig/build_app.sh src "$W/app" 2>&1 | tee "$W/build-out.txt"; then
+            tail -40 "$W/build-out.txt" > "$W/app.ready.failed"; sleep 20; exit 1
+          fi
+          touch "$W/app.ready"
+
+      - name: Store the new build
+        if: ${{ steps.app.outputs.built == '1' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.app.outputs.key }}
+          path: ${{ github.workspace }}/w/app/app.tgz
+          retention-days: 30
+          compression-level: 0
+
+      - name: Session
+        if: ${{ env.KIND != 'build' }}
+        run: |
+          trap 'kill $TAIL 2>/dev/null || true' EXIT
+          tail -n +1 -F "$W"/agent-*.log & TAIL=$!
+          while pgrep -f ui-rig/agent.py > /dev/null; do sleep 3; done
+          sleep 2
+
+      - name: Keep the results
+        if: ${{ always() && env.KIND != 'build' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-rig-${{ fromJSON(github.event.head_commit.message).title }}-${{ github.run_id }}
+          path: |
+            w/phone-*/out
+            w/phone-*/app.log
+            w/agent-*.log
+            w/stub/stub.log
+          retention-days: 7
+          if-no-files-found: ignore
+
+      - name: Remove the throwaway branch
+        if: always()
+        run: |
+          case "$GITHUB_REF" in refs/heads/ui-rig/*) gh api -X DELETE "repos/$GITHUB_REPOSITORY/git/${GITHUB_REF}" || true ;; esac
+
+  web:
+    if: ${{ !github.event.deleted && fromJSON(github.event.head_commit.message).job == 'web' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ fromJSON(github.event.head_commit.message).timeout }}
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
+      GH_TOKEN: ${{ github.token }}
+      SESSION: ${{ github.event.head_commit.message }}
+    steps:
+      - uses: actions/checkout@v4
+        with: { path: rig, persist-credentials: false }
+      - uses: actions/checkout@v4
+        with: { path: src, ref: "${{ fromJSON(github.event.head_commit.message).app_ref }}", persist-credentials: false }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - name: Start the browser's agent and the site
+        run: |
+          mkdir -p w
+          python3 - <<'PY'
+          import json, os
+          s = json.loads(os.environ["SESSION"])
+          for i, p in enumerate(s["phones"]):
+              p.update(minutes=s["minutes"], idle=s["idle"])
+              json.dump(p, open("w/web-%d.json" % i, "w")); open("w/sids.txt", "a").write(p["sid"] + "\n")
+          PY
+          for sid in $(cat w/sids.txt); do
+            python3 -c "import json;json.dump({'say_state':'starting'},open('w/say.json','w'))"
+            python3 rig/scripts/ui-rig/agent.py --sid "$sid" --options w/say.json --work w --say "building the website in preview mode" || true
+          done
+          pip install -q "playwright==1.*" > /dev/null && playwright install ffmpeg > /dev/null
+          ( cd src/web && npm ci --no-audit --no-fund > ../../w/npm.log 2>&1 && npm run build > ../../w/build.log 2>&1 ) || { tail -40 w/npm.log w/build.log; exit 1; }
+          ( cd src/web && nohup npm start -- -p 3000 > ../../w/site.log 2>&1 & )
+          for _ in $(seq 1 60); do curl -sf -o /dev/null http://localhost:3000/ && break; sleep 1; done
+          # A trusted https address for the local site is not needed: browsers treat localhost as secure.
+          i=0
+          for sid in $(cat w/sids.txt); do
+            nohup python3 rig/scripts/ui-rig/agent.py --sid "$sid" --kind web --options "w/web-$i.json" --work "w/web-$i" > "w/agent-$sid.log" 2>&1 < /dev/null &
+            i=$((i + 1))
+          done
+          sleep 2
+      - name: Session
+        run: |
+          tail -n +1 -F w/agent-*.log & TAIL=$!
+          while pgrep -f ui-rig/agent.py > /dev/null; do sleep 3; done
+          kill $TAIL
+      - name: Remove the throwaway branch
+        if: always()
+        run: |
+          case "$GITHUB_REF" in refs/heads/ui-rig/*) gh api -X DELETE "repos/$GITHUB_REPOSITORY/git/${GITHUB_REF}" || true ;; esac
+
+  media:
+    if: ${{ !github.event.deleted && fromJSON(github.event.head_commit.message).job == 'media' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy: { fail-fast: false, matrix: { pack: [small, long, big] } }
+    steps:
+      - uses: actions/checkout@v4
+        with: { persist-credentials: false }
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg espeak-ng fonts-dejavu-core > /dev/null
+      - run: bash scripts/ui-rig/make_media.sh ${{ matrix.pack }} out && ls -la out
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ui-media-${{ matrix.pack }}
+          path: out
+          retention-days: 90
+          compression-level: 0
+
+  media-done:
+    if: ${{ always() && !github.event.deleted && fromJSON(github.event.head_commit.message).job == 'media' }}
+    needs: media
+    runs-on: ubuntu-latest
+    env: { GH_TOKEN: "${{ github.token }}" }
+    steps:
+      - run: |
+          case "$GITHUB_REF" in refs/heads/ui-rig/*) gh api -X DELETE "repos/$GITHUB_REPOSITORY/git/${GITHUB_REF}" || true ;; esac
