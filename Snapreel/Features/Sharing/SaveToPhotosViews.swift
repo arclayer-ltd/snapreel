@@ -232,6 +232,8 @@ struct SharingStatusCard: View {
             }
             if showsBar { SharingProgressBar(progress: progress) }
         }
+        // Its natural height: an overlay's proposal would squeeze the thumbnail and the title.
+        .fixedSize(horizontal: false, vertical: true)
         .padding(Space.s)
         .frame(maxWidth: 440)
         .background(RoundedRectangle(cornerRadius: Radius.l, style: .continuous).fill(Color.srSurface))
