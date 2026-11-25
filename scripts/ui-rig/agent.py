@@ -259,6 +259,10 @@ class Steps:
         big = self._media_catalogue()
         if not a:
             return "videos and pictures you can add: " + ", ".join(sorted(set(names) | set(big)))
+        there = [n for n in a if n in getattr(self.d, "preloaded", set())]
+        a = [n for n in a if n not in there]
+        if not a:
+            return "%s: already in Photos" % ", ".join(there)
         for name in a:
             if name not in names and name in big:
                 self._download_media(big[name])
@@ -653,6 +657,7 @@ def main():
     parser.add_argument("--wait-for", default="", help="a file that appears when the app and driver are in place")
     parser.add_argument("--script", default="")
     parser.add_argument("--resume", action="store_true")
+    parser.add_argument("--prepare", default="", help="make a prepared phone into this folder instead")
     parser.add_argument("--say", default="", help="only report this status and leave")
     args = parser.parse_args()
     with open(args.options, encoding="utf-8") as f:
@@ -680,6 +685,22 @@ def main():
                     return reply.read().decode()
             except urllib.error.HTTPError as error:
                 raise StepError(error.read().decode()[:300])
+
+    if args.prepare:
+        import glob
+        driver = make()
+        samples = [p for p in sorted(glob.glob(os.path.join(args.work, "media", "*"))) if p.endswith((".mp4", ".jpg"))]
+        samples.sort(key=os.path.getsize)
+        try:
+            name = driver.prepare(args.wda, samples, args.prepare)
+            with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+                f.write("name=%s\n" % name)
+            live.status("made " + name, "ended")
+            return 0
+        except (StepError, subprocess.SubprocessError, OSError) as error:
+            traceback.print_exc()
+            live.status("the phone could not be prepared: %s" % error, "failed")
+            return 1
 
     driver, why = make(), "ended"
     code = 0

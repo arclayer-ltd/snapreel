@@ -148,6 +148,69 @@ jobs:
         run: |
           case "$GITHUB_REF" in refs/heads/ui-rig/*) gh api -X DELETE "repos/$GITHUB_REPOSITORY/git/${GITHUB_REF}" || true ;; esac
 
+  # A prepared phone: started, settled, filled with the samples and stored, so sessions start from it.
+  image:
+    if: ${{ !github.event.deleted && fromJSON(github.event.head_commit.message).job == 'image' }}
+    runs-on: ${{ fromJSON(github.event.head_commit.message).runner }}
+    timeout-minutes: ${{ fromJSON(github.event.head_commit.message).timeout }}
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
+      GH_TOKEN: ${{ github.token }}
+      SESSION: ${{ github.event.head_commit.message }}
+      IOS: ${{ fromJSON(github.event.head_commit.message).ios }}
+      W: ${{ github.workspace }}/w
+    steps:
+      - uses: actions/checkout@v4
+        with: { path: rig, persist-credentials: false }
+      - run: mkdir -p "$W/phone"
+      - name: Find the newest Xcode and the iOS asked for
+        run: |
+          XCODE=$(for app in /Applications/Xcode*.app; do
+              if echo "$app" | grep -qiE 'beta|_rc'; then continue; fi
+              v=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app/Contents/Info.plist" 2>/dev/null) || continue
+              echo "$v $app"
+            done | sort -t. -k1,1n -k2,2n -k3,3n | tail -1 | cut -d' ' -f2-)
+          sudo xcode-select -s "$XCODE"
+          if [ "$IOS" = "16.4" ]; then
+            # The iOS 16.4 simulator is a 6 GB download from Apple, about 2 minutes. It can hang, so each try gets 6 minutes.
+            ( for BUILD in 16.4 20E247 16.4 20E247; do
+                perl -e 'alarm shift; exec @ARGV' 360 xcodebuild -downloadPlatform iOS -buildVersion $BUILD > "$W/runtime.log" 2>&1
+                xcrun simctl list runtimes | grep -q "iOS 16.4" && break
+                sleep 5
+              done; touch "$W/runtime.done" ) > /dev/null 2>&1 &
+          else
+            touch "$W/runtime.done"
+          fi
+          echo "BUILD_XCODE=$XCODE" >> "$GITHUB_ENV"
+          xcodebuild -version
+
+      - name: Make the phone
+        id: make
+        run: |
+          python3 - <<'PY'
+          import json, os
+          s = json.loads(os.environ["SESSION"])
+          json.dump(dict(s["phones"][0], ios=s["ios"], prepare=True), open(os.environ["W"] + "/phone.json", "w"))
+          open(os.environ["W"] + "/sid.txt", "w").write(s["phones"][0]["sid"])
+          PY
+          curl -sL --retry 5 -o "$W/wda.zip" https://github.com/appium/WebDriverAgent/releases/download/v16.15.3/WebDriverAgentRunner-Build-Sim-arm64.zip
+          echo "02f22b68338bd9c63b30626bb0c639f9e7d6fb260d3b9e30e72c3eb2dd710e1e  $W/wda.zip" | shasum -a 256 -c
+          unzip -qo "$W/wda.zip" -d "$W/wda"
+          bash rig/scripts/ui-rig/get_media.sh small "$W/phone/media"
+          while [ ! -f "$W/runtime.done" ]; do sleep 2; done
+          python3 rig/scripts/ui-rig/agent.py --sid "$(cat "$W/sid.txt")" --options "$W/phone.json" --work "$W/phone" \
+            --wda "$W/wda/WebDriverAgentRunner-Runner.app" --prepare "$W/out"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.make.outputs.name }}
+          path: ${{ github.workspace }}/w/out
+          retention-days: 90
+          compression-level: 0
+      - name: Remove the throwaway branch
+        if: always()
+        run: |
+          case "$GITHUB_REF" in refs/heads/ui-rig/*) gh api -X DELETE "repos/$GITHUB_REPOSITORY/git/${GITHUB_REF}" || true ;; esac
+
   web:
     if: ${{ !github.event.deleted && fromJSON(github.event.head_commit.message).job == 'web' }}
     runs-on: ubuntu-latest

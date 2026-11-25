@@ -22,6 +22,7 @@ import time
 
 BUNDLE = "co.arclayer.snapreel"
 WDA_BUNDLE = "com.facebook.WebDriverAgentRunner.xctrunner"
+DEVICE_DIR = os.path.expanduser("~/Library/Developer/CoreSimulator/Devices")
 REPORTS = os.path.expanduser("~/Library/Logs/DiagnosticReports")
 
 # First name that the newest runtime accepts wins.
@@ -108,6 +109,7 @@ class IOSDriver:
         self.conn = None
         self.wda_stuck = False  # the touch driver is still waiting for a hung app
         self.photos_ready = False
+        self.preloaded, self.restored = set(), False
         self.slow_mac = 0       # how often the Mac, not the app, was the slow one
         self.away = False       # a hung app was left for another one
         self.hung = False       # the app's main thread was busy and not answering when last looked at
@@ -119,7 +121,8 @@ class IOSDriver:
         """After the phone is on: put the app and the touch driver on it."""
         self.app = app
         self.status("installing the app")
-        self._put(wda)
+        if not (self.restored and simctl("get_app_container", self.udid, WDA_BUNDLE, check=False).strip()):
+            self._put(wda)
         self._install()
         self._trust()
         self._start_log()
@@ -159,6 +162,8 @@ class IOSDriver:
                 raise StepError("this runner has no iOS %s simulator" % want)
         names = DEVICES.get(self.opt.get("device", "small"), [self.opt.get("device")])
         problem = ""
+        if not self.opt.get("prepare") and runtimes and self._restore(runtimes[0]["version"]):
+            return
         for runtime in runtimes:
             for name in names:
                 out = subprocess.run(["xcrun", "simctl", "create", "rig-" + self.sid, name, runtime["identifier"]],
@@ -169,6 +174,76 @@ class IOSDriver:
                     return
                 problem = out.stderr.strip()[-200:]
         raise StepError("no simulator could be made for %s (%s)" % (names, problem))
+
+    # ---- prepared phones: one that was started, settled and filled with samples once, and put away
+
+    def _image_name(self, version):
+        return "ui-device-%s-%s-v1" % (self.opt.get("device", "small"), version)
+
+    def _restore(self, version):
+        """Brings back the prepared phone of this kind, if one is stored. Much faster than a new one."""
+        here = os.path.dirname(os.path.abspath(__file__))
+        place = os.path.join(self.work, "device")
+        self.status("looking for a prepared phone")
+        begun = time.time()
+        try:
+            got = subprocess.run(["bash", os.path.join(here, "find_artifact.sh"), self._image_name(version), place],
+                                 capture_output=True, text=True, timeout=600)
+            if got.returncode != 0:
+                return False
+            with open(os.path.join(place, "phone.json")) as f:
+                info = json.load(f)
+            if os.path.exists(os.path.join(DEVICE_DIR, info["udid"])):
+                return False  # another phone on this runner is already that one
+            os.makedirs(DEVICE_DIR, exist_ok=True)
+            run("tar", "-xzf", os.path.join(place, "device.tgz"), "-C", DEVICE_DIR, timeout=600)
+            os.remove(os.path.join(place, "device.tgz"))
+            run("pkill", "-9", "-f", "CoreSimulatorService", check=False)
+            end = time.time() + 40
+            while time.time() < end:
+                time.sleep(2)
+                listed = json.loads(simctl("list", "devices", "-j", check=False, timeout=120) or "{}").get("devices", {})
+                if any(d["udid"] == info["udid"] and d.get("isAvailable") for ds in listed.values() for d in ds):
+                    self.udid, self.device, self.ios = info["udid"], info["device"], info["ios"]
+                    self.preloaded, self.photos_ready, self.restored = set(info["samples"]), True, True
+                    print("prepared phone back after %.0f s" % (time.time() - begun), flush=True)
+                    return True
+            print("the prepared phone was not accepted", flush=True)
+        except (OSError, ValueError, KeyError, StepError, subprocess.SubprocessError) as error:
+            print("no prepared phone: %s" % error, flush=True)
+        return False
+
+    def prepare(self, wda, samples, out):
+        """Makes a prepared phone: started, settled, the touch driver on it, the samples in Photos."""
+        self._create()
+        self._boot()
+        self._put(wda)
+        self._start_wda()
+        added = []
+        for path in samples:
+            self.status("adding %s" % os.path.basename(path))
+            try:
+                self.add_photo(path, limit=600)
+                added.append(os.path.splitext(os.path.basename(path))[0])
+            except StepError as error:
+                print("not added: %s: %s" % (path, error), flush=True)
+        for bundle in ("com.apple.mobileslideshow", "com.apple.Preferences", "com.apple.mobilesafari"):
+            simctl("launch", self.udid, bundle, check=False, timeout=120)
+            time.sleep(8)
+            simctl("terminate", self.udid, bundle, check=False)
+        end = time.time() + 420
+        while time.time() < end and os.getloadavg()[0] > 2.0:  # let first-start work finish
+            time.sleep(10)
+        print("load %.1f; shutting the phone down" % os.getloadavg()[0], flush=True)
+        simctl("shutdown", self.udid, timeout=240)
+        os.makedirs(out, exist_ok=True)
+        run("tar", "-czf", os.path.join(out, "device.tgz"), "--options", "gzip:compression-level=3",
+            "--exclude", "*/Library/Logs/*", "--exclude", "*/var/db/diagnostics/*", "--exclude", "*/var/db/uuidtext/*",
+            "-C", DEVICE_DIR, self.udid, timeout=1200)
+        with open(os.path.join(out, "phone.json"), "w") as f:
+            json.dump({"udid": self.udid, "device": self.device, "ios": self.ios, "samples": added}, f)
+        print("%s: %.0f MB, samples %s" % (self._image_name(self.ios), os.path.getsize(os.path.join(out, "device.tgz")) / 1e6, added), flush=True)
+        return self._image_name(self.ios)
 
     def _boot(self):
         light = ["--disabledJob=com.apple." + job for job in IDLE_JOBS]
@@ -806,14 +881,14 @@ class IOSDriver:
         run("pkill", "-f", "%s.*storekit" % self.udid, check=False)
         return places
 
-    def add_photo(self, path):
+    def add_photo(self, path, limit=None):
         if not self.photos_ready:
             # A new simulator has no photo library until Photos has run; adding to it then can hang.
             simctl("launch", self.udid, SYSTEM_APPS["photos"], check=False, timeout=120)
             time.sleep(6)
             simctl("terminate", self.udid, SYSTEM_APPS["photos"], check=False)
             self.photos_ready = True
-        limit = 150 + os.path.getsize(path) / 4e6
+        limit = limit or 150 + os.path.getsize(path) / 4e6
         for attempt in range(3):
             try:
                 simctl("addmedia", self.udid, path, timeout=limit)

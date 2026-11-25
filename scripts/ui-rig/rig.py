@@ -27,7 +27,7 @@ OUT = os.environ.get("RIG_OUT") or os.path.join(tempfile.gettempdir(), "snapreel
 RUNNERS = {"27": "xcode-27", "26": "macos-26", "18": "macos-15", "16": "macos-26"}
 IOS_EXACT = {"16": "16.4"}
 DEVICES = ("small", "se", "normal", "large", "iphonex")
-OWN = ("start", "status", "list", "stop", "do", "look", "batch", "build", "media", "clean", "time", "reload", "help")
+OWN = ("start", "status", "list", "stop", "do", "look", "batch", "build", "media", "clean", "time", "reload", "image", "help")
 
 
 def die(text, code=1):
@@ -459,6 +459,21 @@ def cmd_build(a):
     print("built and stored; sessions with --app %s start from it" % a.app)
 
 
+def cmd_image(a):
+    """Makes and stores a prepared phone, so that sessions with this device and iOS start quickly."""
+    name = "image-%s-%s" % (a.device, a.ios)
+    launch_job(name, {"title": name, "job": "image", "phones": [{"sid": name, "device": a.device, "theme": "light"}], "app_ref": "main",
+                      "minutes": 60, "idle": 60, "timeout": 90, "cloud": "off", "runner": RUNNERS[a.ios],
+                      "ios": IOS_EXACT.get(a.ios, a.ios)}, again=True)
+    if a.no_wait:
+        print("making a prepared phone (%s, iOS %s)" % (a.device, a.ios))
+        return
+    _, ok = follow_run("ui-rig/" + name, "prepared phone " + name)
+    delete_refs(wire(), name)
+    if not ok:
+        die("the phone could not be prepared; see the run above")
+
+
 def cmd_media(a):
     launch_job("media", {"title": "media", "job": "media", "phones": [], "app_ref": "main", "runner": "ubuntu-latest", "timeout": 60})
     _, ok = follow_run("ui-rig/media", "sample videos")
@@ -582,6 +597,11 @@ def main():
     p.add_argument("--app", default="main")
     p.add_argument("--no-wait", action="store_true")
     p.set_defaults(run=cmd_build)
+    p = subs.add_parser("image")
+    p.add_argument("--device", default="small", choices=DEVICES)
+    p.add_argument("--ios", default="27", choices=sorted(RUNNERS))
+    p.add_argument("--no-wait", action="store_true")
+    p.set_defaults(run=cmd_image)
     subs.add_parser("media").set_defaults(run=cmd_media)
     p = subs.add_parser("batch")
     p.add_argument("script")
