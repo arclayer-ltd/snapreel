@@ -46,7 +46,7 @@ of the steps; write "seen 2 of 2" or "seen 1 of 3".
 | Kind | For example |
 | --- | --- |
 | Crash | the app closes by itself; the rig says CRASH |
-| Hang | no answer to touches; the rig says HANG; or anything slower than about 1 second without a sign of progress |
+| Hang | no answer to touches; the rig says HANG; `hangcheck` shows the app busy while it shows no sign of progress |
 | Dead control | a button, row or gesture that does nothing, or does something else than it says |
 | Lost work | a recording, edit, title, note or setting that is gone, changed or duplicated |
 | Wrong text | spelling, grammar, wrong number, wrong name, a promise the app does not keep, words only a programmer understands |
@@ -54,7 +54,7 @@ of the steps; write "seen 2 of 2" or "seen 1 of 3".
 | Confusing | you could not tell what to do, what happened, or how to undo it; the same thing named two ways; a control greyed out with no reason |
 | Dead end | no way back, no way to close, an error with nothing to do about it |
 | Access | no name for a control in the list, too small to hit (under 44x44), unreadable at the largest text, colour alone says something |
-| Slow or heavy | CPU above about 40% while nothing moves, memory that only grows |
+| Slow or heavy | `perf 10` above about 40% CPU while nothing moves; memory that only grows; work with no progress shown (the cloud phone itself is slow: compare with other screens before you call the app slow) |
 
 **Not faults** (the simulator cannot do them; note them once as "not testable"): the camera's picture, recording
 another app's screen, picture in picture, real App Store purchases, Sign in with Apple finishing, pushes from the
@@ -91,17 +91,17 @@ Each tester takes one. "Extra" is worth one more short pass after the main one.
 | --- | --- | --- | --- |
 | 1 | **First launch and tour**: welcome, questions, the tour, permissions asked, what an empty app says, skipping and going back, starting again after deleting the app | `start n1 --device small`, then `launch fresh` | iPhone SE; largest text |
 | 2 | **Record**: every way to start a recording, modes, settings of the recorder, countdown, pause, stop, discard, review, save and title; voice recording for real (the simulator records silence); what is said about camera and screen | `--device small`, `allow microphone` | deny every permission; leave half-way |
-| 3 | **Library, folders, search**: add videos from Photos, lists, sorting, folders, tags, rename, move, delete and undo, watch later, search, empty states | `--photos short,landscape,square,silent,turned,hevc60,picture` | 30 videos; 300-letter names |
-| 4 | **Player, notes, transcript**: play, scrub, speed, full screen, the small player, notes, reactions, transcript and its search, details, statistics, the "..." menu | `--photos short,4min,landscape` and bring them into the app | `launch sample` for a full library; on its side |
-| 5 | **Editor, part 1**: get into it; trim, split, delete a part, move parts, speed, crop, undo and redo, zoom the timeline, close with and without saving | `--photos short,4min` | 9min, 30min |
-| 6 | **Editor, part 2**: text, shapes (add each, move, resize, colour, delete), stickers, blur, captions, voice-over, sound, export and where the result goes | `--photos short,4min` | 9min; leave during export |
-| 7 | **Share and save**: save to Photos, send the file, the share sheet, share from each place that offers it, big files, cancelling half-way, what is in Photos afterwards (`open photos`) | `--photos short,4min,9min,big` | deny Photos, then allow |
-| 8 | **Copy link and uploads**: make a link, the progress of an upload, link settings, stop sharing, try again after a failure, uploads list, insights, comments | `--photos short,9min`; sign in with any email and the code 123456; `net ...`, `plan pro` | close the app during an upload; `open <the link>` makes a view and two comments |
+| 3 | **Library, folders, search**: add videos from Photos, lists, sorting, folders, tags, rename, move, delete and undo, watch later, search, empty states | `--device small` (the samples are in Photos) | 30 videos; 300-letter names |
+| 4 | **Player, notes, transcript**: play, scrub, speed, full screen, the small player, notes, reactions, transcript and its search, details, statistics, the "..." menu | bring `short`, `4min` and `landscape` into the app | `launch sample` for a full library; on its side |
+| 5 | **Editor, part 1**: get into it; trim, split, delete a part, move parts, speed, crop, undo and redo, zoom the timeline, close with and without saving | `short` and `4min` | 9min, 30min; repeat on `--device iphonex --ios 16` |
+| 6 | **Editor, part 2**: text, shapes (add each, move, resize, colour, delete), stickers, blur, captions, voice-over, sound, export and where the result goes | `short` and `4min` | 9min; leave during export; repeat on `--device iphonex --ios 16` |
+| 7 | **Share and save**: save to Photos, send the file, the share sheet, share from each place that offers it, big files, cancelling half-way, what is in Photos afterwards (`open photos`) | `short`, `4min`, `9min`; `photo big` | deny Photos, then allow |
+| 8 | **Copy link and uploads**: make a link, the progress of an upload, link settings, stop sharing, try again after a failure, uploads list, insights, comments | `short` and `9min`; sign in with any email and the code 123456; `net ...`, `plan pro` | close the app during an upload; `open <the link>` makes a view and two comments |
 | 9 | **Sign-in and Pro**: every way to sign in, wrong email, wrong code, sending again, signing out, deleting the account, the Pro page from every place it opens, plans, restoring, terms and privacy | any email, code 123456; `plan free` and `plan pro` | `net error`; largest text |
-| 10 | **Settings, storage, help**: every row and every page under it, appearance, recording defaults, notifications, storage and clearing it, help articles and their search, contact, legal, erase everything | `--photos short,4min` and bring one in first | Dark; largest text |
+| 10 | **Settings, storage, help**: every row and every page under it, appearance, recording defaults, notifications, storage and clearing it, help articles and their search, contact, legal, erase everything | bring one video in first | Dark; largest text |
 | 11 | **Access and small phone**: the whole app once, quickly, with `textsize ax3`, then in Dark with `contrast on`, then on `--device se`; names and sizes of everything that can be touched | `--device se` | `--device large`, on its side |
 | 12 | **Old iPhone**: the main path (add a video, play, edit, save, share, record voice) on the oldest supported iOS | `--device iphonex --ios 16` | Dark |
-| 13 | **Long and heavy**: 9 and 30 minute and >1 GB videos through adding, playing, editing, saving and linking; memory and CPU (`perf 10`) at every step; 20 minutes of ordinary use in a row | `--photos 9min,30min,big` | Home and back every minute |
+| 13 | **Long and heavy**: 9 and 30 minute and >1 GB videos through adding, playing, editing, saving and linking; memory and CPU (`perf 10`) at every step; 20 minutes of ordinary use in a row | `photo 9min 30min big` | Home and back every minute |
 | 14 | **The website**: see [TESTER-WEB.md](TESTER-WEB.md) | | |
 
 Suggested split for five at a time: (5), (6), (3), (10), (1), then (4), (2), (7), (8), (9), then (11), (12), (13).
