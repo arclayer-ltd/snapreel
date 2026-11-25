@@ -159,7 +159,7 @@ enum EditCompositionBuilder {
             let at = CMTime(seconds: outputSeconds, preferredTimescale: timescale)
             outputSeconds += (end - start).seconds / speed
             let length = CMTime(seconds: outputSeconds, preferredTimescale: timescale) - at
-            let placement = Placement(range: range, at: at, length: length)
+            let placement = Placement(range: range, at: at, length: length, stretches: abs(speed - 1) > 0.001)
             if let videoOut, let videoIn = source.videoTrack {
                 try insertPicture(placement, of: videoIn, available: source.videoRange, into: videoOut)
             }
@@ -212,6 +212,8 @@ enum EditCompositionBuilder {
         /// In the edit.
         let at: CMTime
         let length: CMTime
+        /// Played faster or slower.
+        let stretches: Bool
 
         /// The edit's time for a moment of the recording inside `range`.
         func output(_ time: CMTime) -> CMTime {
@@ -226,7 +228,8 @@ enum EditCompositionBuilder {
                                into out: AVMutableCompositionTrack) throws {
         let clipped = placement.range.intersection(available)
         guard clipped.duration > .zero else { return }
-        try insert(clipped, of: track, from: placement.output(clipped.start), to: placement.output(clipped.end), into: out)
+        try insert(clipped, of: track, from: placement.output(clipped.start), to: placement.output(clipped.end),
+                   stretches: placement.stretches, into: out)
     }
 
     /// `range` of `track` from `from` to `to` in the edit, played faster or slower to fit.
@@ -235,15 +238,15 @@ enum EditCompositionBuilder {
     /// splits it, and stretching a section by a rounding error runs all of its sound through the
     /// pitch corrector. So sections that follow each other are joined end to end, and only a real
     /// change of speed stretches.
-    private static func insert(_ range: CMTimeRange, of track: AVAssetTrack, from: CMTime, to: CMTime,
+    private static func insert(_ range: CMTimeRange, of track: AVAssetTrack, from: CMTime, to: CMTime, stretches: Bool,
                                into out: AVMutableCompositionTrack) throws {
         guard to > from, range.duration > .zero else { return }
         let end = out.segments.isEmpty ? CMTime.zero : out.timeRange.end
         let at = (from - end).seconds < 0.02 ? end : from
         try out.insertTimeRange(range, of: track, at: at)
+        guard stretches else { return }
         let length = CMTimeMaximum(to - at, CMTime(value: 1, timescale: timescale))
-        let stretch = length.seconds / range.duration.seconds
-        if abs(stretch - 1) > 0.002 {
+        if length != range.duration {
             out.scaleTimeRange(CMTimeRange(start: at, duration: range.duration), toDuration: length)
         }
     }
@@ -256,12 +259,13 @@ enum EditCompositionBuilder {
         let frame = CMTimeMinimum(heldFrame, available.duration)
         if range.start < available.start {
             try insert(CMTimeRange(start: available.start, duration: frame), of: track, from: placement.at,
-                       to: placement.output(CMTimeMinimum(available.start, range.end)), into: out)
+                       to: placement.output(CMTimeMinimum(available.start, range.end)), stretches: true, into: out)
         }
         try insert(placement, of: track, available: available, into: out)
         if range.end > available.end {
             try insert(CMTimeRange(start: available.end - frame, duration: frame), of: track,
-                       from: placement.output(CMTimeMaximum(available.end, range.start)), to: placement.at + placement.length, into: out)
+                       from: placement.output(CMTimeMaximum(available.end, range.start)), to: placement.at + placement.length,
+                       stretches: true, into: out)
         }
     }
 
