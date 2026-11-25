@@ -330,6 +330,9 @@ class IOSDriver:
                 return shot
             last = shot
 
+    # Visibility comes along: the app keeps its other tabs' contents in the tree, where a person cannot see them.
+    SOURCE = "?format=json&excluded_attributes=accessible"
+
     def read_tree(self, timeout=None):
         """Fills self.elements with what is on screen, in reading order, numbered from 1."""
         started = time.time()
@@ -339,15 +342,14 @@ class IOSDriver:
             self._start_wda()
             self.wda_stuck = False
         try:
-            # compact source: no per-element visibility queries, which take seconds on a big screen
-            node = self._http("GET", "/session/%s/source?format=json&excluded_attributes=visible,accessible" % self.session,
+            node = self._http("GET", "/session/%s/source%s" % (self.session, self.SOURCE),
                               timeout=timeout or self.hang_after)["value"]
         except Hang:
             self.wda_stuck = True
             raise
         except (ConnectionError, http.client.HTTPException, OSError):
             self._start_wda()
-            node = self._wda("GET", "/source?format=json&excluded_attributes=visible,accessible", timeout=30)
+            node = self._wda("GET", "/source" + self.SOURCE, timeout=30)
         self.answer_time = time.time() - started
         if isinstance(node, str):
             node = json.loads(node)
@@ -369,31 +371,45 @@ class IOSDriver:
                 self.keyboard = True
             text = str(label or "").strip()
             shown = str(value).strip() if value not in (None, "") else ""
-            inside_key = kind == "Key"
-            if (kind in INTERACTIVE or text or (shown and kind not in ("Other", "Window", "Application"))
-                    or kind in ("Slider", "TextField")) and kind not in ("Application", "Window", "Keyboard") and not inside_key:
-                if not (kind in ("Other", "StaticText", "Image") and text and text == parent_text):
-                    x, y = float(rect.get("x", 0)), float(rect.get("y", 0))
-                    w, h = float(rect.get("width", 0)), float(rect.get("height", 0))
-                    item = {"kind": kind, "label": text, "value": shown, "id": name, "x": x, "y": y, "w": w, "h": h,
-                            "enabled": str(n.get("isEnabled", n.get("enabled", "1"))) not in ("0", "false", "False"),
-                            "selected": str(n.get("isSelected", n.get("selected", "0"))) in ("1", "true", "True")}
-                    cx, cy = x + w / 2, y + h / 2
-                    if w > 0 and h > 0 and x < width and y < height and x + w > 0 and y + h > 0:
-                        item["onscreen"] = 0 <= cx <= width and 0 <= cy <= height
-                        found.append(item)
-                    else:
-                        self.offscreen += 1
+            if kind == "Switch":
+                shown = {"1": "on", "0": "off"}.get(shown, shown)
+            elif kind in ("Button", "Tab", "Cell") and shown == "1":
+                shown = "selected"
+            unseen = str(n.get("isVisible", "1")) in ("0", "false", "False")
+            if unseen and kind not in ("Application", "Window") and not (n.get("children") or []):
+                if (text or shown) and float(rect.get("y", 0)) >= height:
+                    self.offscreen += 1
+                return
+            if kind in ("Image", "Other", "StaticText") and parent_text and (kind == "Image" or text in parent_text):
+                text = shown = ""  # the picture or words on a button, already named by it
+            if text.startswith(("Vertical scroll bar", "Horizontal scroll bar")):
+                return
+            wanted = kind in INTERACTIVE or text or (shown and kind != "Other")
+            if wanted and not unseen and kind not in ("Application", "Window", "Keyboard", "Key"):
+                x, y = float(rect.get("x", 0)), float(rect.get("y", 0))
+                w, h = float(rect.get("width", 0)), float(rect.get("height", 0))
+                item = {"kind": kind, "label": text, "value": shown, "id": name, "x": x, "y": y, "w": w, "h": h,
+                        "enabled": str(n.get("isEnabled", n.get("enabled", "1"))) not in ("0", "false", "False"),
+                        "selected": str(n.get("isSelected", n.get("selected", "0"))) in ("1", "true", "True")}
+                cx, cy = x + w / 2, y + h / 2
+                if w > 0 and h > 0 and x < width and y < height and x + w > 0 and y + h > 0:
+                    item["onscreen"] = 0 <= cx <= width and 0 <= cy <= height
+                    found.append(item)
+                else:
+                    self.offscreen += 1
             for child in n.get("children") or []:
                 walk(child, depth + 1, text if kind in INTERACTIVE else parent_text)
 
         walk(node, 0, "")
         unique, seen = [], set()
+        named = {(e["label"], round(e["x"] + e["w"] / 2), round(e["y"] + e["h"] / 2)) for e in found if e["kind"] in INTERACTIVE}
         for e in found:
+            middle = (e["label"], round(e["x"] + e["w"] / 2), round(e["y"] + e["h"] / 2))
             key = (e["kind"], e["label"], e["value"], round(e["x"]), round(e["y"]), round(e["w"]), round(e["h"]))
-            if key not in seen:
-                seen.add(key)
-                unique.append(e)
+            if key in seen or (e["kind"] not in INTERACTIVE and e["label"] and middle in named):
+                continue
+            seen.add(key)
+            unique.append(e)
         self.elements = unique
         for number, e in enumerate(unique, 1):
             e["n"] = number
