@@ -394,7 +394,7 @@ class Steps:
         count = 60
         if a and a[0].isdigit():
             count = int(a.pop(0))
-        lines = self.d.log_tail(min(count, 1000), " ".join(a))
+        lines = self.d.log_tail(min(count, 2000), " ".join(a))
         return "\n".join(l[:400] for l in lines) or "(nothing logged)"
 
     def do_crashes(self, a):
@@ -412,8 +412,18 @@ class Steps:
     def do_perf(self, a):
         return self.d.perf(min(seconds(a[0] if a else "", 5), 60))
 
+    def do_mac(self, a):
+        """For whoever works on the rig: what keeps the Mac busy."""
+        out = subprocess.run("uptime; memory_pressure | tail -1; sysctl vm.swapusage; ps -Aceo pcpu,rss,comm -r | head -16",
+                             shell=True, capture_output=True, text=True, timeout=60).stdout
+        return out
+
     def do_hangcheck(self, a):
-        found = self.d.main_thread(min(int(seconds(a[0] if a else "", 2)), 10))
+        span = min(seconds(a[0] if a else "", 2), 10)
+        share = self.d.main_busy(span) if hasattr(self.d, "main_busy") else None
+        if share is not None and share < 0.3:
+            return "not stuck: main thread busy %d%% of %.0f s" % (round(share * 100), span)
+        found = self.d.main_thread(int(span))
         if found is None:
             return "Snapreel is not running"
         self.files["sample.txt"] = found[2].encode()
@@ -629,7 +639,7 @@ def batch(agent, script, out, opts):
     agent.d.new_crashes()
     for crash in agent.d.crashes:
         files["crash-" + crash["file"]] = crash["text"].encode()
-    files["app-log.txt"] = "\n".join(agent.d.log_tail(20000)).encode()
+    files["app-log.txt"] = "\n".join(agent.d.log_tail(50000, "", 90)).encode()
     for name, data in files.items():
         with open(os.path.join(out, name), "wb") as f:
             f.write(data)

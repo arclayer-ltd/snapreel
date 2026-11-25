@@ -102,8 +102,6 @@ class IOSDriver:
         self.crashes = []
         self.hangs = []
         self.video = None
-        self.log_proc = None
-        self.log_path = os.path.join(work, "app.log")
         self.cpu_mark = None
         self.hang_after = float(options.get("hang_after", 8))
         self.conn = None
@@ -125,7 +123,6 @@ class IOSDriver:
             self._put(wda)
         self._install()
         self._trust()
-        self._start_log()
         self.status("starting the touch driver")
         self._start_wda()
         self._warm_up()
@@ -135,13 +132,10 @@ class IOSDriver:
 
     def pause(self):
         self._drop()
-        if self.log_proc:
-            self.log_proc.terminate()
 
     def resume(self, state):
         self.__dict__.update(state)
         self.size = tuple(self.size)
-        self._start_log()
         self._open_session()
 
     def _trust(self):
@@ -291,13 +285,6 @@ class IOSDriver:
                 subprocess.run(["xcrun", "simctl", "boot", self.udid], capture_output=True)
                 subprocess.run(["xcrun", "simctl", "bootstatus", self.udid], capture_output=True)
 
-    def _start_log(self):
-        self.log_file = open(self.log_path, "ab")
-        self.log_proc = subprocess.Popen(
-            ["xcrun", "simctl", "spawn", self.udid, "log", "stream", "--style", "compact", "--level", "info",
-             "--predicate", 'process == "Snapreel" OR process BEGINSWITH "SnapreelB" OR process BEGINSWITH "SnapreelL"'],
-            stdout=self.log_file, stderr=subprocess.DEVNULL)
-
     def _start_wda(self):
         env = dict(os.environ, SIMCTL_CHILD_USE_PORT=str(self.port), SIMCTL_CHILD_MJPEG_SERVER_PORT=str(self.port + 1000))
         problem = ""
@@ -376,8 +363,7 @@ class IOSDriver:
         """A quick look (about 2 s) at a hung app: has it come back by itself?"""
         if not self.hung:
             return False
-        found = self.main_thread(1) if self.alive() else None
-        self.hung = bool(found and found[0] > 0.8)
+        self.hung = (self.main_busy() or 0) > 0.6
         return self.hung
 
     def _wda(self, method, path, body=None, timeout=30):
@@ -461,8 +447,7 @@ class IOSDriver:
                               timeout=timeout or self.hang_after)["value"]
         except Hang:
             self.wda_stuck = True
-            found = self.main_thread(2)
-            if found and found[0] > 0.5:
+            if (self.main_busy() or 0) > 0.5:
                 raise  # the app really is busy
             # Its main thread has nothing to do, so it is the Mac that is slow: wait for it.
             self.slow_mac += 1
@@ -888,6 +873,8 @@ class IOSDriver:
             time.sleep(6)
             simctl("terminate", self.udid, SYSTEM_APPS["photos"], check=False)
             self.photos_ready = True
+            if self.alive():
+                self.activate()
         limit = limit or 150 + os.path.getsize(path) / 4e6
         for attempt in range(3):
             try:
@@ -980,6 +967,23 @@ class IOSDriver:
             text += ", footprint " + match.group(1).strip() + (" (peak %s)" % peak.group(1).strip() if peak else "")
         return text
 
+    def main_busy(self, seconds=1.5):
+        """How much of `seconds` the app's main thread spent working, 0 to 1; None when it cannot be told. Cheap."""
+        def used():
+            out = run("ps", "-M", "-p", self.pid, check=False, timeout=30).split("\n")
+            if len(out) < 2:
+                return None
+            times = re.findall(r"(\d+):([\d.]+)", out[1])[-2:]  # system and user time of the first thread
+            return sum(int(m) * 60 + float(sec) for m, sec in times) if len(times) == 2 else None
+        if not self.alive():
+            return None
+        before, begun = used(), time.time()
+        time.sleep(seconds)
+        after = used()
+        if before is None or after is None:
+            return None
+        return min(1.0, (after - before) / (time.time() - begun))
+
     def main_thread(self, seconds=2):
         """What the app's main thread did for `seconds`: (busy share 0-1, readable stack, whole sample)."""
         if not self.alive():
@@ -990,6 +994,7 @@ class IOSDriver:
             run("sudo", "sample", self.pid, seconds, 5, "-mayDie", "-file", path, check=False, timeout=seconds + 90)
             run("sudo", "chmod", "644", path, check=False)
         except subprocess.TimeoutExpired:
+            run("sudo", "pkill", "-9", "-x", "sample", check=False)
             return None
         try:
             with open(path, errors="replace") as f:
@@ -1030,23 +1035,30 @@ class IOSDriver:
         """Called when the app did not answer in time. Records and returns a hang if its main thread is busy."""
         if not self.alive():
             return None
-        found = self.main_thread(3)
-        if found is None:
-            return None
-        busy, stack, text = found
-        self.hung = busy > 0.8
+        share = self.main_busy(2)
+        found = self.main_thread(2) if share is None or share > 0.3 else None
+        busy, stack, text = found if found else (share or 0.0, "(no stack)", "main thread busy %s" % share)
+        if share is not None:
+            busy = share
+        self.hung = busy > 0.6
         hang = {"at": time.strftime("%H:%M:%S"), "reason": reason, "busy": round(busy * 100), "stack": stack, "text": text}
         if busy < 0.5:
             hang["note"] = "its main thread is mostly idle, so this may be the rig being slow; look again"
         self.hangs.append(hang)
         return hang
 
-    def log_tail(self, count=60, pattern=""):
-        try:
-            with open(self.log_path, errors="replace") as f:
-                lines = f.read().split("\n")
-        except OSError:
-            return []
+    def log_tail(self, count=60, pattern="", minutes=10):
+        """The app's log, read back on demand: a running log stream takes a third of a core."""
+        out = simctl("spawn", self.udid, "log", "show", "--style", "compact", "--info", "--last", "%dm" % minutes, "--predicate",
+                     'process == "Snapreel" OR process BEGINSWITH "SnapreelB" OR process BEGINSWITH "SnapreelL"',
+                     check=False, timeout=150)
+        lines = out.split("\n")
+        for name in ("stdout.log", "stderr.log"):
+            try:
+                with open(os.path.join(self.work, name), errors="replace") as f:
+                    lines += ["(%s) %s" % (name[:6], l) for l in f.read().split("\n")[-200:] if l.strip()]
+            except OSError:
+                pass
         if pattern:
             lines = [l for l in lines if re.search(pattern, l, re.I)]
         return lines[-count:]
@@ -1083,9 +1095,6 @@ class IOSDriver:
             return f.read()
 
     def stop(self):
-        for proc in (self.log_proc,):
-            if proc:
-                proc.terminate()
         if self.video:
             self.video[0].send_signal(signal.SIGINT)
         if self.udid:
