@@ -134,6 +134,9 @@ final class Uploader: ObservableObject {
         transfers.onFinish = { [weak self] tag, result in self?.transferFinished(tag, result) }
         (transfers as? BackgroundTransfers)?.onEventsDelivered = { [weak self] in self?.backgroundEventsDelivered() }
         if watchesNetwork {
+            // iOS may have launched Snapreel in the background, for upload events or a processing task.
+            isActive = UIApplication.shared.applicationState != .background
+            queuesEverything = !isActive
             let monitor = NWPathMonitor()
             monitor.pathUpdateHandler = { [weak self] path in
                 let online = path.status == .satisfied
@@ -247,6 +250,8 @@ final class Uploader: ObservableObject {
     /// Carries on every unfinished job, after asking iOS which transfers it still has.
     func resumeAll() {
         guard environment.isConfigured() else { return }
+        // Pieces still waiting for their time to begin go now, three at a time.
+        if isActive && !queuesEverything { transfers.cancelWaiting() }
         Task { @MainActor in
             let running = await self.transfers.running()
             for tag in running where self.inFlight[tag] == nil {
