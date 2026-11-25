@@ -30,20 +30,6 @@ on:
         description: Record these flow id prefixes as videos (empty = none), e.g. "flow."
         type: string
         default: ""
-      tests:
-        description: Run the unit tests (SnapreelTests)
-        type: boolean
-        default: true
-      only_tests:
-        description: Only these tests, e.g. "SnapreelTests/ShareFlowTests" (space-separated, empty = all)
-        type: string
-        default: ""
-      ios16:
-        # Instead of the build job: the tests on an iOS 16 simulator, the oldest iOS Snapreel supports
-        # and the owner's phone. It downloads the runtime (about 7 GB) on an older macOS image.
-        description: Run only the tests, on iOS 16
-        type: boolean
-        default: false
       runner:
         # xcode-27 (Apple silicon, macOS 27) builds with the iOS 27 SDK, which App Store Connect
         # requires for uploads from April 2027 (ITMS-90725). The others build with the iOS 26 SDK.
@@ -51,14 +37,41 @@ on:
         type: choice
         options: [xcode-27, macos-26, macos-15, macos-15-intel, macos-latest]
         default: xcode-27
+      tests:
+        # SnapreelTests (unit tests and the editor's measurements on 1, 9 and 30 minute recordings).
+        description: Run the unit tests and measurements (separate job)
+        type: boolean
+        default: false
+      test_only:
+        description: Only these space-separated test classes or Class/test names (empty = all)
+        type: string
+        default: ""
+      test_ios:
+        description: iOS version to test on, e.g. 16.4 (downloaded if needed; empty = newest installed)
+        type: string
+        default: ""
+      device:
+        # Another simulator for the screenshots, e.g. "iPhone SE (3rd generation)" (empty = 375x812).
+        description: Simulator for the screenshots
+        type: string
+        default: ""
+      text_size:
+        # Dynamic Type for the screenshots, e.g. accessibility-extra-extra-extra-large (empty = large).
+        description: Text size for the screenshots
+        type: string
+        default: ""
+      build:
+        description: Run the build, screenshots and TestFlight job
+        type: boolean
+        default: true
 
 concurrency:
-  group: ios-${{ github.ref }}
+  group: ios-${{ github.ref }}-${{ inputs.tests && !inputs.build && format('tests-{0}', inputs.test_ios) || 'build' }}
   cancel-in-progress: false
 
 jobs:
   build:
-    if: ${{ !inputs.ios16 }}
+    if: ${{ inputs.build }}
     runs-on: ${{ inputs.runner || 'xcode-27' }}
     # A full Light pass (~60 min) plus a Dark pass over every recorder and player screen (~30 min).
     timeout-minutes: 140
@@ -71,6 +84,8 @@ jobs:
       BROADCAST_PROFILE: Snapreel Broadcast App Store
       LIVE_ACTIVITY_PROFILE: Snapreel Live Activity App Store
       BUILD_NUMBER: ${{ github.run_number }}
+      SCREENSHOT_DEVICE: ${{ inputs.device }}
+      SCREENSHOT_TEXT_SIZE: ${{ inputs.text_size }}
     steps:
       - uses: actions/checkout@v4
 
@@ -116,17 +131,12 @@ jobs:
           fi
           ls build/Build/Products/Debug-iphonesimulator/Snapreel.app/PlugIns/
 
-      - name: Unit tests
-        if: ${{ inputs.tests }}
-        timeout-minutes: 45
-        run: bash scripts/ci-tests.sh ci-out/tests "" "${{ inputs.only_tests }}"
-
       - name: Simulator screenshots
-        if: ${{ !cancelled() && steps.sim.outcome == 'success' && inputs.screenshots }}
+        if: ${{ inputs.screenshots }}
         run: bash scripts/ci-screenshots.sh build/Build/Products/Debug-iphonesimulator/Snapreel.app ci-out/screenshots "${{ inputs.only }}" light
 
       - name: Simulator screenshots (Dark mode)
-        if: ${{ !cancelled() && steps.sim.outcome == 'success' && inputs.screenshots && inputs.dark != 'none' }}
+        if: ${{ inputs.screenshots && inputs.dark != 'none' }}
         run: bash scripts/ci-screenshots.sh build/Build/Products/Debug-iphonesimulator/Snapreel.app ci-out/dark/screenshots "${{ inputs.dark }}" dark
 
       - name: Record app flows
@@ -262,12 +272,10 @@ jobs:
           path: ci-out
           if-no-files-found: ignore
 
-  ios16:
-    if: ${{ inputs.ios16 }}
-    # Not the xcode-27 image: an Xcode that has the SDKs the app needs (iOS 26) and is old enough to
-    # run iOS 16 simulators.
-    runs-on: macos-26
-    timeout-minutes: 120
+  tests:
+    if: ${{ inputs.tests }}
+    runs-on: ${{ inputs.runner || 'xcode-27' }}
+    timeout-minutes: 240
     steps:
       - uses: actions/checkout@v4
 
@@ -280,26 +288,70 @@ jobs:
             done | sort -t. -k1,1n -k2,2n -k3,3n | tail -1 | cut -d' ' -f2-)
           sudo xcode-select -s "$XCODE"
           xcodebuild -version
-          xcrun simctl list runtimes | grep iOS || true
+          sysctl -n machdep.cpu.brand_string hw.memsize hw.ncpu
 
-      - name: Download the iOS 16 simulator runtime
+      - name: Simulator
         run: |
-          set +e
-          xcrun simctl list runtimes | grep -q "iOS 16" && exit 0
-          for VERSION in 16.4; do
-            xcodebuild -downloadPlatform iOS -buildVersion "$VERSION" && break
+          mkdir -p ci-out
+          WANT="${{ inputs.test_ios }}"
+          if [ -n "$WANT" ] && ! xcrun simctl list runtimes | grep -q "iOS $WANT"; then
+            echo "Downloading iOS $WANT"
+            xcodebuild -downloadPlatform iOS -buildVersion "$WANT" 2>&1 | tail -5 || true
+          fi
+          xcrun simctl list runtimes | tee ci-out/runtimes.txt
+          RUNTIMES=$(xcrun simctl list runtimes -j | python3 -c '
+          import json, sys
+          want = sys.argv[1]
+          rs = [r for r in json.load(sys.stdin)["runtimes"] if r["platform"] == "iOS" and r["isAvailable"]]
+          if want: rs = [r for r in rs if r["version"].startswith(want)]
+          print(*[r["identifier"] for r in reversed(rs)])' "$WANT")
+          [ -n "$RUNTIMES" ] || { echo "No iOS $WANT runtime available on this runner" | tee ci-out/no-runtime.txt; exit 1; }
+          UDID=""
+          for RUNTIME in $RUNTIMES; do
+            for TYPE in "iPhone X" "iPhone 11 Pro" "iPhone 13 mini" "iPhone 14" "iPhone 17"; do
+              UDID=$(xcrun simctl create "Snapreel tests" "$TYPE" "$RUNTIME" 2>/dev/null) && break 2 || UDID=""
+            done
           done
-          xcrun simctl list runtimes | grep iOS
-          exit 0
+          [ -n "$UDID" ] || { echo "No device could be created"; exit 1; }
+          echo "$TYPE on $RUNTIME: $UDID"
+          xcrun simctl boot "$UDID" || true
+          xcrun simctl bootstatus "$UDID" -b > /dev/null || true
+          echo "UDID=$UDID" >> "$GITHUB_ENV"
 
-      - name: Unit tests on iOS 16
-        timeout-minutes: 60
-        run: bash scripts/ci-tests.sh ci-out/tests-ios16 16 "${{ inputs.only_tests }}"
+      # Optimised (like the App Store build) but testable, so the times mean something. Signed to run
+      # locally: iOS 16 simulators don't install an unsigned test runner.
+      - name: Test
+        run: |
+          ONLY=()
+          for NAME in ${{ inputs.test_only }}; do
+            if [[ "$NAME" == Snapreel* ]]; then ONLY+=("-only-testing:$NAME"); else ONLY+=("-only-testing:SnapreelTests/$NAME"); fi
+          done
+          set +e
+          xcodebuild test -project Snapreel.xcodeproj -scheme Snapreel -configuration Debug \
+            -destination "id=$UDID" -derivedDataPath build -resultBundlePath ci-out/tests.xcresult \
+            -parallel-testing-enabled NO ${ONLY[@]+"${ONLY[@]}"} \
+            -test-timeouts-enabled YES -default-test-execution-time-allowance 420 -maximum-test-execution-time-allowance 5400 \
+            SWIFT_OPTIMIZATION_LEVEL=-O ONLY_ACTIVE_ARCH=YES \
+            CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM= PROVISIONING_PROFILE_SPECIFIER= 2>&1 \
+            | tee ci-out/tests.log | grep --line-buffered -E "error:|PERF\||BEEPS\||NOTE\||Test Case"
+          STATUS=${PIPESTATUS[0]}
+          set -e
+          grep -E "error:|PERF\||BEEPS\||NOTE\||Test Case|Executed" ci-out/tests.log | sed -E 's#^/Users/runner/work/[^/]+/[^/]+/##' > ci-out/tests-summary.txt || true
+          { echo "### Tests: exit $STATUS"; echo '```'; tail -c 60000 ci-out/tests-summary.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          # Screenshots the UI tests took.
+          mkdir -p ci-out/attachments
+          xcrun xcresulttool export attachments --path ci-out/tests.xcresult --output-path ci-out/attachments > /dev/null 2>&1 || true
+          [ "$STATUS" = "0" ] || tail -30 ci-out/tests.log
+          exit $STATUS
 
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: snapreel-ci-ios16
+          name: snapreel-tests
           retention-days: 7
-          path: ci-out
+          path: |
+            ci-out/tests.log
+            ci-out/tests-summary.txt
+            ci-out/runtimes.txt
+            ci-out/attachments
           if-no-files-found: ignore

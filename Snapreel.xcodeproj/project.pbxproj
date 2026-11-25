@@ -9,8 +9,8 @@
 /* Begin PBXBuildFile section */
 		5C0000000000000000000001 /* SnapreelBroadcast.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 5A0000000000000000000002 /* SnapreelBroadcast.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		5C0000000000000000000002 /* SnapreelLiveActivity.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 5A0000000000000000000007 /* SnapreelLiveActivity.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
-		5C0000000000000000000003 /* BroadcastWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A000000000000000000000A /* BroadcastWriter.swift */; };
-		5C0000000000000000000004 /* SoundTimeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A000000000000000000000B /* SoundTimeline.swift */; };
+		5C0000000000000000000D01 /* BroadcastWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A0000000000000000000D01 /* BroadcastWriter.swift */; };
+		5C0000000000000000000D02 /* SoundTimeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A0000000000000000000D02 /* SoundTimeline.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -28,7 +28,7 @@
 			remoteGlobalIDString = 6A0000000000000000000003;
 			remoteInfo = SnapreelLiveActivity;
 		};
-		6F0000000000000000000005 /* PBXContainerItemProxy */ = {
+		6F0000000000000000000E01 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 6C0000000000000000000001 /* Project object */;
 			proxyType = 1;
@@ -53,6 +53,8 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		5A0000000000000000000D01 /* BroadcastWriter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = BroadcastWriter.swift; path = SnapreelBroadcast/BroadcastWriter.swift; sourceTree = SOURCE_ROOT; };
+		5A0000000000000000000D02 /* SoundTimeline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = SoundTimeline.swift; path = SnapreelBroadcast/SoundTimeline.swift; sourceTree = SOURCE_ROOT; };
 		5A0000000000000000000001 /* Snapreel.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Snapreel.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		5A0000000000000000000002 /* SnapreelBroadcast.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = SnapreelBroadcast.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		5A0000000000000000000003 /* Snapreel-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "Snapreel-Info.plist"; sourceTree = "<group>"; };
@@ -61,9 +63,7 @@
 		5A0000000000000000000006 /* SnapreelBroadcast.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = SnapreelBroadcast.entitlements; sourceTree = "<group>"; };
 		5A0000000000000000000007 /* SnapreelLiveActivity.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = SnapreelLiveActivity.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		5A0000000000000000000008 /* SnapreelLiveActivity-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "SnapreelLiveActivity-Info.plist"; sourceTree = "<group>"; };
-		5A0000000000000000000009 /* SnapreelTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SnapreelTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		5A000000000000000000000A /* BroadcastWriter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = BroadcastWriter.swift; path = SnapreelBroadcast/BroadcastWriter.swift; sourceTree = SOURCE_ROOT; };
-		5A000000000000000000000B /* SoundTimeline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = SoundTimeline.swift; path = SnapreelBroadcast/SoundTimeline.swift; sourceTree = SOURCE_ROOT; };
+		5A0000000000000000000E01 /* SnapreelTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SnapreelTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -92,7 +92,7 @@
 			path = RecordingActivity;
 			sourceTree = "<group>";
 		};
-		5B0000000000000000000006 /* SnapreelTests */ = {
+		5B0000000000000000000E01 /* SnapreelTests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = SnapreelTests;
 			sourceTree = "<group>";
@@ -121,7 +121,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		5E0000000000000000000004 /* Frameworks */ = {
+		5E0000000000000000000E01 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -139,14 +139,12 @@
 				5B0000000000000000000003 /* Shared */,
 				5B0000000000000000000004 /* SnapreelLiveActivity */,
 				5B0000000000000000000005 /* RecordingActivity */,
-				5B0000000000000000000006 /* SnapreelTests */,
+				5B0000000000000000000E01 /* SnapreelTests */,
 				5A0000000000000000000003 /* Snapreel-Info.plist */,
 				5A0000000000000000000004 /* SnapreelBroadcast-Info.plist */,
 				5A0000000000000000000005 /* Snapreel.entitlements */,
 				5A0000000000000000000006 /* SnapreelBroadcast.entitlements */,
 				5A0000000000000000000008 /* SnapreelLiveActivity-Info.plist */,
-				5A000000000000000000000A /* BroadcastWriter.swift */,
-				5A000000000000000000000B /* SoundTimeline.swift */,
 				5F0000000000000000000002 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -157,7 +155,7 @@
 				5A0000000000000000000001 /* Snapreel.app */,
 				5A0000000000000000000002 /* SnapreelBroadcast.appex */,
 				5A0000000000000000000007 /* SnapreelLiveActivity.appex */,
-				5A0000000000000000000009 /* SnapreelTests.xctest */,
+				5A0000000000000000000E01 /* SnapreelTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -238,27 +236,27 @@
 			productReference = 5A0000000000000000000007 /* SnapreelLiveActivity.appex */;
 			productType = "com.apple.product-type.app-extension";
 		};
-		6A0000000000000000000004 /* SnapreelTests */ = {
+		6A0000000000000000000E01 /* SnapreelTests */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 6D0000000000000000000005 /* Build configuration list for PBXNativeTarget "SnapreelTests" */;
+			buildConfigurationList = 6D0000000000000000000E01 /* Build configuration list for PBXNativeTarget "SnapreelTests" */;
 			buildPhases = (
-				6B0000000000000000000007 /* Sources */,
-				5E0000000000000000000004 /* Frameworks */,
-				6B0000000000000000000008 /* Resources */,
+				6B0000000000000000000E01 /* Sources */,
+				5E0000000000000000000E01 /* Frameworks */,
+				6B0000000000000000000E02 /* Resources */,
 			);
 			buildRules = (
 			);
 			dependencies = (
-				6F0000000000000000000006 /* PBXTargetDependency */,
+				6F0000000000000000000E02 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
-				5B0000000000000000000006 /* SnapreelTests */,
+				5B0000000000000000000E01 /* SnapreelTests */,
 			);
 			name = SnapreelTests;
 			packageProductDependencies = (
 			);
 			productName = SnapreelTests;
-			productReference = 5A0000000000000000000009 /* SnapreelTests.xctest */;
+			productReference = 5A0000000000000000000E01 /* SnapreelTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
 /* End PBXNativeTarget section */
@@ -280,7 +278,7 @@
 					6A0000000000000000000003 = {
 						CreatedOnToolsVersion = 16.0;
 					};
-					6A0000000000000000000004 = {
+					6A0000000000000000000E01 = {
 						CreatedOnToolsVersion = 16.0;
 						TestTargetID = 6A0000000000000000000001;
 					};
@@ -303,7 +301,7 @@
 				6A0000000000000000000001 /* Snapreel */,
 				6A0000000000000000000002 /* SnapreelBroadcast */,
 				6A0000000000000000000003 /* SnapreelLiveActivity */,
-				6A0000000000000000000004 /* SnapreelTests */,
+				6A0000000000000000000E01 /* SnapreelTests */,
 			);
 		};
 /* End PBXProject section */
@@ -330,7 +328,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		6B0000000000000000000008 /* Resources */ = {
+		6B0000000000000000000E02 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -361,12 +359,12 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		6B0000000000000000000007 /* Sources */ = {
+		6B0000000000000000000E01 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				5C0000000000000000000003 /* BroadcastWriter.swift in Sources */,
-				5C0000000000000000000004 /* SoundTimeline.swift in Sources */,
+				5C0000000000000000000D01 /* BroadcastWriter.swift in Sources */,
+				5C0000000000000000000D02 /* SoundTimeline.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -383,10 +381,10 @@
 			target = 6A0000000000000000000003 /* SnapreelLiveActivity */;
 			targetProxy = 6F0000000000000000000003 /* PBXContainerItemProxy */;
 		};
-		6F0000000000000000000006 /* PBXTargetDependency */ = {
+		6F0000000000000000000E02 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = 6A0000000000000000000001 /* Snapreel */;
-			targetProxy = 6F0000000000000000000005 /* PBXContainerItemProxy */;
+			targetProxy = 6F0000000000000000000E01 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -711,7 +709,7 @@
 			};
 			name = Release;
 		};
-		6E0000000000000000000009 /* Debug */ = {
+		6E0000000000000000000E01 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
@@ -723,14 +721,13 @@
 				PRODUCT_BUNDLE_IDENTIFIER = co.arclayer.snapreel.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
-				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 1;
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Snapreel.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Snapreel";
 			};
 			name = Debug;
 		};
-		6E000000000000000000000A /* Release */ = {
+		6E0000000000000000000E02 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
@@ -742,7 +739,6 @@
 				PRODUCT_BUNDLE_IDENTIFIER = co.arclayer.snapreel.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
-				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 1;
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Snapreel.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Snapreel";
@@ -788,11 +784,11 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		6D0000000000000000000005 /* Build configuration list for PBXNativeTarget "SnapreelTests" */ = {
+		6D0000000000000000000E01 /* Build configuration list for PBXNativeTarget "SnapreelTests" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				6E0000000000000000000009 /* Debug */,
-				6E000000000000000000000A /* Release */,
+				6E0000000000000000000E01 /* Debug */,
+				6E0000000000000000000E02 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

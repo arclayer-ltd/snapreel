@@ -4,7 +4,7 @@ import XCTest
 @testable import Snapreel
 
 /// Names, links and their clean-up, the item the share sheet hands over, and Photos' errors.
-final class ShareFilesTests: MovieTestCase {
+final class ShareFilesTests: SharingTestCase {
     private var root: URL { folder }
 
     private func recording(_ name: String = "source.mov", bytes: Int = 2_000) throws -> URL {

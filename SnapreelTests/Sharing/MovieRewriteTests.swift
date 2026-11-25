@@ -3,7 +3,7 @@ import XCTest
 @testable import Snapreel
 
 /// Putting a recording's file in order without touching its picture.
-final class MovieRewriteTests: MovieTestCase {
+final class MovieRewriteTests: SharingTestCase {
     // MARK: Layout
 
     func testOrdinaryRecordingNeedsNothing() async throws {
@@ -228,7 +228,7 @@ final class MovieRewriteTests: MovieTestCase {
     func testProgressRisesToOne() async throws {
         let url = try await movie("progress.mov", TestMovie.Spec(seconds: 30))
         let plan = try await MoviePlan.make(for: url, isScreenRecording: true)
-        let seen = Values()
+        let seen = ProgressValues()
         let control = MovieRewriteControl { seen.add($0) }
         try await MovieRewrite.run(url, to: folder.appendingPathComponent("p.mp4"), plan: plan, fileType: .mp4,
                                    indexFirst: false, control: control)
@@ -299,7 +299,7 @@ final class MovieRewriteTests: MovieTestCase {
     }
 }
 
-final class Values: @unchecked Sendable {
+final class ProgressValues: @unchecked Sendable {
     private let lock = NSLock()
     private var values: [Double] = []
 

@@ -4,7 +4,7 @@ import XCTest
 
 /// The screen recorder's writer (compiled into the tests; the app doesn't contain it): sound stays in
 /// step with the picture whatever is lost on the way.
-final class BroadcastSoundTests: MovieTestCase {
+final class BroadcastSoundTests: SharingTestCase {
     // MARK: The timeline
 
     func testStepsThroughAGap() {

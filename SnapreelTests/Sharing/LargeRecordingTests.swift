@@ -5,7 +5,7 @@ import XCTest
 
 /// Long and large recordings: how long Share takes to open, how long the file work takes next to build
 /// 47's, and how much memory it uses. The numbers are the runner's, not a phone's; the ratios carry over.
-final class LargeRecordingTests: MovieTestCase {
+final class LargeRecordingTests: SharingTestCase {
     /// Nine minutes at the owner's size and bit rate (their failing file is 8:50, 165.8 MB).
     private func nineMinutes(_ sounds: [TestMovie.Sound], cutOff: Bool = false) async throws -> URL {
         var spec = TestMovie.Spec()
@@ -19,7 +19,7 @@ final class LargeRecordingTests: MovieTestCase {
     }
 
     private func timed<T>(_ work: () async throws -> T) async throws -> (T, seconds: Double, peak: Double) {
-        let peak = MemoryPeak()
+        let peak = SharingMemoryPeak()
         let started = Date()
         let value = try await work()
         return (value, Date().timeIntervalSince(started), peak.stop())
@@ -161,7 +161,7 @@ final class LargeRecordingTests: MovieTestCase {
             var ended = false
             let started = Date()
             var cardAt: Double?
-            let peak = MemoryPeak()
+            let peak = SharingMemoryPeak()
             flow.start(video, library: library, onEnd: { ended = true })
             for _ in 0..<6_000 where flow.phase != .sheet && !ended {
                 if cardAt == nil, flow.card != nil { cardAt = Date().timeIntervalSince(started) }

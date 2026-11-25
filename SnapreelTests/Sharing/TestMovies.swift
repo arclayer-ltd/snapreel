@@ -335,7 +335,7 @@ struct MovieFacts {
 }
 
 /// The most memory the process used while it ran, over what it used at the start.
-final class MemoryPeak: @unchecked Sendable {
+final class SharingMemoryPeak: @unchecked Sendable {
     private let lock = NSLock()
     private var most: UInt64 = 0
     private var isRunning = true
@@ -378,7 +378,7 @@ final class MemoryPeak: @unchecked Sendable {
 }
 
 /// A folder of its own for each test, gone afterwards.
-class MovieTestCase: XCTestCase {
+class SharingTestCase: XCTestCase {
     private(set) var folder: URL!
 
     override func setUpWithError() throws {
@@ -396,8 +396,8 @@ class MovieTestCase: XCTestCase {
         return url
     }
 
-    /// A line CI collects (`scripts/ci-tests.sh`).
+    /// A line CI collects (the `tests` job in ios.yml).
     func measure(_ text: String) {
-        print("MEASURE \(text)")
+        print("PERF|sharing|\(text)")
     }
 }
