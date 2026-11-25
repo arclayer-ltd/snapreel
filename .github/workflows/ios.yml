@@ -329,11 +329,12 @@ jobs:
           xcodebuild test -project Snapreel.xcodeproj -scheme Snapreel -configuration Debug \
             -destination "id=$UDID" -derivedDataPath build -resultBundlePath ci-out/tests.xcresult \
             -parallel-testing-enabled NO ${ONLY[@]+"${ONLY[@]}"} \
-            SWIFT_OPTIMIZATION_LEVEL=-O CODE_SIGNING_ALLOWED=NO ONLY_ACTIVE_ARCH=YES > ci-out/tests.log 2>&1
-          STATUS=$?
+            -test-timeouts-enabled YES -default-test-execution-time-allowance 420 -maximum-test-execution-time-allowance 5400 \
+            SWIFT_OPTIMIZATION_LEVEL=-O CODE_SIGNING_ALLOWED=NO ONLY_ACTIVE_ARCH=YES 2>&1 \
+            | tee ci-out/tests.log | grep --line-buffered -E "error:|PERF\||BEEPS\||NOTE\||Test Case"
+          STATUS=${PIPESTATUS[0]}
           set -e
           grep -E "error:|PERF\||BEEPS\||NOTE\||Test Case|Executed" ci-out/tests.log | sed -E 's#^/Users/runner/work/[^/]+/[^/]+/##' > ci-out/tests-summary.txt || true
-          cat ci-out/tests-summary.txt
           { echo "### Tests: exit $STATUS"; echo '```'; tail -c 60000 ci-out/tests-summary.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
           # Screenshots the UI tests took.
           mkdir -p ci-out/attachments

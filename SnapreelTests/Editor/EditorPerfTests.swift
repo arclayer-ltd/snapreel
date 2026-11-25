@@ -79,6 +79,7 @@ final class EditorPerfTests: XCTestCase {
     }
 
     private func run(minutes: Int, audioShortBy: Double) async throws {
+        executionTimeAllowance = 5_000
         let name = "\(minutes)min"
         let url = try await TestMedia.long(minutes: minutes, audioShortBy: audioShortBy)
         let (library, id) = try await TestMedia.library(with: url)
