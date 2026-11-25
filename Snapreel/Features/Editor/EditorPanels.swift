@@ -137,7 +137,7 @@ struct EditorPanelButton: View {
             Label(title, systemImage: systemImage)
                 .font(.srSubheadlineStrong)
                 .lineLimit(1)
-                .minimumScaleFactor(0.75)
+                .minimumScaleFactor(0.6)
                 .foregroundStyle(prominent ? Color.white : (isDestructive ? Color.srStageRed : Color.srStageText))
                 .padding(.horizontal, Space.m)
                 .frame(minHeight: 40)
@@ -255,6 +255,8 @@ struct EditorCropPanel: View {
                 Spacer(minLength: 0)
                 Button { model.resetCrop() } label: {
                     Text("Reset")
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.6)
                         .frame(minWidth: 44, minHeight: 44)
                         .contentShape(Rectangle())
                 }
@@ -533,16 +535,19 @@ struct EditorVoicePanel: View {
                     Text("Get ready…")
                         .font(.srHeadline)
                         .foregroundStyle(Color.srStageText)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.6)
                     EditorPlayheadText(model) { "Recording starts at \($0)." }
                         .font(.srFootnote)
                         .foregroundStyle(Color.srStageTextSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 Spacer(minLength: 0)
                 Button("Cancel") { model.cancelCountdown() }
                     .buttonStyle(.srSecondaryCompact)
             }
             .padding(.horizontal, Space.gutter)
-            .frame(height: 84)
+            .frame(minHeight: 84)
         case .recording:
             HStack(spacing: Space.m) {
                 Button {
@@ -564,11 +569,12 @@ struct EditorVoicePanel: View {
                     Text("The video plays muted while you talk.")
                         .font(.srFootnote)
                         .foregroundStyle(Color.srStageTextTertiary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 Spacer(minLength: 0)
             }
             .padding(.horizontal, Space.gutter)
-            .frame(height: 96)
+            .frame(minHeight: 96)
         case .review(let take):
             VStack(alignment: .leading, spacing: Space.s) {
                 HStack(spacing: Space.xs) {
@@ -835,37 +841,57 @@ struct EditorBlurPanel: View {
 
 struct EditorThumbnailPanel: View {
     @ObservedObject var model: EditorModel
+    @Environment(\.dynamicTypeSize) private var textSize
 
     var body: some View {
-        HStack(spacing: Space.m) {
-            VStack(alignment: .leading, spacing: 3) {
-                if let time = model.recipe.thumbnailTime {
-                    Label("Frame at \(EditorText.precise(time))", systemImage: "checkmark.circle.fill")
-                        .font(.srSubheadlineStrong)
-                        .foregroundStyle(Color.srStageText)
-                        .labelStyle(EditorTintedIconLabel())
-                    Text("Your library shows this frame for the new recording.")
-                        .font(.srFootnote)
-                        .foregroundStyle(Color.srStageTextSecondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                } else {
-                    Text("Scrub to the frame people should see")
-                        .font(.srSubheadlineStrong)
-                        .foregroundStyle(Color.srStageText)
-                    Text("It becomes the picture on the recording's card in your library.")
-                        .font(.srFootnote)
-                        .foregroundStyle(Color.srStageTextSecondary)
-                        .fixedSize(horizontal: false, vertical: true)
+        Group {
+            if textSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: Space.s) {
+                    text
+                    button
                 }
-            }
-            Spacer(minLength: 0)
-            EditorPanelButton(title: model.recipe.thumbnailTime == nil ? "Use this frame" : "Use this one",
-                              systemImage: "photo", prominent: true) {
-                model.chooseThumbnail()
+                .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                HStack(spacing: Space.m) {
+                    text
+                    Spacer(minLength: 0)
+                    button
+                }
             }
         }
         .padding(.horizontal, Space.gutter)
         .padding(.vertical, Space.xs)
+    }
+
+    private var button: some View {
+        EditorPanelButton(title: model.recipe.thumbnailTime == nil ? "Use this frame" : "Use this one",
+                          systemImage: "photo", prominent: true) {
+            model.chooseThumbnail()
+        }
+    }
+
+    private var text: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            if let time = model.recipe.thumbnailTime {
+                Label("Frame at \(EditorText.precise(time))", systemImage: "checkmark.circle.fill")
+                    .font(.srSubheadlineStrong)
+                    .foregroundStyle(Color.srStageText)
+                    .labelStyle(EditorTintedIconLabel())
+                Text("Your library shows this frame for the new recording.")
+                    .font(.srFootnote)
+                    .foregroundStyle(Color.srStageTextSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                Text("Scrub to the frame people should see")
+                    .font(.srSubheadlineStrong)
+                    .foregroundStyle(Color.srStageText)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text("It becomes the picture on the recording's card in your library.")
+                    .font(.srFootnote)
+                    .foregroundStyle(Color.srStageTextSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
     }
 }
 

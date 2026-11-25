@@ -45,6 +45,8 @@ struct EditorView: View {
                 transport
                     .opacity(model.textEntry == nil ? 1 : 0)
                 EditorTimeline(model: model)
+                    // The coach mark hangs over the bar below.
+                    .zIndex(1)
                 EditorBottomBar(model: model)
             }
             // The keyboard (text entry) covers the page instead of squeezing it.
@@ -59,8 +61,8 @@ struct EditorView: View {
             phaseOverlay
                 .zIndex(3)
         }
-        // Controls keep their places; the largest accessibility sizes are for reading, and the sheets
-        // (which scroll) follow them.
+        // Text grows up to the first accessibility size; beyond it the controls, and the titles of the
+        // sheets, would no longer fit an iPhone's width.
         .dynamicTypeSize(...DynamicTypeSize.accessibility1)
         .offset(y: pageOffset)
         .onChange(of: isSwiping) { swiping in
@@ -71,6 +73,7 @@ struct EditorView: View {
         .animation(Motion.quick, value: model.selection)
         .sheet(item: $model.sheet) { sheet in
             sheetView(sheet)
+                .dynamicTypeSize(...DynamicTypeSize.accessibility1)
         }
         .toast($model.toast, bottomInset: 170)
         .shareVideo($shareTarget)
