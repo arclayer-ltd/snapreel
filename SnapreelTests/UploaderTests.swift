@@ -205,7 +205,7 @@ final class UploaderTests: XCTestCase {
         // Pieces 2, 3 and 4 are whole and final; 1 holds the index and 5 isn't whole.
         await until("early pieces") { self.server.pieceRequests == 3 }
         try? await Task.sleep(nanoseconds: 50_000_000)
-        XCTAssertEqual(Set(server.log.compactMap { if case .piece(let n) = $0 { return n } else { return nil } }), [2, 3, 4])
+        XCTAssertEqual(Set(server.log.compactMap { (operation: StubStorage.Operation) -> Int? in if case .piece(let n) = operation { return n } else { return nil } }), [2, 3, 4])
         XCTAssertEqual(uploader.phase(for: id), .preparing)
         let progress = uploader.progress(for: id)
         XCTAssertEqual(progress?.prepared, 0.6)

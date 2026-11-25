@@ -29,7 +29,10 @@ final class WebCopyTests: XCTestCase {
         var done: (copyID: String, size: Int64, headerEnd: Int64)?
     }
 
-    @MainActor private final class Box { var seen = Seen() }
+    @MainActor private final class Box {
+        var seen = Seen()
+        var task: Task<Void, Error>?
+    }
 
     /// Runs the preparer; `stopAfter` cancels it once that many stretches were reported.
     private func prepare(_ source: URL, screen: Bool = true, audio: Bool = false, long: Int = 1_920, duration: Double,
@@ -40,7 +43,6 @@ final class WebCopyTests: XCTestCase {
                                   title: "Test recording", duration: duration)
         let box = await Box()
         let video = jobFolder.appendingPathComponent("video.mp4")
-        var task: Task<Void, Error>?
         let preparer = WebPreparer(job: job) { update in
             switch update {
             case .file(let kind, let size): box.seen.files[kind] = size
@@ -54,14 +56,15 @@ final class WebCopyTests: XCTestCase {
                     try? handle?.seek(toOffset: UInt64(from))
                     let tail = (try? handle?.read(upToCount: Int(state.finalBytes - from))) ?? Data()
                     box.seen.final.append((state.finalBytes, state.headerEnd, tail))
-                    if let stopAfter, box.seen.final.count >= stopAfter { task?.cancel() }
+                    if let stopAfter, box.seen.final.count >= stopAfter { box.task?.cancel() }
                 }
             case .videoDone(let copyID, let size, let headerEnd): box.seen.done = (copyID, size, headerEnd)
             }
         }
-        task = Task { try await preparer.run() }
+        let task = Task { try await preparer.run() }
+        await MainActor.run { box.task = task }
         do {
-            try await task!.value
+            try await task.value
         } catch is CancellationError where stopAfter != nil {
         }
         return (await box.seen, video)

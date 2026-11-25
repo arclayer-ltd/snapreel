@@ -30,14 +30,14 @@ final class WebCopyBenchmarks: XCTestCase {
                 let job = folder.appendingPathComponent("job-\(UUID().uuidString)", isDirectory: true)
                 try FileManager.default.createDirectory(at: job, withIntermediateDirectories: true)
                 clock = Date()
-                let first = FirstBytes()
+                let first = await FirstBytes()
                 try await WebPreparer(job: .init(source: source, folder: job, maxLongSide: long, isScreen: isScreen, isAudio: false,
                                                  title: name, duration: seconds)) { update in
                     if case .video(let state) = update, state.finalBytes > state.headerEnd, first.at == nil { first.at = Date() }
                 }.run()
                 let newTime = Date().timeIntervalSince(clock)
                 let video = job.appendingPathComponent("video.mp4")
-                let firstBytes = first.at.map { String(format: "%.1f", $0.timeIntervalSince(clock)) } ?? "-"
+                let firstBytes = await first.at.map { String(format: "%.1f", $0.timeIntervalSince(clock)) } ?? "-"
                 lines.append(String(format: "%@ | %@ | %.1f | %.1f s, %.1f | %.1f s, %.1f | %@", name, plan, mb(source), oldTime, mb(old), newTime, mb(video), firstBytes))
                 XCTAssertNil(WebPreparer.lastFallback)
                 try? FileManager.default.removeItem(at: job)
