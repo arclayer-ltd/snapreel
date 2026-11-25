@@ -49,6 +49,7 @@ class Handler(BaseHTTPRequestHandler):
     def reply(self, status, body=None, headers=None):
         data = b"" if body is None else body if isinstance(body, bytes) else json.dumps(body).encode()
         self.send_response(status)
+        self.send_header("X-Practice-Server", "yes")
         if body is not None and not (headers or {}).get("Content-Type"):
             self.send_header("Content-Type", "application/json")
         for key, value in (headers or {}).items():

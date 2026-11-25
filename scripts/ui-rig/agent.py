@@ -415,6 +415,12 @@ class Steps:
 
     def do_mac(self, a):
         """For whoever works on the rig: what keeps the Mac busy."""
+        if a and a[0] == "net":
+            script = ("tail -8 /etc/hosts; for h in $(awk '/supabase|snapreel/{print $2}' /etc/hosts); do echo == $h; "
+                      "dscacheutil -q host -a name $h; done; lsof -nP -iTCP:443 -sTCP:LISTEN 2>&1 | head -3; "
+                      "sudo lsof -nP -iTCP:443 -sTCP:LISTEN 2>&1 | head -3; curl -s http://127.0.0.1:8899/ | tail -c 700; "
+                      "tail -5 $W/stub/stub.log")
+            return subprocess.run(["bash", "-c", script], capture_output=True, text=True, timeout=60).stdout
         out = subprocess.run("uptime; memory_pressure | tail -1; ps -Ao pcpu,rss,command -r | cut -c1-210 | head -22; "
                              "echo; echo in the phone: $(ps -Ao command | grep -c RuntimeRoot), on the Mac: $(ps -Ao command | grep -vc RuntimeRoot)",
                              shell=True, capture_output=True, text=True, timeout=60).stdout
@@ -462,7 +468,8 @@ class Agent:
             entry["seconds"] = round(time.time() - started, 1)
             if each:
                 shot = self._quiet_shot(settle=True)
-                entry["changed"] = shot != before
+                if line.split()[0].lower() in ("tap", "doubletap", "press", "drag", "swipe", "pinch", "rotate", "key", "type"):
+                    entry["changed"] = shot != before
                 if keep:
                     keep(index, line, shot, entry)
                 else:
@@ -560,7 +567,7 @@ class Live:
         """For whoever works on the rig: new rig files for a running phone, without starting it again."""
         here = os.path.dirname(os.path.abspath(__file__))
         for name, data in files.items():
-            if re.fullmatch(r"[a-z_]+\.(py|sh|json|storekit)", name) and name != "req.json":
+            if re.fullmatch(r"[a-z_]+\.(py|sh|json|storekit|swift)", name) and name != "req.json":
                 with open(os.path.join(here, name), "wb") as f:
                     f.write(data)
         self.start_over(agent, deadline, idle_minutes)

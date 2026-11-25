@@ -107,7 +107,7 @@ class IOSDriver:
         self.hang_after = float(options.get("hang_after", 8))
         self.conn = None
         self.wda_stuck = False  # the touch driver is still waiting for a hung app
-        self.ocr, self.ocr_used = None, False
+        self.ocr, self.ocr_used, self.no_ocr = None, False, False
         self.photos_ready = False
         self.preloaded, self.restored = set(), False
         self.slow_mac = 0       # how often the Mac, not the app, was the slow one
@@ -316,6 +316,8 @@ class IOSDriver:
                     self._http("GET", "/status", timeout=5)
                     self._open_session()
                     print("touch driver up (try %d)" % (attempt + 1), flush=True)
+                    if again and self.alive() and not self.away:
+                        self.activate()  # starting it put itself in front
                     return
                 except (OSError, http.client.HTTPException, StepError, Hang, KeyError) as error:
                     problem = "%s: %s" % (type(error).__name__, error)
@@ -580,7 +582,7 @@ class IOSDriver:
                     continue
                 near = " ".join(text for text, x, y, w, h in words if x < e["x"] + e["w"] + 12 and x + w > e["x"] - 12
                                 and y < e["y"] + e["h"] + 8 and y + h > e["y"] - 8)
-                if any(w in near for w in wanted):
+                if sum(w in near for w in wanted) >= max(1, (len(wanted) + 1) // 2):
                     seen += 1
                 elif e["kind"] != "Button" or " " in e["label"]:
                     missing += 1  # (an icon button's name is never in the picture)
@@ -594,7 +596,11 @@ class IOSDriver:
             if self.ocr is None:
                 tool = self.opt.get("ocr") or os.path.join(os.environ.get("W", "/nonexistent"), "ocr")
                 if not os.path.exists(tool):
-                    return None
+                    if self.no_ocr:
+                        return None
+                    self.no_ocr = True  # one try
+                    source = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ocr.swift")
+                    run("swiftc", "-O", source, "-o", tool, timeout=240)
                 self.ocr = subprocess.Popen([tool], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, bufsize=1)
             path = os.path.join(self.work, "raw-words.jpg")
             self._raw_shot(path)
@@ -862,7 +868,7 @@ class IOSDriver:
                     break
             except (Hang, StepError, OSError):
                 break
-        time.sleep(0.8)
+        self.settle(4)  # the entrance animation
 
     def activate(self):
         self.away = False

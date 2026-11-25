@@ -96,8 +96,16 @@ jobs:
         with: { path: src, ref: "${{ fromJSON(github.event.head_commit.message).app_ref }}", persist-credentials: false }
 
       - name: Practice server
-        if: ${{ env.KIND != 'build' && env.CLOUD == 'stub' }}
-        run: bash rig/scripts/ui-rig/start_stub.sh src "$W/stub"
+        if: ${{ env.KIND != 'build' }}
+        run: |
+          # Without proof that the real services are out of reach there is no session.
+          if ! bash rig/scripts/ui-rig/start_stub.sh src "$W/stub" "$CLOUD"; then
+            echo '{"say_state": "failed"}' > "$W/say.json"
+            for SID in $(cat "$W/sids.txt"); do
+              python3 rig/scripts/ui-rig/agent.py --sid "$SID" --options "$W/say.json" --work "$W" --say "the app could not be cut off from its real services, so the session was not started" || true
+            done
+            exit 1
+          fi
 
       - name: The app (stored build, or build it)
         id: app

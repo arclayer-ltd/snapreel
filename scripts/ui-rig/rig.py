@@ -573,7 +573,7 @@ def main():
         p.add_argument("--theme", default="light", choices=("light", "dark"))
         p.add_argument("--photos", default="", help="samples to put in Photos at the start, e.g. short,4min")
         p.add_argument("--minutes", type=int, default=120, help="the session ends after this long")
-        p.add_argument("--cloud", default="stub", choices=("stub", "off"), help="stub: practice server; off: no practice server")
+        p.add_argument("--cloud", default="stub", choices=("stub", "off"), help="stub: practice server; off: every online service unreachable")
 
     p = subs.add_parser("start")
     p.add_argument("names", nargs="*", help="session names; name:device for several on one runner")
