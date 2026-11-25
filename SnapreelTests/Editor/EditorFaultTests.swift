@@ -219,28 +219,7 @@ final class EditorFaultTests: XCTestCase {
         perf("short picture", "recording length", length, "s")
         let (library, id) = try await TestMedia.library(with: url)
         let recipe = EditRecipe.original(sourceID: id, duration: length)
-        // A look at the piece itself while it exists.
-        let folder = library.media.editFolder(id)
-        let kept = TestMedia.folder.appendingPathComponent("kept-piece.mov")
-        try? FileManager.default.removeItem(at: kept)
-        let watch = Task.detached {
-            while !Task.isCancelled {
-                for name in (try? FileManager.default.contentsOfDirectory(atPath: folder.path)) ?? [] where name.hasPrefix("saving-") {
-                    let piece = folder.appendingPathComponent(name).appendingPathComponent("piece-0.mov")
-                    if FileManager.default.fileExists(atPath: piece.path) {
-                        try? FileManager.default.linkItem(at: piece, to: kept)
-                        return
-                    }
-                }
-                try? await Task.sleep(nanoseconds: 1_000_000)
-            }
-        }
         let (video, file) = try await TestMedia.export(recipe, library: library)
-        watch.cancel()
-        if FileManager.default.fileExists(atPath: kept.path) {
-            let piece = try await TestMedia.readFrames(kept)
-            print("NOTE|short picture piece \(piece.count), last at \(piece.suffix(4).map(\.time))")
-        }
         let tracks = try await AVURLAsset(url: file).load(.tracks)
         for track in tracks {
             let range = try await track.load(.timeRange)

@@ -107,7 +107,7 @@ struct EditExportPlan {
             return plain
         }
         let data = (try? JSONEncoder.snapreelStable.encode(recipe)) ?? Data()
-        return "2|\(Int(settings.size.width))x\(Int(settings.size.height))|\(Int(settings.videoBitRate))|" + data.base64EncodedString()
+        return "3|\(Int(settings.size.width))x\(Int(settings.size.height))|\(Int(settings.videoBitRate))|" + data.base64EncodedString()
     }
 }
 
@@ -328,6 +328,15 @@ final class EditExporter: @unchecked Sendable {
                                 url: plan.workFolder.appendingPathComponent("piece-\(result.count).mov")))
             start = end
         }
+        // The last moment is a piece of its own, so the file surely ends with a frame: encoders may
+        // leave out a repeat of a picture that stands still, and a file's last frame gets a usual
+        // length, not the rest of the video.
+        if let last = result.last, (last.end - last.start).seconds > 0.5 {
+            let tail = last.end - CMTime(value: 1, timescale: 30)
+            result[result.count - 1] = Piece(index: last.index, start: last.start, end: tail, url: last.url)
+            result.append(Piece(index: result.count, start: tail, end: last.end,
+                                url: plan.workFolder.appendingPathComponent("piece-\(result.count).mov")))
+        }
         return result
     }
 
@@ -439,12 +448,8 @@ final class EditExporter: @unchecked Sendable {
             }
         }
         try checkStop()
-        guard let last = held else { throw EditExportFailure.failed(nil) }
+        guard held != nil else { throw EditExportFailure.failed(nil) }
         try fill(until: total)
-        // A frame right at the end: writers give the last frame a usual length, not the rest of the
-        // video, so a picture that stands still to the end would otherwise stop early.
-        let tail = CMTimeMaximum(.zero, total - CMTime(value: 1, timescale: 30))
-        if tail > last.time { try emit(last.buffer, at: tail) }
         // The last pieces, when the picture stands still to the end.
         try writer?.finish()
         writer = nil
