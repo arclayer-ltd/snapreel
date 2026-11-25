@@ -37,6 +37,9 @@ final class EditRenderer: ObservableObject {
     private var jobs: [UUID: Job] = [:]
     private var observers: [NSObjectProtocol] = []
     private var isInBackground = false
+    private var keptAwake = false
+    private var isBusy = false
+    private var waiting: [CheckedContinuation<Void, Never>] = []
     /// Edits whose save waits because Snapreel isn't on screen.
     @Published private(set) var isPaused = false
 
@@ -79,13 +82,16 @@ final class EditRenderer: ObservableObject {
         jobs[id] = job
         observe()
         keepAwake()
+        await takeTurn()
         let background = BackgroundTime(name: "Saving an edit")
         defer {
             jobs[id] = nil
             keepAwake()
             background.end()
+            endTurn()
         }
         do {
+            try check(job)
             try await render(output, id: id, job: job, to: url, library: library)
         } catch {
             try? FileManager.default.removeItem(at: url)
@@ -191,7 +197,29 @@ final class EditRenderer: ObservableObject {
 
     /// The screen stays on while an edit saves, so the iPhone doesn't lock halfway.
     private func keepAwake() {
-        UIApplication.shared.isIdleTimerDisabled = !jobs.isEmpty
+        if !jobs.isEmpty {
+            keptAwake = true
+            UIApplication.shared.isIdleTimerDisabled = true
+        } else if keptAwake {
+            keptAwake = false
+            // A recording in progress keeps the screen on for itself.
+            let router = AppEnvironment.shared.router
+            if router.recorder == nil, router.minimizedRecorder == nil { UIApplication.shared.isIdleTimerDisabled = false }
+        }
+    }
+
+    /// One save at a time: two encoders at once would take an older iPhone's memory, and finish no
+    /// sooner.
+    private func takeTurn() async {
+        if !isBusy {
+            isBusy = true
+            return
+        }
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in waiting.append(continuation) }
+    }
+
+    private func endTurn() {
+        if waiting.isEmpty { isBusy = false } else { waiting.removeFirst().resume() }
     }
 
     // MARK: - Afterwards
