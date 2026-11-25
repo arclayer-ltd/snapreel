@@ -49,9 +49,12 @@ final class LargeRecordingTests: MovieTestCase {
 
     func testNineMinutesWithOneSilentSound() async throws {
         let url = try await nineMinutes([.silence(), .tone(880)])
+        measure("step: made")
         let old = folder.appendingPathComponent("old.mov")
         let (_, oldSeconds, _) = try await timed { await LegacyAudioMixer.mix(url, into: old) }
+        measure("step: mixed the old way")
         let (plan, planSeconds, _) = try await timed { try await MoviePlan.make(for: url, isScreenRecording: true) }
+        measure("step: looked, \(plan.sound)")
         let new = folder.appendingPathComponent("new.mov")
         let (_, newSeconds, newPeak) = try await timed {
             try await MovieRewrite.run(url, to: new, plan: plan, fileType: .mov, indexFirst: false, control: MovieRewriteControl())

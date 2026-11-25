@@ -34,10 +34,14 @@ on:
         description: Run the unit tests (SnapreelTests)
         type: boolean
         default: true
+      only_tests:
+        description: Only these tests, e.g. "SnapreelTests/ShareFlowTests" (space-separated, empty = all)
+        type: string
+        default: ""
       ios16:
-        # A second job that runs the tests on an iOS 16 simulator, the oldest iOS Snapreel supports.
-        # It downloads the runtime (about 7 GB) on an older macOS image.
-        description: Also run the tests on iOS 16
+        # Instead of the build job: the tests on an iOS 16 simulator, the oldest iOS Snapreel supports
+        # and the owner's phone. It downloads the runtime (about 7 GB) on an older macOS image.
+        description: Run only the tests, on iOS 16
         type: boolean
         default: false
       runner:
@@ -54,6 +58,7 @@ concurrency:
 
 jobs:
   build:
+    if: ${{ !inputs.ios16 }}
     runs-on: ${{ inputs.runner || 'xcode-27' }}
     # A full Light pass (~60 min) plus a Dark pass over every recorder and player screen (~30 min).
     timeout-minutes: 140
@@ -114,7 +119,7 @@ jobs:
       - name: Unit tests
         if: ${{ inputs.tests }}
         timeout-minutes: 45
-        run: bash scripts/ci-tests.sh ci-out/tests
+        run: bash scripts/ci-tests.sh ci-out/tests "" "${{ inputs.only_tests }}"
 
       - name: Simulator screenshots
         if: ${{ inputs.screenshots }}
@@ -288,7 +293,8 @@ jobs:
           exit 0
 
       - name: Unit tests on iOS 16
-        run: bash scripts/ci-tests.sh ci-out/tests-ios16 16
+        timeout-minutes: 60
+        run: bash scripts/ci-tests.sh ci-out/tests-ios16 16 "${{ inputs.only_tests }}"
 
       - uses: actions/upload-artifact@v4
         if: always()
