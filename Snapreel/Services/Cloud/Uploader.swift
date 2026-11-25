@@ -1314,6 +1314,12 @@ final class Uploader: ObservableObject {
         fail(id, (error as? LocalizedError)?.errorDescription ?? "Snapreel couldn't prepare the video.")
     }
 
+    /// Tries web copies again that were cut short.
+    func resumePaused() {
+        pausedPreparing = []
+        resumeAll()
+    }
+
     /// Stops making the web copy for now; what is done is kept.
     func pausePreparing() {
         preparation?.cancel()

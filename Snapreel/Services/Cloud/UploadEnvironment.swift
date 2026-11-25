@@ -140,7 +140,7 @@ enum UploadBackground {
             let work = Task { @MainActor in
                 let uploader = Uploader.shared
                 uploader.setUp()
-                uploader.resumeAll()
+                uploader.resumePaused()
                 try? await Task.sleep(nanoseconds: 2_000_000_000)
                 await uploader.settle(seconds: 600)
                 if uploader.jobs.values.contains(where: \.isActive) { schedule() }
