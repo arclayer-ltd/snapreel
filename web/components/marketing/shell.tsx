@@ -8,7 +8,7 @@ import "./marketing.css";
 // Geist from the root layout.
 const outfit = Outfit({ subsets: ["latin"], variable: "--font-display", display: "swap" });
 
-/** The marketing site's frame: skip link, floating nav pill, main content and the footer scene. Used by the
+/** The marketing site's frame: skip link, floating nav bar, main content and the footer scene. Used by the
  *  (marketing) layout and by app/not-found.tsx, so an unknown address gets the same page as everything else. */
 export function MarketingShell({ children }: { children: React.ReactNode }) {
   return (

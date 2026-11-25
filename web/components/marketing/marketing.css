@@ -448,7 +448,7 @@
     filter: blur(1.2cqw);
   }
 
-  /* ---------------------------------------------------------------- Header (floating pill) */
+  /* ---------------------------------------------------------------- Header (floating bar) */
 
   /* Zero-height and sticky, so the pill floats over each page's scene and follows the scroll. */
   .mk-header {

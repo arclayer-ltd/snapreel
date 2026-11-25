@@ -76,7 +76,7 @@ export function IPhone({
           />
         </picture>
         {flow ? (
-          <FlowVideo light={`/marketing/flows/${flow}-light.mp4`} dark={`/marketing/flows/${flow}-dark.mp4`} priority={priority} />
+          <FlowVideo light={`/marketing/flows/${flow}-light.mp4`} dark={`/marketing/flows/${flow}-dark.mp4`} />
         ) : null}
         <span className="mk-iphone-glass" aria-hidden="true" />
       </div>

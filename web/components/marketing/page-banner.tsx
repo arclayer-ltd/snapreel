@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { SceneStage, sceneVars } from "./art";
 
 /**
- * The top of an inner page: the skyline panorama under the floating nav pill.
+ * The top of an inner page: the skyline panorama under the floating nav bar.
  *
  * - `variant="hero"` (help centre, support): the title, intro and anything passed as children
  *   sit on the sky.
