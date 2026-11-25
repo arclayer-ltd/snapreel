@@ -56,8 +56,8 @@ final class MovieRewriteControl: @unchecked Sendable {
 }
 
 /// What has to change in a recording's file before other apps get it, if anything.
-struct MoviePlan: Equatable {
-    enum Sound: Equatable {
+struct MoviePlan: Equatable, Sendable {
+    enum Sound: Equatable, Sendable {
         case none
         /// One track, copied as it is.
         case copy(CMPersistentTrackID)
@@ -65,7 +65,7 @@ struct MoviePlan: Equatable {
         case mix([CMPersistentTrackID])
     }
 
-    enum Reason: String {
+    enum Reason: String, Sendable {
         /// Cut off while recording: many small indexes instead of one.
         case fragmented
         /// Phone sound and microphone on separate tracks. Most apps play only the first one.
@@ -84,7 +84,14 @@ struct MoviePlan: Equatable {
 
     /// Reads `url`. `isScreenRecording`: its sound tracks belong together and are mixed. Movies from
     /// elsewhere can carry alternative sound tracks that must not be.
+    ///
+    /// Takes a moment whatever the length; given up on after 20 seconds, so nothing ever waits on a file
+    /// AVFoundation can't get through.
     static func make(for url: URL, isScreenRecording: Bool) async throws -> MoviePlan {
+        try await Deadline.run(seconds: 20) { try await read(url, isScreenRecording: isScreenRecording) }
+    }
+
+    private static func read(_ url: URL, isScreenRecording: Bool) async throws -> MoviePlan {
         let asset = AVURLAsset(url: url)
         let videoTracks: [AVAssetTrack]
         let audioTracks: [AVAssetTrack]
@@ -161,6 +168,41 @@ struct MoviePlan: Equatable {
     }
 
     private static let silentPacketBytes = 40
+}
+
+/// Work that must not keep anyone waiting forever.
+enum Deadline {
+    private final class Once<Value: Sendable>: @unchecked Sendable {
+        private let lock = NSLock()
+        private var continuation: CheckedContinuation<Value, Error>?
+
+        init(_ continuation: CheckedContinuation<Value, Error>) { self.continuation = continuation }
+
+        func resume(_ result: Result<Value, Error>) {
+            lock.lock()
+            let waiting = continuation
+            continuation = nil
+            lock.unlock()
+            waiting?.resume(with: result)
+        }
+    }
+
+    /// The result of `work`, or `MovieRewriteError.failed` after `seconds` (the work may go on unseen).
+    static func run<Value: Sendable>(seconds: Double, _ work: @escaping @Sendable () async throws -> Value) async throws -> Value {
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Value, Error>) in
+            let once = Once(continuation)
+            Task.detached(priority: .userInitiated) {
+                do {
+                    once.resume(.success(try await work()))
+                } catch {
+                    once.resume(.failure(error))
+                }
+            }
+            DispatchQueue.global().asyncAfter(deadline: .now() + seconds) {
+                once.resume(.failure(MovieRewriteError.failed))
+            }
+        }
+    }
 }
 
 /// Writes a movie again with its picture copied sample by sample.
@@ -245,21 +287,12 @@ enum SoundSettings {
     }
 }
 
-/// Moves samples from a reader to a writer until both are done. A few samples at a time, so memory
-/// stays flat whatever the movie's length.
+/// Moves samples from a reader to a writer until both are done: each track on a thread of its own, one
+/// sample at a time, so memory stays flat whatever the movie's length and no track can block another.
 enum MoviePump {
     struct Lane {
         let output: AVAssetReaderOutput
         let input: AVAssetWriterInput
-    }
-
-    /// Handed once to the loop, which is the only code that touches them afterwards.
-    private struct Job: @unchecked Sendable {
-        let reader: AVAssetReader
-        let writer: AVAssetWriter
-        let lanes: [Lane]
-        let duration: Double
-        let control: MovieRewriteControl
     }
 
     static func run(reader: AVAssetReader, writer: AVAssetWriter, lanes: [Lane], duration: Double,
@@ -277,75 +310,11 @@ enum MoviePump {
             throw writer.error ?? MovieRewriteError.failed
         }
         writer.startSession(atSourceTime: .zero)
-        let job = Job(reader: reader, writer: writer, lanes: lanes, duration: max(duration, 0.1), control: control)
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-            DispatchQueue.global(qos: .userInitiated).async {
-                do {
-                    try loop(job)
-                    continuation.resume()
-                } catch {
-                    continuation.resume(throwing: error)
-                }
-            }
+            MoviePumpJob(reader: reader, writer: writer, lanes: lanes, duration: max(duration, 0.1), control: control) {
+                continuation.resume(with: $0)
+            }.start()
         }
-    }
-
-    private static func loop(_ job: Job) throws {
-        var open = Array(job.lanes.indices)
-        var idle = 0
-        do {
-            while !open.isEmpty {
-                if let stop = job.control.stopped { throw stop }
-                guard job.writer.status == .writing else { throw job.writer.error ?? MovieRewriteError.failed }
-                var moved = false
-                for index in open {
-                    if try feed(job, index, moved: &moved) == false { open.removeAll { $0 == index } }
-                }
-                if moved {
-                    idle = 0
-                } else {
-                    idle += 1
-                    // Nothing has moved for about 20 seconds of running time.
-                    if idle > 10_000 { throw MovieRewriteError.failed }
-                    usleep(2_000)
-                }
-            }
-            guard job.reader.status == .completed else { throw job.reader.error ?? MovieRewriteError.failed }
-        } catch {
-            job.reader.cancelReading()
-            job.writer.cancelWriting()
-            throw error
-        }
-        let finished = DispatchSemaphore(value: 0)
-        job.writer.finishWriting { finished.signal() }
-        finished.wait()
-        guard job.writer.status == .completed else { throw job.writer.error ?? MovieRewriteError.failed }
-        if let stop = job.control.stopped { throw stop }
-        job.control.progress(1)
-    }
-
-    /// Moves up to 16 samples of one track, which keeps the tracks next to each other in the file.
-    /// False when the track is done.
-    private static func feed(_ job: Job, _ index: Int, moved: inout Bool) throws -> Bool {
-        let lane = job.lanes[index]
-        for _ in 0..<16 {
-            guard lane.input.isReadyForMoreMediaData else { return true }
-            moved = true
-            let more = try autoreleasepool { () throws -> Bool in
-                guard let sample = lane.output.copyNextSampleBuffer() else { return false }
-                guard lane.input.append(sample) else { throw job.writer.error ?? MovieRewriteError.failed }
-                if index == 0 {
-                    let seconds = CMSampleBufferGetPresentationTimeStamp(sample).seconds
-                    if seconds.isFinite { job.control.progress(0.96 * seconds / job.duration) }
-                }
-                return true
-            }
-            if !more {
-                lane.input.markAsFinished()
-                return false
-            }
-        }
-        return true
     }
 
     /// AVFoundation's error as one the app acts on.
@@ -366,5 +335,158 @@ enum MoviePump {
             }
         }
         return .failed
+    }
+}
+
+/// One run of `MoviePump`. Ends exactly once: done, failed, stopped, or given up on because nothing has
+/// moved for too long.
+private final class MoviePumpJob: @unchecked Sendable {
+    private let reader: AVAssetReader
+    private let writer: AVAssetWriter
+    private let lanes: [MoviePump.Lane]
+    private let duration: Double
+    private let control: MovieRewriteControl
+    private let lock = NSLock()
+    private var ending: ((Result<Void, Error>) -> Void)?
+    private var problem: Error?
+    private var openLanes: Int
+    private var idleTicks = 0
+    private var isFinishing = false
+    private var watchdog: DispatchSourceTimer?
+
+    /// Seconds of running time (time asleep in the background doesn't count) without a single sample.
+    private static let mostIdle = 30
+    /// Closing the file can mean writing all of it once more.
+    private static let mostIdleFinishing = 600
+
+    init(reader: AVAssetReader, writer: AVAssetWriter, lanes: [MoviePump.Lane], duration: Double,
+         control: MovieRewriteControl, ending: @escaping (Result<Void, Error>) -> Void) {
+        self.reader = reader
+        self.writer = writer
+        self.lanes = lanes
+        self.duration = duration
+        self.control = control
+        self.ending = ending
+        openLanes = lanes.count
+    }
+
+    func start() {
+        let timer = DispatchSource.makeTimerSource(queue: .global(qos: .userInitiated))
+        timer.schedule(deadline: .now() + 1, repeating: 1)
+        // Keeps the job alive until it ends.
+        timer.setEventHandler { self.tick() }
+        watchdog = timer
+        timer.resume()
+        for index in lanes.indices {
+            Thread.detachNewThread { [self] in
+                Thread.current.qualityOfService = .userInitiated
+                pump(index)
+            }
+        }
+    }
+
+    // MARK: - One track
+
+    private func pump(_ index: Int) {
+        let lane = lanes[index]
+        do {
+            while true {
+                if let stop = control.stopped { throw stop }
+                if let problem = currentProblem { throw problem }
+                guard writer.status == .writing else { throw writer.error ?? MovieRewriteError.failed }
+                guard lane.input.isReadyForMoreMediaData else {
+                    usleep(1_000)
+                    continue
+                }
+                let more = try autoreleasepool { () throws -> Bool in
+                    guard let sample = lane.output.copyNextSampleBuffer() else { return false }
+                    guard lane.input.append(sample) else { throw writer.error ?? MovieRewriteError.failed }
+                    moved()
+                    if index == 0 {
+                        let seconds = CMSampleBufferGetPresentationTimeStamp(sample).seconds
+                        if seconds.isFinite { control.progress(0.96 * seconds / duration) }
+                    }
+                    return true
+                }
+                guard more else { break }
+            }
+            lane.input.markAsFinished()
+        } catch {
+            note(error)
+        }
+        laneEnded()
+    }
+
+    private func laneEnded() {
+        lock.lock()
+        openLanes -= 1
+        let isLast = openLanes == 0
+        let failure = problem
+        if isLast { isFinishing = true }
+        idleTicks = 0
+        lock.unlock()
+        guard isLast else { return }
+        if let failure { return abort(failure) }
+        guard reader.status == .completed else { return abort(reader.error ?? MovieRewriteError.failed) }
+        writer.finishWriting { [self] in
+            if writer.status != .completed {
+                end(.failure(writer.error ?? MovieRewriteError.failed))
+            } else if let stop = control.stopped {
+                end(.failure(stop))
+            } else {
+                control.progress(1)
+                end(.success(()))
+            }
+        }
+    }
+
+    private func abort(_ error: Error) {
+        reader.cancelReading()
+        if writer.status == .writing { writer.cancelWriting() }
+        end(.failure(error))
+    }
+
+    // MARK: - State
+
+    private var currentProblem: Error? {
+        lock.lock()
+        defer { lock.unlock() }
+        return problem
+    }
+
+    private func note(_ error: Error) {
+        lock.lock()
+        if problem == nil { problem = error }
+        lock.unlock()
+    }
+
+    private func moved() {
+        lock.lock()
+        idleTicks = 0
+        lock.unlock()
+    }
+
+    private func tick() {
+        lock.lock()
+        idleTicks += 1
+        let limit = isFinishing ? Self.mostIdleFinishing : Self.mostIdle
+        let isStuck = idleTicks > limit
+        lock.unlock()
+        guard isStuck else { return }
+        // A track's thread can be stuck inside AVFoundation; the work ends for everyone else anyway.
+        note(MovieRewriteError.failed)
+        reader.cancelReading()
+        end(.failure(MovieRewriteError.failed))
+    }
+
+    private func end(_ result: Result<Void, Error>) {
+        lock.lock()
+        let ending = self.ending
+        self.ending = nil
+        let timer = watchdog
+        watchdog = nil
+        lock.unlock()
+        timer?.cancel()
+        ending?(result)
     }
 }

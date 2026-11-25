@@ -29,7 +29,8 @@ final class ShareCopies {
     func job(for video: Video, source: URL, kind: Kind, root: URL) -> ShareCopyJob {
         let folder = Self.folder(root: root)
         let key = Self.key(for: video.id, source: source, tag: kind.tag)
-        if let running = jobs[key] { return running }
+        // One that was stopped and is still winding down is no use.
+        if let running = jobs[key], !running.isStopped { return running }
         let target = folder.appendingPathComponent("\(key).mp4")
         removeOthers(in: folder, keeping: target.lastPathComponent)
         let job = ShareCopyJob(source: source, target: target, kind: kind)
@@ -107,6 +108,8 @@ final class ShareCopyJob: ObservableObject {
     }
 
     func cancel() { control?.cancel() }
+
+    var isStopped: Bool { control?.stopped != nil }
 
     fileprivate func start(onEnd: @escaping @MainActor () -> Void) {
         let control = MovieRewriteControl { [weak self] value in
