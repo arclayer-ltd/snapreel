@@ -229,7 +229,8 @@ final class RecordingSaver {
             let started = Date()
             if await tidy(destination, id: id, kind: video.kind, library: library) {
                 ReviewTiming.after(id, "file put in order", seconds: Date().timeIntervalSince(started))
-                library.update(id) { $0.fileSize = MediaInspector.fileSize(destination) }
+                // A new URL: one that was asked before remembers the old file's size.
+                library.update(id) { $0.fileSize = MediaInspector.fileSize(URL(fileURLWithPath: destination.path)) }
             }
         }
         settle(id)

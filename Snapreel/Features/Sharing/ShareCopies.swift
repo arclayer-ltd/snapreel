@@ -56,10 +56,13 @@ final class ShareCopies {
     }
 
     /// Changes with the file, so a copy of an earlier version (before the sound was mixed) isn't used.
+    /// Read through `FileManager`: a URL remembers its size and dates for a while.
     nonisolated static func key(for id: UUID, source: URL, tag: String) -> String {
-        let values = try? source.resourceValues(forKeys: [.contentModificationDateKey])
-        let modified = Int(values?.contentModificationDate?.timeIntervalSince1970 ?? 0)
-        return "\(id.uuidString)-\(MediaInspector.fileSize(source))-\(modified)-\(tag)"
+        let attributes = try? FileManager.default.attributesOfItem(atPath: source.path)
+        let modified = Int(((attributes?[.modificationDate] as? Date)?.timeIntervalSince1970 ?? 0) * 1_000)
+        let size = (attributes?[.size] as? NSNumber)?.int64Value ?? 0
+        let file = (attributes?[.systemFileNumber] as? NSNumber)?.int64Value ?? 0
+        return "\(id.uuidString)-\(size)-\(file)-\(modified)-\(tag)"
     }
 
     /// Copies take real space, so there is only ever one finished one. Whoever still reads an older

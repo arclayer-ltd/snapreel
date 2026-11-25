@@ -19,6 +19,8 @@ final class ShareFlow: ObservableObject {
     struct Card: Equatable {
         enum Step: Equatable {
             case saving, sound, packing, shrinking
+            /// The share sheet takes a moment to come up.
+            case opening
 
             var title: String {
                 switch self {
@@ -26,6 +28,7 @@ final class ShareFlow: ObservableObject {
                 case .sound: return "Finishing the sound"
                 case .packing: return "Getting the video ready"
                 case .shrinking: return "Making a smaller copy"
+                case .opening: return "Opening the share sheet"
                 }
             }
         }
@@ -67,7 +70,7 @@ final class ShareFlow: ObservableObject {
         switch phase {
         case .idle: return false
         case .preparing: return true
-        case .opening: return Date().timeIntervalSince(openedAt) < 8
+        case .opening: return Date().timeIntervalSince(openedAt) < ShareSheetPresenter.patience + 8
         case .sheet: return sheet?.isOnScreen ?? false
         }
     }
@@ -229,9 +232,9 @@ final class ShareFlow: ObservableObject {
     }
 
     private func open(_ file: ReadyFile, library: Library, token mine: UUID) {
-        hideCard()
         phase = .opening
         openedAt = Date()
+        show(file.video, .opening, token: mine, after: 0.8) { nil }
         let root = library.media.root
         let title = file.video.title
         let link = ShareFileLink.prepare(file.source, title: title, root: root)
@@ -244,6 +247,7 @@ final class ShareFlow: ObservableObject {
             onShown: { [weak self] in
                 guard let self, self.token == mine else { return }
                 self.phase = .sheet
+                self.hideCard()
                 #if DEBUG
                 DebugTrace.log(String(format: "share: sheet shown %.2f s after the tap", Date().timeIntervalSince(self.startedAt)))
                 #endif
@@ -304,15 +308,16 @@ final class ShareFlow: ObservableObject {
     // MARK: - Card
 
     /// Puts up the card for `step`, unless it is over within a quarter of a second.
-    private func show(_ video: Video, _ step: Card.Step, token mine: UUID, progress: @escaping @MainActor () -> Double?) {
+    private func show(_ video: Video, _ step: Card.Step, token mine: UUID, after quiet: TimeInterval = ShareFlow.quiet,
+                      progress: @escaping @MainActor () -> Double?) {
         watcher?.cancel()
         let wasUp = card != nil
         if wasUp { card = Card(video: video, step: step, progress: progress()) }
         watcher = Task { @MainActor [weak self] in
-            if !wasUp { try? await Task.sleep(nanoseconds: UInt64(Self.quiet * 1_000_000_000)) }
+            if !wasUp { try? await Task.sleep(nanoseconds: UInt64(quiet * 1_000_000_000)) }
             var announced = wasUp
             while !Task.isCancelled {
-                guard let self, self.token == mine, self.phase == .preparing else { return }
+                guard let self, self.token == mine, self.phase == .preparing || self.phase == .opening else { return }
                 let next = Card(video: video, step: step, progress: progress())
                 if self.card != next { self.card = next }
                 if !announced {
@@ -433,7 +438,8 @@ struct ShareVideoModifier: ViewModifier {
                         SharingStatusCard(video: card.video, title: card.step.title,
                                           detail: SharingStatusCard.detail(progress: card.progress, of: card.video),
                                           progress: card.progress, showsBar: true,
-                                          actionTitle: "Cancel", actionHint: "Stops preparing this recording",
+                                          actionTitle: card.step == .opening ? nil : "Cancel",
+                                          actionHint: "Stops preparing this recording",
                                           action: { flow.cancel() })
                     }
                 }

@@ -137,7 +137,10 @@ enum TestMovie {
         writer.startSession(atSourceTime: .zero)
         for frame in 0..<60 {
             while !input.isReadyForMoreMediaData { try await Task.sleep(nanoseconds: 2_000_000) }
-            guard let buffer = noise(width: spec.width, height: spec.height, pool: adaptor.pixelBufferPool) else {
+            // Noise costs about 3 bits a pixel whatever the encoder is asked for, so only as much of the
+            // picture is noise as the bit rate needs.
+            let share = Double(spec.bitRate) / (Double(spec.width * spec.height) * 30 * 3.2)
+            guard let buffer = noise(width: spec.width, height: spec.height, share: share, pool: adaptor.pixelBufferPool) else {
                 throw Failed(reason: "no pixel buffer")
             }
             adaptor.append(buffer, withPresentationTime: CMTime(value: CMTimeValue(frame), timescale: 30))
@@ -160,7 +163,8 @@ enum TestMovie {
         return samples
     }
 
-    static func noise(width: Int, height: Int, pool: CVPixelBufferPool? = nil) -> CVPixelBuffer? {
+    /// A grey picture whose top `share` (0...1) is noise.
+    static func noise(width: Int, height: Int, share: Double = 0.02, pool: CVPixelBufferPool? = nil) -> CVPixelBuffer? {
         var buffer: CVPixelBuffer?
         if let pool {
             CVPixelBufferPoolCreatePixelBuffer(nil, pool, &buffer)
@@ -171,9 +175,12 @@ enum TestMovie {
         guard let buffer else { return nil }
         CVPixelBufferLockBaseAddress(buffer, [])
         for plane in 0..<CVPixelBufferGetPlaneCount(buffer) {
-            if let base = CVPixelBufferGetBaseAddressOfPlane(buffer, plane) {
-                arc4random_buf(base, CVPixelBufferGetBytesPerRowOfPlane(buffer, plane) * CVPixelBufferGetHeightOfPlane(buffer, plane))
-            }
+            guard let base = CVPixelBufferGetBaseAddressOfPlane(buffer, plane) else { continue }
+            let row = CVPixelBufferGetBytesPerRowOfPlane(buffer, plane)
+            let rows = CVPixelBufferGetHeightOfPlane(buffer, plane)
+            memset(base, 120, row * rows)
+            let noisy = min(rows, max(2, Int(Double(rows) * share)))
+            if plane == 0 { arc4random_buf(base, row * noisy) }
         }
         CVPixelBufferUnlockBaseAddress(buffer, [])
         return buffer

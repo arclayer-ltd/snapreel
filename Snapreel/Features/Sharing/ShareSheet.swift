@@ -57,29 +57,40 @@ enum ShareSheetPresenter {
         return session
     }
 
-    private static func presentWhenReady(_ controller: UIViewController, session: ShareSheetSession) async {
-        for _ in 0..<2 {
-            for _ in 0..<15 {
-                // Snapreel left the screen while the file was prepared: wait for it, however long.
-                await BackgroundTime.waitUntilActive()
-                if let top = topViewController(), !top.isBeingPresented, !top.isBeingDismissed,
-                   top.transitionCoordinator == nil, top.viewIfLoaded?.window != nil {
-                    if let popover = controller.popoverPresentationController {
-                        popover.sourceView = top.view
-                        popover.sourceRect = CGRect(x: top.view.bounds.midX, y: top.view.bounds.maxY, width: 0, height: 0)
-                        popover.permittedArrowDirections = []
-                    }
-                    top.present(controller, animated: true) { session.shown() }
-                    break
-                }
-                try? await Task.sleep(nanoseconds: 120_000_000)
+    /// How long iOS gets to bring the sheet up. The first one after a launch can take seconds on an
+    /// older iPhone, so it is asked once and waited for; asking again would be ignored.
+    static let patience: TimeInterval = 12
+
+    private static func presentWhenReady(_ controller: ShareActivityController, session: ShareSheetSession) async {
+        var presenter: UIViewController?
+        for _ in 0..<30 {
+            // Snapreel left the screen while the file was prepared: wait for it, however long.
+            await BackgroundTime.waitUntilActive()
+            if let top = topViewController(), !top.isBeingPresented, !top.isBeingDismissed,
+               top.transitionCoordinator == nil, top.viewIfLoaded?.window != nil {
+                presenter = top
+                break
             }
-            // iOS can refuse a presentation without saying so: check, and try again.
-            for _ in 0..<10 {
-                if session.wasShown || controller.presentingViewController != nil { return session.shown() }
-                try? await Task.sleep(nanoseconds: 100_000_000)
-            }
+            try? await Task.sleep(nanoseconds: 120_000_000)
         }
+        guard let presenter else { return session.failed() }
+        if let popover = controller.popoverPresentationController {
+            popover.sourceView = presenter.view
+            popover.sourceRect = CGRect(x: presenter.view.bounds.midX, y: presenter.view.bounds.maxY, width: 0, height: 0)
+            popover.permittedArrowDirections = []
+        }
+        controller.onAppear = { session.shown() }
+        presenter.present(controller, animated: true) { session.shown() }
+        // iOS can refuse a presentation without saying so.
+        let limit = Date().addingTimeInterval(patience)
+        while !session.wasShown, Date() < limit {
+            if controller.viewIfLoaded?.window != nil { return session.shown() }
+            try? await Task.sleep(nanoseconds: 100_000_000)
+            if UIApplication.shared.applicationState != .active { await BackgroundTime.waitUntilActive() }
+        }
+        guard !session.wasShown else { return }
+        // Too late now: it must not come up after the person was told that it didn't.
+        controller.presentingViewController?.dismiss(animated: false)
         session.failed()
     }
 
@@ -130,6 +141,12 @@ enum ShareSheetPresenter {
 /// Reports when the sheet has really left the screen.
 final class ShareActivityController: UIActivityViewController {
     var onGone: (@MainActor () -> Void)?
+    var onAppear: (@MainActor () -> Void)?
+
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        onAppear?()
+    }
 
     override func viewDidDisappear(_ animated: Bool) {
         super.viewDidDisappear(animated)
@@ -153,7 +170,7 @@ final class ShareSheetSession: ShareSheetHandle {
         self.controller = controller
     }
 
-    var isOnScreen: Bool { controller?.presentingViewController != nil }
+    var isOnScreen: Bool { controller?.presentingViewController != nil || controller?.viewIfLoaded?.window != nil }
 
     func shown() {
         guard !wasShown, !isFinished else { return }

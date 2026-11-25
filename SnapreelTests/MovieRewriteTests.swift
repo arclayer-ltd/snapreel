@@ -168,8 +168,11 @@ final class MovieRewriteTests: MovieTestCase {
         let whole = try XCTUnwrap(MovieStructure.read(target))
         XCTAssertFalse(whole.isFragmented)
         XCTAssertTrue(whole.isComplete)
+        let before = try await MovieFacts.read(url)
         let after = try await MovieFacts.read(target)
-        XCTAssertEqual(after.videoSeconds, plan.duration, accuracy: 0.5)
+        XCTAssertEqual(after.seconds, plan.duration, accuracy: 0.5)
+        XCTAssertEqual(after.videoSeconds, before.videoSeconds, accuracy: 0.5)
+        XCTAssertEqual(after.frames, before.frames)
     }
 
     func testTurnedPictureComesBackIntoView() async throws {

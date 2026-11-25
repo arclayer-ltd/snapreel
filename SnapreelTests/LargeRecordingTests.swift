@@ -81,7 +81,7 @@ final class LargeRecordingTests: MovieTestCase {
         spec.seconds = 600
         spec.width = 1080
         spec.height = 1920
-        spec.bitRate = 27_000_000
+        spec.bitRate = 28_000_000
         spec.sounds = [.tone(440), .tone(880)]
         guard DiskSpace.available > 8_000_000_000 || DiskSpace.available == 0 else { throw XCTSkip("no room on this runner") }
         let url = try await movie("two-gigabytes.mov", spec)
@@ -165,7 +165,7 @@ final class LargeRecordingTests: MovieTestCase {
                 try await Task.sleep(nanoseconds: 10_000_000)
             }
             let seconds = Date().timeIntervalSince(started)
-            XCTAssertEqual(flow.phase, .sheet, video.title)
+            XCTAssertEqual(flow.phase, .sheet, "\(video.title) \(flow.toast?.text ?? "") state \(UIApplication.shared.applicationState.rawValue)")
             let sheet = ShareSheetPresenter.topViewController()
             XCTAssertTrue(sheet is UIActivityViewController, "\(String(describing: sheet))")
             measure(String(format: "tap to share sheet, %@ (%.0f MB): %.2f s, card after %@, +%.0f MB", video.title,
