@@ -24,7 +24,7 @@ from gitwire import AuthError, Wire, WireError  # noqa: E402
 
 REPO = os.environ.get("RIG_REPO", "arclayer-ltd/snapreel")
 OUT = os.environ.get("RIG_OUT") or os.path.join(tempfile.gettempdir(), "snapreel-rig")
-RUNNERS = {"27": "xcode-27", "26": "macos-26", "18": "macos-15", "16": "macos-15"}
+RUNNERS = {"27": "xcode-27", "26": "macos-26", "18": "macos-15", "16": "macos-26"}
 IOS_EXACT = {"16": "16.4"}
 DEVICES = ("small", "se", "normal", "large", "iphonex")
 OWN = ("start", "status", "list", "stop", "do", "look", "batch", "build", "media", "clean", "time", "reload", "help")

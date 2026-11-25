@@ -54,17 +54,17 @@ jobs:
               v=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app/Contents/Info.plist" 2>/dev/null) || continue
               echo "$v $app"
             done | sort -t. -k1,1n -k2,2n -k3,3n | tail -1 | cut -d' ' -f2-)
+          sudo xcode-select -s "$XCODE"
           if [ "$IOS" = "16.4" ]; then
-            # The iOS 16.4 simulator is a 7 GB download from Apple (about 2 minutes); Xcode 16.2 fetches and runs it.
-            sudo xcode-select -s /Applications/Xcode_16.2.app
-            # It sometimes hangs, so each try gets 5 minutes.
-            ( for i in 1 2 3 4; do
-                perl -e 'alarm shift; exec @ARGV' 300 xcodebuild -downloadPlatform iOS -buildVersion 20E247 > "$W/runtime.log" 2>&1
+            # The iOS 16.4 simulator is a 6 GB download from Apple, about 2 minutes. It can hang, so each try gets 6 minutes.
+            ( for BUILD in 16.4 20E247 16.4 20E247; do
+                perl -e 'alarm shift; exec @ARGV' 360 xcodebuild -downloadPlatform iOS -buildVersion $BUILD 2>&1 | tr '' '
+' | grep -v '%' > "$W/runtime.log"
                 xcrun simctl list runtimes | grep -q "iOS 16.4" && break
                 sleep 5
-              done; touch "$W/runtime.done" ) &
+              done; touch "$W/runtime.done" ) > /dev/null 2>&1 &
           else
-            sudo xcode-select -s "$XCODE"; touch "$W/runtime.done"
+            touch "$W/runtime.done"
           fi
           echo "BUILD_XCODE=$XCODE" >> "$GITHUB_ENV"
           xcodebuild -version
