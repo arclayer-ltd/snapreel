@@ -37,13 +37,31 @@ on:
         type: choice
         options: [xcode-27, macos-26, macos-15, macos-15-intel, macos-latest]
         default: xcode-27
+      tests:
+        # SnapreelTests (unit tests and the editor's measurements on 1, 9 and 30 minute recordings).
+        description: Run the unit tests and measurements (separate job)
+        type: boolean
+        default: false
+      test_only:
+        description: Only these space-separated test classes or Class/test names (empty = all)
+        type: string
+        default: ""
+      test_ios:
+        description: iOS version to test on, e.g. 16.4 (downloaded if needed; empty = newest installed)
+        type: string
+        default: ""
+      build:
+        description: Run the build, screenshots and TestFlight job
+        type: boolean
+        default: true
 
 concurrency:
-  group: ios-${{ github.ref }}
+  group: ios-${{ github.ref }}-${{ inputs.tests && !inputs.build && format('tests-{0}', inputs.test_ios) || 'build' }}
   cancel-in-progress: false
 
 jobs:
   build:
+    if: ${{ inputs.build }}
     runs-on: ${{ inputs.runner || 'xcode-27' }}
     # A full Light pass (~60 min) plus a Dark pass over every recorder and player screen (~30 min).
     timeout-minutes: 140
@@ -240,4 +258,77 @@ jobs:
           name: snapreel-ci
           retention-days: 7
           path: ci-out
+          if-no-files-found: ignore
+
+  tests:
+    if: ${{ inputs.tests }}
+    runs-on: ${{ inputs.runner || 'xcode-27' }}
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select newest Xcode
+        run: |
+          XCODE=$(for app in /Applications/Xcode*.app; do
+              if echo "$app" | grep -qiE 'beta|_rc'; then continue; fi
+              v=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app/Contents/Info.plist" 2>/dev/null) || continue
+              echo "$v $app"
+            done | sort -t. -k1,1n -k2,2n -k3,3n | tail -1 | cut -d' ' -f2-)
+          sudo xcode-select -s "$XCODE"
+          xcodebuild -version
+          sysctl -n machdep.cpu.brand_string hw.memsize hw.ncpu
+
+      - name: Simulator
+        run: |
+          mkdir -p ci-out
+          WANT="${{ inputs.test_ios }}"
+          if [ -n "$WANT" ] && ! xcrun simctl list runtimes | grep -q "iOS $WANT"; then
+            echo "Downloading iOS $WANT"
+            xcodebuild -downloadPlatform iOS -buildVersion "$WANT" 2>&1 | tail -5 || true
+          fi
+          xcrun simctl list runtimes | tee ci-out/runtimes.txt
+          RUNTIME=$(xcrun simctl list runtimes -j | python3 -c '
+          import json, sys
+          want = sys.argv[1]
+          rs = [r for r in json.load(sys.stdin)["runtimes"] if r["platform"] == "iOS" and r["isAvailable"]]
+          if want: rs = [r for r in rs if r["version"].startswith(want)]
+          print(rs[-1]["identifier"] if rs else "")' "$WANT")
+          [ -n "$RUNTIME" ] || { echo "No iOS $WANT runtime available on this runner" | tee ci-out/no-runtime.txt; exit 1; }
+          for TYPE in "iPhone X" "iPhone 11 Pro" "iPhone 13 mini" "iPhone 14" "iPhone 17"; do
+            UDID=$(xcrun simctl create "Snapreel tests" "$TYPE" "$RUNTIME" 2>/dev/null) && break || UDID=""
+          done
+          [ -n "$UDID" ] || { echo "No device could be created on $RUNTIME"; exit 1; }
+          echo "$TYPE on $RUNTIME: $UDID"
+          xcrun simctl boot "$UDID" || true
+          xcrun simctl bootstatus "$UDID" -b > /dev/null || true
+          echo "UDID=$UDID" >> "$GITHUB_ENV"
+
+      # Optimised (like the App Store build) but testable, so the times mean something.
+      - name: Test
+        run: |
+          ONLY=()
+          for NAME in ${{ inputs.test_only }}; do ONLY+=("-only-testing:SnapreelTests/$NAME"); done
+          set +e
+          xcodebuild test -project Snapreel.xcodeproj -scheme Snapreel -configuration Debug \
+            -destination "id=$UDID" -derivedDataPath build -resultBundlePath ci-out/tests.xcresult \
+            -parallel-testing-enabled NO ${ONLY[@]+"${ONLY[@]}"} \
+            SWIFT_OPTIMIZATION_LEVEL=-O CODE_SIGNING_ALLOWED=NO ONLY_ACTIVE_ARCH=YES > ci-out/tests.log 2>&1
+          STATUS=$?
+          set -e
+          grep -E "error:|PERF\||BEEPS\||NOTE\||Test Case|Executed" ci-out/tests.log | sed -E 's#^/Users/runner/work/[^/]+/[^/]+/##' > ci-out/tests-summary.txt || true
+          cat ci-out/tests-summary.txt
+          { echo "### Tests: exit $STATUS"; echo '```'; tail -c 60000 ci-out/tests-summary.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          [ "$STATUS" = "0" ] || tail -30 ci-out/tests.log
+          exit $STATUS
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: snapreel-tests
+          retention-days: 7
+          path: |
+            ci-out/tests.log
+            ci-out/tests-summary.txt
+            ci-out/runtimes.txt
+            ci-out/attachments
           if-no-files-found: ignore
