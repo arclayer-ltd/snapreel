@@ -41,8 +41,10 @@ rm -rf "$OUT/results.xcresult"
 xcodebuild test -project Snapreel.xcodeproj -scheme Snapreel -configuration Debug \
   -destination "platform=iOS Simulator,id=$DEVICE" -derivedDataPath build \
   CODE_SIGNING_ALLOWED=NO ONLY_ACTIVE_ARCH=YES -IDEBuildingContinueBuildingAfterErrors=YES \
-  -parallel-testing-enabled NO -resultBundlePath "$OUT/results.xcresult" ${ARGS[@]+"${ARGS[@]}"} > "$OUT/tests.log" 2>&1
-STATUS=$?
+  -parallel-testing-enabled NO -test-timeouts-enabled YES -default-test-execution-time-allowance 180 \
+  -maximum-test-execution-time-allowance 300 -resultBundlePath "$OUT/results.xcresult" ${ARGS[@]+"${ARGS[@]}"} 2>&1 \
+  | tee "$OUT/tests.log" | grep --line-buffered -E "^Test Case|MEASURE |error:|Restarting after|Testing failed" | cut -c1-300
+STATUS=${PIPESTATUS[0]}
 
 grep -E "(error|fatal error):" "$OUT/tests.log" | sed -E 's#^/Users/runner/work/[^/]+/[^/]+/##' | sort -u > "$OUT/errors.txt" || true
 grep -oE "MEASURE .*" "$OUT/tests.log" | awk '!seen[$0]++' > "$OUT/measures.txt" || true

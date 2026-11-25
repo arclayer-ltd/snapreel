@@ -208,11 +208,14 @@ enum TestMovie {
         case .tone(let hertz, let length): pitch = hertz; limit = min(seconds, length ?? seconds)
         case .silence(let length): pitch = 0; limit = min(seconds, length ?? seconds)
         }
+        // A tenth of a second holds a whole number of waves of any tone that is a multiple of 10 Hz,
+        // so the same data is used for all of them.
         var frame = 0
+        let count = 4_410
+        let data = pcmBlock(frames: count, startingAt: 0, pitch: pitch)
         return {
-            guard Double(frame) / 44_100 < limit else { return nil }
-            let count = 4_410
-            let buffer = pcmBuffer(frames: count, startingAt: frame, pitch: pitch)
+            guard Double(frame) / 44_100 < limit, let data else { return nil }
+            let buffer = pcmBuffer(data, frames: count, at: CMTime(value: CMTimeValue(frame), timescale: 44_100))
             frame += count
             return buffer
         }
@@ -230,6 +233,11 @@ enum TestMovie {
     }()
 
     static func pcmBuffer(frames: Int, startingAt first: Int, pitch: Double, at time: CMTime? = nil) -> CMSampleBuffer? {
+        guard let block = pcmBlock(frames: frames, startingAt: first, pitch: pitch) else { return nil }
+        return pcmBuffer(block, frames: frames, at: time ?? CMTime(value: CMTimeValue(first), timescale: 44_100))
+    }
+
+    private static func pcmBlock(frames: Int, startingAt first: Int, pitch: Double) -> CMBlockBuffer? {
         var data = [Int16](repeating: 0, count: frames * 2)
         if pitch > 0 {
             for index in 0..<frames {
@@ -247,11 +255,14 @@ enum TestMovie {
         _ = data.withUnsafeBytes { bytes in
             CMBlockBufferReplaceDataBytes(with: bytes.baseAddress!, blockBuffer: block, offsetIntoDestination: 0, dataLength: length)
         }
+        return block
+    }
+
+    private static func pcmBuffer(_ block: CMBlockBuffer, frames: Int, at time: CMTime) -> CMSampleBuffer? {
         var sample: CMSampleBuffer?
         CMAudioSampleBufferCreateReadyWithPacketDescriptions(
             allocator: nil, dataBuffer: block, formatDescription: pcmFormat, sampleCount: frames,
-            presentationTimeStamp: time ?? CMTime(value: CMTimeValue(first), timescale: 44_100),
-            packetDescriptions: nil, sampleBufferOut: &sample)
+            presentationTimeStamp: time, packetDescriptions: nil, sampleBufferOut: &sample)
         return sample
     }
 }
