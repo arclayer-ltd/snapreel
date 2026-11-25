@@ -9,8 +9,10 @@ Standard library only (it also runs on the macOS runner).
 import base64
 import hashlib
 import http.client
+import queue
 import ssl
 import struct
+import threading
 import time
 import zlib
 
@@ -188,6 +190,7 @@ class Wire:
         self.timeout = timeout
         self.conn = None
         self.known = {}  # ref -> sha, for the refs this side writes
+        self.lanes, self.good_lane = [], 0
         self.notes = []  # what was slow or failed, for finding out why a command took long
 
     def _post(self, service, body, retries=5):
@@ -282,7 +285,7 @@ class Wire:
         walk(root, "")
         return files
 
-    def push(self, ref, files, message="rig"):
+    def push(self, ref, files, message="rig", tries=6):
         """Replaces `ref` with one parentless commit holding `files`; returns its sha."""
         objects = []
         tree = _tree(objects, files)
@@ -291,14 +294,66 @@ class Wire:
         objects.append(("commit", commit))
         sha = _sha("commit", commit)
         unique = list({_sha(k, b): (k, b) for k, b in objects}.values())
-        self._update(ref, sha, _pack(unique))
+        self._update(ref, sha, _pack(unique), tries)
         return sha
+
+    def push_fast(self, prefix, files, lanes=4, patience=2.5):
+        """Puts `files` on one of the refs prefix/0, prefix/1, ...: the next lane is tried as soon as one
+        fails, or has not answered after `patience` seconds (GitHub sometimes takes 15 s over one ref, or
+        answers with a server error, while the ref beside it works). The other end watches them all."""
+        if not self.lanes:
+            for _ in range(lanes):
+                lane = Wire("", "", self.timeout)
+                lane.path, lane.auth = self.path, self.auth
+                self.lanes.append([lane, None])
+        done = queue.Queue()
+
+        def attempt(index):
+            lane, error = self.lanes[index][0], None
+            try:
+                lane.push("%s/%d" % (prefix, index), files, tries=2)
+            except WireError as problem:
+                error = problem
+            self.notes += lane.notes
+            lane.notes = []
+            done.put((index, error))
+
+        def finished(wait):
+            """True when a lane got through; raises queue.Empty when none answered within `wait`."""
+            nonlocal running, problem
+            index, problem = done.get(timeout=wait)
+            running -= 1
+            if problem is None:
+                self.good_lane = index
+            return problem is None
+
+        running, problem = 0, None
+        for step in range(lanes):
+            index = (self.good_lane + step) % lanes
+            if self.lanes[index][1] is not None and self.lanes[index][1].is_alive():
+                continue  # still busy with an earlier message
+            self.lanes[index][1] = threading.Thread(target=attempt, args=(index,), daemon=True)
+            self.lanes[index][1].start()
+            running += 1
+            try:
+                if finished(patience):
+                    return
+            except queue.Empty:
+                pass
+        deadline = time.time() + 45
+        while running and time.time() < deadline:
+            try:
+                if finished(max(0.1, deadline - time.time())):
+                    return
+            except queue.Empty:
+                break
+        raise problem or WireError("GitHub did not take the message in 45 s")
 
     def delete(self, ref):
         self._update(ref, ZERO, b"")
 
-    def _update(self, ref, new, pack):
-        for attempt in range(6):
+    def _update(self, ref, new, pack, tries=6):
+        for attempt in range(tries):
             old = self.known.get(ref)
             if old is None or attempt:
                 old = self.ref(ref) or ZERO
@@ -312,7 +367,7 @@ class Wire:
             if "ok " + ref in text:
                 break
             self.note("push refused: %s" % text.strip()[:160])
-            if attempt == 5:
+            if attempt == tries - 1:
                 raise WireError("GitHub did not take the update of %s: %s" % (ref, text.strip()[:300]))
             time.sleep(0.5 * 2 ** attempt)
         if new == ZERO:

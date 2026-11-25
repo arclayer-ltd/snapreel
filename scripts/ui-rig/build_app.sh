@@ -7,11 +7,15 @@ SRC="$1"; mkdir -p "$2"; OUT=$(cd "$2" && pwd); HERE=$(cd "$(dirname "$0")" && p
 export GH_TOKEN="${GH_TOKEN:-${GITHUB_TOKEN:-}}"
 # Only what goes into the app counts, so a change to the website or to docs reuses the build.
 TREE=$(cd "$SRC" && git ls-tree HEAD | awk -F'\t' '$2 !~ /^(web|docs|scripts|supabase|art|refs|SnapreelTests|README\.md|\.github|\.gitignore)$/' | shasum | cut -c1-16)
-KEY="ui-app-v2-$TREE"
+SDK=$(xcodebuild -version | awk 'NR == 1 { split($2, v, "."); print v[1] }')
+KEY="ui-app-v3-$TREE-x$SDK"
 echo "key=$KEY" >> "${GITHUB_OUTPUT:-/dev/null}"
-if bash "$HERE/find_artifact.sh" "$KEY" "$OUT" && [ -f "$OUT/app.tgz" ]; then
-  tar -xzf "$OUT/app.tgz" -C "$OUT" && echo "using the stored build $KEY" && exit 0
-fi
+# The build made with the newest Xcode (the one the app ships from) is used on every runner when there is one.
+for STORED in "ui-app-v3-$TREE-x27" "$KEY"; do
+  if bash "$HERE/find_artifact.sh" "$STORED" "$OUT" && [ -f "$OUT/app.tgz" ]; then
+    tar -xzf "$OUT/app.tgz" -C "$OUT" && echo "using the stored build $STORED" && exit 0
+  fi
+done
 echo "building $KEY"
 # Signed to run locally, with the app's entitlements, so the keychain (sign-in) and the shared folder work.
 cd "$SRC"

@@ -27,7 +27,7 @@ OUT = os.environ.get("RIG_OUT") or os.path.join(tempfile.gettempdir(), "snapreel
 RUNNERS = {"27": "xcode-27", "26": "macos-26", "18": "macos-15", "16": "macos-15"}
 IOS_EXACT = {"16": "16.4"}
 DEVICES = ("small", "se", "normal", "large", "iphonex")
-OWN = ("start", "status", "list", "stop", "do", "look", "batch", "build", "media", "clean", "time", "fetch", "help")
+OWN = ("start", "status", "list", "stop", "do", "look", "batch", "build", "media", "clean", "time", "reload", "help")
 
 
 def die(text, code=1):
@@ -158,9 +158,8 @@ def cmd_start(a):
                 note = read_status(w, sid)
                 if note and note.get("state") not in ("ended", "failed") and time.time() - note.get("at", 0) < 3600:
                     die("a session called %s exists; stop it or choose another name (or add --again to replace it)" % sid)
-            for ref in list(w.refs("refs/rig/%s/" % sid)):
-                w.delete(ref)
-        w.push("refs/rig/%s/out" % sid, {"status.json": json.dumps(
+            delete_refs(w, sid)
+        w.push("refs/rig/%s/out/status" % sid, {"status.json": json.dumps(
             {"state": "queued", "note": "waiting for a free runner", "at": time.time(), "started": time.time()}).encode()}, "queued")
     launch_job(settings["title"], settings)
     for phone in phones:
@@ -173,16 +172,8 @@ def cmd_start(a):
 
 
 def read_status(w, sid):
-    sha = w.ref("refs/rig/%s/out" % sid)
-    if not sha:
-        return None
-    files = w.fetch(sha)
-    if "status.json" in files:
-        return json.loads(files["status.json"])
-    if "res.json" in files:
-        answer = json.loads(files["res.json"])
-        return {"state": "ready", "note": "in use", "at": time.time(), "ends": answer.get("ends")}
-    return None
+    sha = w.ref("refs/rig/%s/out/status" % sid)
+    return json.loads(w.fetch(sha)["status.json"]) if sha else None
 
 
 def wait_ready(w, sids, minutes):
@@ -220,26 +211,31 @@ def send(sid, steps, opts=None, limit=None):
     started = time.time()
     request = {"id": uuid.uuid4().hex, "steps": steps, "opts": opts or {}, "sent": time.time()}
     out_ref, in_ref = "refs/rig/%s/out" % sid, "refs/rig/%s/in" % sid
-    old = w.ref(out_ref)
-    if old is None:
+    seen = w.refs(out_ref + "/")
+    if not seen:
         remember(sid, over=True)
         die("there is no session called %s (it may have ended); open sessions: %s" % (sid, ", ".join(known_sessions()) or "none"))
-    w.push(in_ref, {"req.json": json.dumps(request).encode()}, "steps")
+    w.push_fast(in_ref, {"req.json": json.dumps(request).encode()})
     limit = limit or 120 + 60 * len(steps)
     while True:
-        sha = w.ref(out_ref)
-        if sha and sha != old:
+        answer = None
+        for ref, sha in w.refs(out_ref + "/").items():
+            if seen.get(ref) == sha:
+                continue
+            seen[ref] = sha
             files = w.fetch(sha)
             if "res.json" in files:
                 answer = json.loads(files.pop("res.json"))
                 if answer.get("id") == request["id"]:
                     break
+                answer = None
             elif "status.json" in files:
                 status = json.loads(files["status.json"])
                 if status.get("state") in ("ended", "failed"):
                     remember(sid, over=True)
                     die("session %s is over: %s" % (sid, status.get("note")))
-            old = sha
+        if answer:
+            break
         if time.time() - started > limit:
             status = read_status(w, sid) or {}
             if status.get("state") in ("ended", "failed"):
@@ -357,11 +353,19 @@ def cmd_list(a):
         print("no sessions on GitHub")
 
 
+def delete_refs(w, sid):
+    for ref in list(w.refs("refs/rig/%s/" % sid)):
+        try:
+            w.delete(ref)
+        except WireError as error:
+            print("left behind on GitHub: %s (%s); `rig.py clean` removes it later" % (ref, error))
+
+
 def stop_one(w, sid):
     refs = w.refs("refs/rig/%s/" % sid)
     title = recall(sid).get("title", sid)
     if refs:
-        w.push("refs/rig/%s/in" % sid, {"req.json": json.dumps({"id": "stop", "stop": True, "steps": []}).encode()}, "stop")
+        w.push_fast("refs/rig/%s/in" % sid, {"req.json": json.dumps({"id": "stop", "stop": True, "steps": []}).encode()})
         end = time.time() + 25
         while time.time() < end:
             status = read_status(w, sid) or {}
@@ -377,11 +381,7 @@ def stop_one(w, sid):
                     print("cancelled run " + line)
                 if w.ref("refs/heads/ui-rig/" + title):
                     w.delete("refs/heads/ui-rig/" + title)
-        for ref in list(w.refs("refs/rig/%s/" % sid)):
-            try:
-                w.delete(ref)
-            except WireError:
-                pass
+        delete_refs(w, sid)
     remember(sid, over=True)
     print("%s is stopped" % sid)
 
@@ -467,8 +467,7 @@ def cmd_batch(a):
     place = os.path.join(folder(sid), "batch")
     gh("run", "download", run_id, "-R", REPO, "-D", place, check=False)
     w = wire()
-    for ref in list(w.refs("refs/rig/%s/" % sid)):
-        w.delete(ref)
+    delete_refs(w, sid)
     remember(sid, over=True)
     print("results: " + place)
     for base, _, files in os.walk(place):
@@ -477,6 +476,22 @@ def cmd_batch(a):
                 print(f.read())
     if not ok:
         die("the run did not finish cleanly; see agent-%s.log in the results" % sid)
+
+
+def cmd_reload(a):
+    """For whoever works on the rig: sends this folder's files to a running session."""
+    sid, w = which(a.session), wire()
+    files = {n.split("/")[-1]: d for n, d in bundle().items() if n.startswith("scripts/ui-rig/")}
+    files["req.json"] = json.dumps({"id": uuid.uuid4().hex, "reload": True, "steps": []}).encode()
+    before = (read_status(w, sid) or {}).get("at", 0)
+    w.push_fast("refs/rig/%s/in" % sid, files)
+    for _ in range(60):
+        status = read_status(w, sid) or {}
+        if status.get("at", 0) > before:
+            print("%s: %s, %s" % (sid, status.get("state"), status.get("note")))
+            return
+        time.sleep(1)
+    die("no sign of the session after the reload")
 
 
 def cmd_time(a):
@@ -560,6 +575,7 @@ def main():
     p.add_argument("--name", default="")
     phone_options(p)
     p.set_defaults(run=cmd_batch)
+    subs.add_parser("reload").set_defaults(run=cmd_reload)
     p = subs.add_parser("time")
     p.add_argument("--count", type=int, default=5)
     p.set_defaults(run=cmd_time)

@@ -99,7 +99,9 @@ class IOSDriver:
         self.cpu_mark = None
         self.hang_after = float(options.get("hang_after", 8))
         self.conn = None
-        self.wda_stuck = False
+        self.wda_stuck = False  # the touch driver is still waiting for a hung app
+        self.away = False       # a hung app was left for another one
+        self.hung = False       # the app's main thread was busy and not answering when last looked at
         os.makedirs(work, exist_ok=True)
 
     # ---- setting up ------------------------------------------------------------------------
@@ -115,6 +117,20 @@ class IOSDriver:
         self.status("starting the touch driver")
         self._start_wda()
         self._warm_up()
+
+    def state(self):
+        return {k: getattr(self, k) for k in ("udid", "device", "ios", "size", "pid", "expected_gone", "app", "crashes", "hangs")}
+
+    def pause(self):
+        self._drop()
+        if self.log_proc:
+            self.log_proc.terminate()
+
+    def resume(self, state):
+        self.__dict__.update(state)
+        self.size = tuple(self.size)
+        self._start_log()
+        self._open_session()
 
     def _trust(self):
         """The practice server's certificate (made on this runner a minute ago)."""
@@ -241,7 +257,17 @@ class IOSDriver:
             raise StepError("%s: %s" % (value["error"], str(value.get("message", ""))[:300]))
         return reply
 
+    def _still_hung(self):
+        """A quick look (about 2 s) at a hung app: has it come back by itself?"""
+        if not self.hung:
+            return False
+        found = self.main_thread(1) if self.alive() else None
+        self.hung = bool(found and found[0] > 0.8)
+        return self.hung
+
     def _wda(self, method, path, body=None, timeout=30):
+        if self.hung and not self.away and self._still_hung():
+            raise Hang("still hung: its main thread is busy all the time, so the touch or look was not even tried")
         if self.wda_stuck:
             self._start_wda()
             self.wda_stuck = False
@@ -261,6 +287,9 @@ class IOSDriver:
     # ---- looking ---------------------------------------------------------------------------
 
     def _raw_shot(self, path):
+        if (self.hung and not self.away) or self.wda_stuck:
+            run("xcrun", "simctl", "io", self.udid, "screenshot", "--type=jpeg", path, timeout=40)
+            return
         try:
             data = base64.b64decode(self._wda("GET", "/screenshot", timeout=10))
             with open(path, "wb") as f:
@@ -304,6 +333,11 @@ class IOSDriver:
     def read_tree(self, timeout=None):
         """Fills self.elements with what is on screen, in reading order, numbered from 1."""
         started = time.time()
+        if self.hung and not self.away and self._still_hung():
+            raise Hang("still hung: its main thread is busy all the time")
+        if self.wda_stuck:
+            self._start_wda()
+            self.wda_stuck = False
         try:
             # compact source: no per-element visibility queries, which take seconds on a big screen
             node = self._http("GET", "/session/%s/source?format=json&excluded_attributes=visible,accessible" % self.session,
@@ -554,6 +588,12 @@ class IOSDriver:
         return None
 
     def home(self):
+        if self.hung:
+            # The touch driver waits for the hung app, so another app is brought to the front instead.
+            simctl("launch", self.udid, SYSTEM_APPS["settings"], check=False)
+            time.sleep(2)
+            self.away = True
+            return
         self._wda("POST", "/wda/homescreen", {}, timeout=20)
 
     def back(self):
@@ -599,10 +639,21 @@ class IOSDriver:
         match = re.search(r": (\d+)", out)
         self.pid = int(match.group(1)) if match else None
         self.expected_gone = False
+        self.hung = self.away = False
         self.cpu_mark = None
-        time.sleep(1.5)
+        # Until it shows something: the first picture is otherwise the empty launch screen.
+        end = time.time() + 15
+        while time.time() < end:
+            time.sleep(0.7)
+            try:
+                if sum(1 for e in self.read_tree() if e["label"]) > 1:
+                    break
+            except (Hang, StepError, OSError):
+                break
+        time.sleep(0.8)
 
     def activate(self):
+        self.away = False
         out = simctl("launch", self.udid, BUNDLE, timeout=60)
         match = re.search(r": (\d+)", out)
         self.pid = int(match.group(1)) if match else self.pid
@@ -617,6 +668,7 @@ class IOSDriver:
 
     def kill(self):
         self.expected_gone = True
+        self.hung = False
         simctl("terminate", self.udid, BUNDLE, check=False)
 
     def open_url(self, url):
@@ -822,6 +874,7 @@ class IOSDriver:
         if found is None:
             return None
         busy, stack, text = found
+        self.hung = busy > 0.8
         hang = {"at": time.strftime("%H:%M:%S"), "reason": reason, "busy": round(busy * 100), "stack": stack, "text": text}
         if busy < 0.5:
             hang["note"] = "its main thread is mostly idle, so this may be the rig being slow; look again"

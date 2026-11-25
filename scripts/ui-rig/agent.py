@@ -177,7 +177,7 @@ class Steps:
 
     def do_home(self, a):
         self.d.home()
-        return "pressed Home"
+        return "left the hung app for another one" if getattr(self.d, "hung", False) else "pressed Home"
 
     def do_open(self, a):
         self._need(a, 1, "open https://... | open photos|safari|settings|files|snapreel")
@@ -471,6 +471,8 @@ class Agent:
             answer["tree"] = ["(the screen could not be read: %s)" % error]
 
     def _report_hang(self, entry, reason):
+        if getattr(self.d, "hung", False):
+            return  # reported when it began
         hang = self.d.check_hang(reason)
         if hang is None:
             entry["text"] += "; Snapreel is not running"
@@ -498,20 +500,35 @@ class Live:
     def __init__(self, wire, sid, work):
         self.wire, self.sid, self.work = wire, sid, work
         self.in_ref, self.out_ref = "refs/rig/%s/in" % sid, "refs/rig/%s/out" % sid
+        self.done = set()
         self.state = {"state": "starting", "note": "", "started": time.time()}
 
     def status(self, note, state="starting", **extra):
         self.state.update(state=state, note=note, at=time.time(), **extra)
         print("[%s] %s: %s" % (self.sid, state, note), flush=True)
         try:
-            self.wire.push(self.out_ref, {"status.json": json.dumps(self.state).encode()}, "status")
+            self.wire.push(self.out_ref + "/status", {"status.json": json.dumps(self.state).encode()}, "status")
         except WireError as error:
             print("status not sent: %s" % error, flush=True)
 
+    def reload(self, agent, files, deadline, idle_minutes):
+        """For whoever works on the rig: new rig files for a running phone, without starting it again."""
+        here = os.path.dirname(os.path.abspath(__file__))
+        for name, data in files.items():
+            if re.fullmatch(r"[a-z_]+\.(py|sh|json|storekit)", name) and name != "req.json":
+                with open(os.path.join(here, name), "wb") as f:
+                    f.write(data)
+        state = dict(agent.d.state(), minutes=(deadline - time.time()) / 60, idle=idle_minutes)
+        with open(os.path.join(self.work, "resume.json"), "w") as f:
+            json.dump(state, f)
+        agent.d.pause()
+        args = [a for a in sys.argv if a != "--resume"]
+        os.execv(sys.executable, [sys.executable] + args + ["--resume"])
+
     def serve(self, agent, minutes, idle_minutes):
-        deadline, last_seen, last_sha = time.time() + minutes * 60, time.time(), None
+        deadline, last_seen = time.time() + minutes * 60, time.time()
+        seen = self.wire.refs(self.in_ref + "/") if self.state.get("resumed") else {}
         self.status("ready", "ready", device=agent.d.device, ios=agent.d.ios, size=list(agent.d.size), ends=deadline)
-        last_sha = self.wire.ref(self.in_ref) if self.state.get("skip_old") else None
         fails = 0
         while True:
             now = time.time()
@@ -520,7 +537,7 @@ class Live:
             if now - last_seen > idle_minutes * 60:
                 return "nothing to do for %d minutes" % idle_minutes
             try:
-                sha = self.wire.ref(self.in_ref)
+                refs = self.wire.refs(self.in_ref + "/")
                 fails = 0
             except WireError as error:
                 fails += 1
@@ -529,11 +546,19 @@ class Live:
                     return "GitHub could not be reached"
                 time.sleep(3)
                 continue
-            if sha and sha != last_sha:
-                last_sha, last_seen = sha, time.time()
+            fresh = [(ref, sha) for ref, sha in refs.items() if seen.get(ref) != sha]
+            if fresh:
+                ref, sha = fresh[0]
+                seen[ref] = sha
                 request = json.loads(self.wire.fetch(sha)["req.json"])
+                if request["id"] in self.done:
+                    continue  # the same steps, arrived on a second lane
+                self.done.add(request["id"])
+                last_seen = time.time()
                 if request.get("stop"):
                     return "stopped by the tester"
+                if request.get("reload"):
+                    self.reload(agent, self.wire.fetch(sha), deadline, idle_minutes)
                 print("[%s] %s" % (self.sid, "; ".join(request["steps"])[:300]), flush=True)
                 got = time.time()
                 answer, files = agent.perform(request["steps"], request.get("opts", {}))
@@ -542,7 +567,7 @@ class Live:
                 files = dict(files)
                 files["res.json"] = json.dumps(answer).encode()
                 try:
-                    self.wire.push(self.out_ref, files, "result")
+                    self.wire.push_fast(self.out_ref, files)
                 except WireError as error:
                     print("result not sent: %s" % error, flush=True)
                 last_seen = time.time()
@@ -604,6 +629,7 @@ def main():
     parser.add_argument("--wda", default="")
     parser.add_argument("--wait-for", default="", help="a file that appears when the app and driver are in place")
     parser.add_argument("--script", default="")
+    parser.add_argument("--resume", action="store_true")
     parser.add_argument("--say", default="", help="only report this status and leave")
     args = parser.parse_args()
     with open(args.options, encoding="utf-8") as f:
@@ -635,7 +661,13 @@ def main():
     driver, why = make(), "ended"
     code = 0
     try:
-        if args.kind == "phone":
+        if args.resume:
+            with open(os.path.join(args.work, "resume.json")) as f:
+                state = json.load(f)
+            options.update(minutes=state.pop("minutes"), idle=state.pop("idle"), photos=[])
+            live.state["resumed"] = True
+            driver.resume(state)
+        elif args.kind == "phone":
             driver._create()
             driver._boot()  # while the app is fetched or built
             waited = time.time()
