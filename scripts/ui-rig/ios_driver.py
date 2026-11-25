@@ -74,6 +74,11 @@ class Hang(Exception):
     """The app stopped answering."""
 
 
+def plain(t):
+    """For comparing: no capitals, straight quotes."""
+    return t.lower().replace("\u2019", "'").replace("\u2018", "'")
+
+
 def run(*args, timeout=60, check=True, **kw):
     out = subprocess.run([str(a) for a in args], capture_output=True, text=True, timeout=timeout,
                          errors="replace", **kw)
@@ -707,7 +712,6 @@ class IOSDriver:
         match = re.fullmatch(r"([A-Z][A-Za-z]+):(.+)", text)
         if match and match.group(1) in INTERACTIVE | {"StaticText", "Image", "Other"}:
             kind, text = match.group(1), match.group(2)
-        plain = lambda t: t.lower().replace("\u2019", "'").replace("\u2018", "'")
         low = plain(text)
         whole = re.compile(r"(?<![a-z0-9])" + re.escape(low) + r"(?![a-z0-9])")
         pool = [e for e in self.elements if e["onscreen"] and (kind is None or e["kind"] == kind)]
@@ -836,7 +840,7 @@ class IOSDriver:
     def press_alert(self, name):
         buttons = self.alert_buttons()
         for button in buttons:
-            if button.lower() == name.lower() or name.lower() in button.lower():
+            if plain(name) in plain(button):
                 self._wda("POST", "/alert/accept", {"name": button}, timeout=15)
                 return button
         return None
