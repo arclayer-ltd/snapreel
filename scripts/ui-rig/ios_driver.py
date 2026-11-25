@@ -118,7 +118,7 @@ class IOSDriver:
         """After the phone is on: put the app and the touch driver on it."""
         self.app = app
         self.status("installing the app")
-        simctl("install", self.udid, wda, timeout=240)
+        self._put(wda)
         self._install()
         self._trust()
         self._start_log()
@@ -199,7 +199,21 @@ class IOSDriver:
                "--cellularMode", "active", "--cellularBars", "4", "--wifiBars", "3", check=False)
 
     def _install(self):
-        simctl("install", self.udid, self.app, timeout=180)
+        self._put(self.app)
+
+    def _put(self, app):
+        """Installs an app; a phone that has just started sometimes drops the first tries."""
+        for attempt in range(4):
+            try:
+                simctl("install", self.udid, app, timeout=240)
+                return
+            except (StepError, subprocess.TimeoutExpired) as error:
+                print("install try %d: %s" % (attempt + 1, error), flush=True)
+                if attempt == 3:
+                    raise StepError("the app could not be installed: %s" % error)
+                time.sleep(5)
+                subprocess.run(["xcrun", "simctl", "boot", self.udid], capture_output=True)
+                subprocess.run(["xcrun", "simctl", "bootstatus", self.udid], capture_output=True)
 
     def _start_log(self):
         self.log_file = open(self.log_path, "ab")
