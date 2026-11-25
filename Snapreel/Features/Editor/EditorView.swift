@@ -35,19 +35,24 @@ struct EditorView: View {
     var body: some View {
         ZStack {
             Color.srStage.ignoresSafeArea()
-            VStack(spacing: 0) {
-                // The top bar and transport hide while typing text so their buttons don't show
-                // through the text entry's backdrop (it has its own Cancel and Done).
-                topBar
-                    .opacity(model.textEntry == nil ? 1 : 0)
-                EditorPreview(model: model)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                transport
-                    .opacity(model.textEntry == nil ? 1 : 0)
-                EditorTimeline(model: model)
-                    // The coach mark hangs over the bar below.
-                    .zIndex(1)
-                EditorBottomBar(model: model)
+            // Exactly as wide as the screen, whatever is in it: a row that was a little too wide used to
+            // widen the whole page, and on iOS 16 dragging a shape then laid it out again for ever.
+            GeometryReader { page in
+                VStack(spacing: 0) {
+                    // The top bar and transport hide while typing text so their buttons don't show
+                    // through the text entry's backdrop (it has its own Cancel and Done).
+                    topBar
+                        .opacity(model.textEntry == nil ? 1 : 0)
+                    EditorPreview(model: model)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    transport
+                        .opacity(model.textEntry == nil ? 1 : 0)
+                    EditorTimeline(model: model)
+                        // The coach mark hangs over the bar below.
+                        .zIndex(1)
+                    EditorBottomBar(model: model)
+                }
+                .frame(width: page.size.width, height: page.size.height)
             }
             // The keyboard (text entry) covers the page instead of squeezing it.
             .ignoresSafeArea(.keyboard)

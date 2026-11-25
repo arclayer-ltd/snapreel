@@ -51,7 +51,7 @@ struct EditSource {
         var isHDR = false
         if let track = videoTracks.first {
             naturalSize = try await track.load(.naturalSize)
-            transform = try await track.load(.preferredTransform)
+            transform = Self.placed(try await track.load(.preferredTransform), size: naturalSize)
             videoRange = try await track.load(.timeRange)
             frameRate = try await track.load(.nominalFrameRate)
             bitRate = try await track.load(.estimatedDataRate)
@@ -68,6 +68,19 @@ struct EditSource {
                           uprightSize: CGSize(width: abs(turned.width), height: abs(turned.height)),
                           orientation: Self.orientation(of: transform), frameRate: frameRate,
                           videoBitRate: bitRate.isFinite ? Double(bitRate) : 0, codec: codec, isHDR: isHDR)
+    }
+
+    /// The turn with the picture's corner at 0,0. Some landscape screen recordings (up to build 47)
+    /// carry a turn that moves the picture out of its frame: it plays, but comes out black when it
+    /// is put together or encoded again.
+    static func placed(_ transform: CGAffineTransform, size: CGSize) -> CGAffineTransform {
+        var turn = transform
+        turn.tx = 0
+        turn.ty = 0
+        let box = CGRect(origin: .zero, size: size).applying(turn)
+        turn.tx = -box.minX
+        turn.ty = -box.minY
+        return turn
     }
 
     /// The EXIF-style orientation that turns the stored picture upright.

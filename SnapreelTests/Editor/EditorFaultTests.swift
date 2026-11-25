@@ -79,6 +79,8 @@ final class EditorFaultTests: XCTestCase {
             ("right", CGAffineTransform(a: 0, b: 1, c: -1, d: 0, tx: h, ty: 0)),
             ("down", CGAffineTransform(a: -1, b: 0, c: 0, d: -1, tx: w, ty: h)),
             ("left", CGAffineTransform(a: 0, b: -1, c: 1, d: 0, tx: 0, ty: w)),
+            // A turn without its move, as landscape screen recordings up to build 47 have.
+            ("unplaced", CGAffineTransform(a: 0, b: 1, c: -1, d: 0, tx: 0, ty: 0)),
         ]
         for (name, transform) in turns {
             var spec = TestMedia.Spec()
@@ -90,7 +92,9 @@ final class EditorFaultTests: XCTestCase {
             spec.transform = transform
             let (url, _) = try await TestMedia.make(spec)
             let (library, id) = try await TestMedia.library(with: url)
-            let wanted = try await TestMedia.image(url, at: 1.2)
+            // (The unplaced one shows as the "right" one does.)
+            let shown = name == "unplaced" ? TestMedia.folder.appendingPathComponent("turn-right.mov") : url
+            let wanted = try await TestMedia.image(shown, at: 1.2)
             for drawn in [false, true] {
                 var recipe = EditRecipe.original(sourceID: id, duration: 2)
                 recipe.remove(source: 0...0.5)
