@@ -175,7 +175,7 @@ private struct UploadRow: View {
             let progress = uploader.progress(for: videoID)
             return [UploadText.preparing(progress), UploadText.preparingDetail(progress)].compactMap { $0 }.joined(separator: "\n")
         case .uploading(let value):
-            return ["Uploading · \(Int((value * 100).rounded()))%", UploadText.uploadingDetail(uploader.progress(for: videoID))]
+            return ["Uploading · \(Int((value * 100).rounded()))%", uploader.progress(for: videoID)?.bytesLabel, uploader.progress(for: videoID)?.timeLabel]
                 .compactMap { $0 }.joined(separator: "\n")
         case .waitingForNetwork(let value):
             return ["Waiting for a connection · \(Int((value * 100).rounded()))%", UploadText.waitingDetail(uploader.progress(for: videoID))]
