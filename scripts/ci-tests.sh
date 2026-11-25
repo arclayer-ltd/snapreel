@@ -9,22 +9,26 @@ ONLY="${3:-}"
 mkdir -p "$OUT"
 
 xcrun simctl list runtimes > "$OUT/runtimes.txt"
-RUNTIME=$(xcrun simctl list runtimes -j | python3 -c '
+RUNTIMES=$(xcrun simctl list runtimes -j | python3 -c '
 import json, sys
 want = sys.argv[1]
 rs = [r for r in json.load(sys.stdin)["runtimes"] if r["platform"] == "iOS" and r["isAvailable"]]
 rs = [r for r in rs if not want or r["version"].startswith(want)]
-print(rs[-1]["identifier"] if rs else "")' "$WANT")
-if [ -z "$RUNTIME" ]; then
+print("\n".join(r["identifier"] for r in reversed(rs)))' "$WANT")
+if [ -z "$RUNTIMES" ]; then
   echo "::warning::No iOS $WANT simulator runtime on this runner" | tee "$OUT/skipped.txt"
   exit 0
 fi
+# Newest runtime first; some (single-device ones) accept none of these models.
 DEVICE=""
-for TYPE in "iPhone 11 Pro" "iPhone 13 mini" "iPhone 12 mini" "iPhone 14" "iPhone 15" "iPhone 16" "iPhone 17"; do
-  DEVICE=$(xcrun simctl create "Snapreel Tests" "$TYPE" "$RUNTIME" 2>/dev/null) && break || DEVICE=""
+RUNTIME=""
+for RUNTIME in $RUNTIMES; do
+  for TYPE in "iPhone 11 Pro" "iPhone 13 mini" "iPhone 14" "iPhone 15" "iPhone 16" "iPhone 17"; do
+    DEVICE=$(xcrun simctl create "Snapreel Tests" "$TYPE" "$RUNTIME" 2>/dev/null) && break 2 || DEVICE=""
+  done
 done
 if [ -z "$DEVICE" ]; then
-  echo "::error::No simulator could be created for $RUNTIME"
+  echo "::error::No simulator could be created"
   exit 1
 fi
 echo "Testing on $RUNTIME ($DEVICE)" | tee "$OUT/device.txt"
