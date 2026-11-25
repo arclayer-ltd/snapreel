@@ -71,7 +71,8 @@ final class EditorPlayback {
                         guard let self, index == self.front else { return }
                         // What it does now, not what it did when this was sent: a pause and a play right
                         // after it arrive here late, and must not stop the video again.
-                        self.onPlayingChanged?(self.players[index].timeControlStatus != .paused)
+                        // (The rate changes at once with play and pause; the status a moment later.)
+                        self.onPlayingChanged?(self.players[index].rate != 0)
                     }
                 }
                 .store(in: &observers)

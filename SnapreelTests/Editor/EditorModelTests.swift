@@ -106,13 +106,16 @@ final class EditorModelTests: XCTestCase {
             model.seek(to: 1, exact: true)
             model.play()
             let moving = await wait(4) { model.playhead > 1.2 }
-            XCTAssertTrue(moving, "plays")
+            XCTAssertTrue(moving, "plays (at \(model.playhead), player \(model.player.currentTime().seconds) rate \(model.player.rate), "
+                + "playing \(model.isPlaying), seeking \(model.playback.isSeeking), showing \(model.playback.isShowing))")
         }
         await startPlaying()
         NotificationCenter.default.post(name: AVAudioSession.interruptionNotification, object: nil,
                                         userInfo: [AVAudioSessionInterruptionTypeKey: AVAudioSession.InterruptionType.began.rawValue])
         let call = await wait(1) { !model.isPlaying }
         XCTAssertTrue(call, "a call pauses")
+        NotificationCenter.default.post(name: AVAudioSession.interruptionNotification, object: nil,
+                                        userInfo: [AVAudioSessionInterruptionTypeKey: AVAudioSession.InterruptionType.ended.rawValue])
         await startPlaying()
         NotificationCenter.default.post(name: AVAudioSession.routeChangeNotification, object: nil,
                                         userInfo: [AVAudioSessionRouteChangeReasonKey: AVAudioSession.RouteChangeReason.oldDeviceUnavailable.rawValue])

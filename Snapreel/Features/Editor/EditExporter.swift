@@ -439,8 +439,12 @@ final class EditExporter: @unchecked Sendable {
             }
         }
         try checkStop()
-        guard held != nil else { throw EditExportFailure.failed(nil) }
+        guard let last = held else { throw EditExportFailure.failed(nil) }
         try fill(until: total)
+        // A frame right at the end: writers give the last frame a usual length, not the rest of the
+        // video, so a picture that stands still to the end would otherwise stop early.
+        let tail = CMTimeMaximum(.zero, total - CMTime(value: 1, timescale: 30))
+        if tail > last.time { try emit(last.buffer, at: tail) }
         // The last pieces, when the picture stands still to the end.
         try writer?.finish()
         writer = nil
