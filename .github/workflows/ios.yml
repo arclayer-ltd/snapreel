@@ -30,6 +30,16 @@ on:
         description: Record these flow id prefixes as videos (empty = none), e.g. "flow."
         type: string
         default: ""
+      tests:
+        description: Run the unit tests (SnapreelTests)
+        type: boolean
+        default: true
+      ios16:
+        # A second job that runs the tests on an iOS 16 simulator, the oldest iOS Snapreel supports.
+        # It downloads the runtime (about 7 GB) on an older macOS image.
+        description: Also run the tests on iOS 16
+        type: boolean
+        default: false
       runner:
         # xcode-27 (Apple silicon, macOS 27) builds with the iOS 27 SDK, which App Store Connect
         # requires for uploads from April 2027 (ITMS-90725). The others build with the iOS 26 SDK.
@@ -100,6 +110,11 @@ jobs:
             exit 1
           fi
           ls build/Build/Products/Debug-iphonesimulator/Snapreel.app/PlugIns/
+
+      - name: Unit tests
+        if: ${{ inputs.tests }}
+        timeout-minutes: 45
+        run: bash scripts/ci-tests.sh ci-out/tests
 
       - name: Simulator screenshots
         if: ${{ inputs.screenshots }}
@@ -238,6 +253,45 @@ jobs:
         if: always()
         with:
           name: snapreel-ci
+          retention-days: 7
+          path: ci-out
+          if-no-files-found: ignore
+
+  ios16:
+    if: ${{ inputs.ios16 }}
+    runs-on: macos-15
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select newest Xcode that runs iOS 16 simulators
+        run: |
+          XCODE=$(for app in /Applications/Xcode_16*.app /Applications/Xcode*.app; do
+              if echo "$app" | grep -qiE 'beta|_rc'; then continue; fi
+              v=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app/Contents/Info.plist" 2>/dev/null) || continue
+              case "$v" in 16.*) echo "$v $app" ;; esac
+            done | sort -t. -k1,1n -k2,2n -k3,3n | tail -1 | cut -d' ' -f2-)
+          [ -n "$XCODE" ] && sudo xcode-select -s "$XCODE"
+          xcodebuild -version
+          xcrun simctl list runtimes | grep iOS || true
+
+      - name: Download the iOS 16 simulator runtime
+        run: |
+          set +e
+          xcrun simctl list runtimes | grep -q "iOS 16" && exit 0
+          for VERSION in 16.4; do
+            xcodebuild -downloadPlatform iOS -buildVersion "$VERSION" && break
+          done
+          xcrun simctl list runtimes | grep iOS
+          exit 0
+
+      - name: Unit tests on iOS 16
+        run: bash scripts/ci-tests.sh ci-out/tests-ios16 16
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: snapreel-ci-ios16
           retention-days: 7
           path: ci-out
           if-no-files-found: ignore
