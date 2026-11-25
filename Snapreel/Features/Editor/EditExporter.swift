@@ -800,7 +800,7 @@ private final class FrameFeed {
         guard time > .zero else { return .zero }
         // Past the end of the picture its last frame stands.
         let time = CMTimeMinimum(time, CMTimeMaximum(.zero, plan.source.videoRange.end - CMTime(value: 1, timescale: 120)))
-        if track.canProvideSampleCursors, let cursor = track.makeSampleCursor(presentationTimeStamp: time) {
+        if let cursor = track.makeSampleCursor(presentationTimeStamp: time) {
             if cursor.presentationTimeStamp > time { _ = cursor.stepInPresentationOrder(byCount: -1) }
             if cursor.presentationTimeStamp <= time { return CMTimeMaximum(.zero, cursor.presentationTimeStamp) }
         }
