@@ -388,16 +388,23 @@ class IOSDriver:
             raise StepError("%s: %s" % (value["error"], str(value.get("message", ""))[:300]))
         return reply
 
+    HUNG = ("it is hung, and the rig cannot touch or list anything until it is closed; pictures, `home` and `reopen` work, "
+            "`launch` closes and opens it")
+
     def _still_hung(self):
         """A quick look (about 2 s) at a hung app: has it come back by itself?"""
         if not self.hung:
             return False
-        self.hung = (self.main_busy() or 0) > 0.6
+        if self.away:
+            # Behind another app iOS puts it to sleep, but the touch driver still waits for its answer.
+            self.hung = self.alive()
+        else:
+            self.hung = self.alive() and (self.main_busy() or 0) > 0.6
         return self.hung
 
     def _wda(self, method, path, body=None, timeout=30):
-        if self.hung and not self.away and self._still_hung():
-            raise Hang("still hung: its main thread is busy all the time, so the touch or look was not even tried")
+        if self.hung and self._still_hung():
+            raise Hang(self.HUNG)
         if self.wda_stuck:
             self._start_wda()
             self.wda_stuck = False
@@ -417,7 +424,7 @@ class IOSDriver:
     # ---- looking ---------------------------------------------------------------------------
 
     def _raw_shot(self, path):
-        if (self.hung and not self.away) or self.wda_stuck:
+        if self.hung or self.wda_stuck:
             run("xcrun", "simctl", "io", self.udid, "screenshot", "--type=jpeg", path, timeout=40)
             return
         try:
@@ -466,8 +473,8 @@ class IOSDriver:
     def read_tree(self, timeout=None):
         """Fills self.elements with what is on screen, in reading order, numbered from 1."""
         started = time.time()
-        if self.hung and not self.away and self._still_hung():
-            raise Hang("still hung: its main thread is busy all the time")
+        if self.hung and self._still_hung():
+            raise Hang(self.HUNG)
         if self.wda_stuck:
             self._start_wda()
             self.wda_stuck = False
@@ -491,6 +498,7 @@ class IOSDriver:
         self.answer_time = time.time() - started
         if isinstance(node, str):
             node = json.loads(node)
+        self.far = []
         self.offscreen, self.app_label = 0, node.get("label") or node.get("name") or ""
         self.keyboard = False
         found, layers = self._flatten(node)
@@ -564,6 +572,8 @@ class IOSDriver:
                     found.append(item)
                 else:
                     self.offscreen += 1
+                    if text:
+                        self.far.append((text, x, y))
             children = n.get("children") or []
             big = []
             if len(children) > 1 and kind not in ("Cell", "Button"):
@@ -700,6 +710,11 @@ class IOSDriver:
                 break
             time.sleep(0.3)
         if not found:
+            away = [(e["label"], e["x"], e["y"]) for e in self.elements if not e["onscreen"]] + getattr(self, "far", [])
+            for label, x, y in away:
+                if plain(target.split(":")[-1]) in plain(label):
+                    side = "below" if y >= self.size[1] - 30 else "above" if y < 0 else "to the left" if x < 30 else "to the right"
+                    raise StepError('"%s" is there but off the screen (%s): swipe to it first' % (label[:60], side))
             near = [e["label"] for e in self.elements if e["label"] and e["onscreen"]][:25]
             raise StepError('nothing on screen is called "%s". On screen: %s' % (target, "; ".join(near)))
         return self._aim(found[0], len(found))
@@ -918,6 +933,10 @@ class IOSDriver:
 
     def activate(self):
         self.away = False
+        if self.hung:
+            simctl("launch", self.udid, BUNDLE, check=False, timeout=60)
+            time.sleep(2)
+            return
         out = simctl("launch", self.udid, BUNDLE, timeout=60)
         match = re.search(r": (\d+)", out)
         self.pid = int(match.group(1)) if match else self.pid
