@@ -228,6 +228,7 @@ final class EditorModel: ObservableObject {
     /// The player shows the recording itself, so a trim handle can show the frame under it.
     private var trimPreview: EditRecipe?
     private var trimTimeValue = 0.0
+    private var trimPreviewIsShown = false
     private var pinchStart: (scale: Double, rotation: Double)?
     private var sessionIsActive = false
     private let recorder = VoiceOverRecorder()
@@ -586,9 +587,10 @@ final class EditorModel: ObservableObject {
                 return
             }
             currentBuild = build
-            if isPlaying { playback.play() }
-            // Levels or the picture may have changed while it was made ready.
+            // What this item was made with; levels or the picture may have changed meanwhile.
+            built = (structure, picture, sound)
             refreshPlaying()
+            if isPlaying { playback.play() }
         } catch {
             if !Task.isCancelled, !isClosed { playbackFailed() }
         }
@@ -604,7 +606,8 @@ final class EditorModel: ObservableObject {
 
     /// New levels and a new picture for what is playing.
     private func refreshPlaying() {
-        guard let info = sourceInfo, let build = currentBuild, let item = player.currentItem, var built else { return }
+        guard let info = sourceInfo, let build = currentBuild, let item = player.currentItem, var built,
+              !playback.isShowing else { return }
         let picture = pictureKey, sound = soundKey
         if sound != built.sound {
             built.sound = sound
@@ -777,7 +780,7 @@ final class EditorModel: ObservableObject {
         takeTask?.cancel()
         guard !isStatic else { return }
         playback.pause()
-        if wasPlaying, trimPreview == nil { playhead = min(max(0, player.currentTime().seconds), duration) }
+        if wasPlaying, trimPreview == nil, !playback.isShowing { playhead = min(max(0, player.currentTime().seconds), duration) }
     }
 
     private func startDisplayLink() {
@@ -1022,6 +1025,7 @@ final class EditorModel: ObservableObject {
         whole.voiceClips = []
         whole.blurs = []
         trimPreview = whole
+        trimPreviewIsShown = false
         trimTime = sourceTime
         buildTask?.cancel()
         buildTask = Task { @MainActor [weak self] in
@@ -1032,7 +1036,7 @@ final class EditorModel: ObservableObject {
             let item = AVPlayerItem(asset: build.composition)
             item.videoComposition = EditCompositionBuilder.previewVideoComposition(recipe: whole, source: info, build: build,
                                                                                    fullFrame: false)
-            await self.playback.show(item, hasPicture: true, place: { [weak self] in self?.trimTime ?? 0 })
+            self.trimPreviewIsShown = await self.playback.show(item, hasPicture: true, place: { [weak self] in self?.trimTime ?? 0 })
         }
     }
 
@@ -1040,7 +1044,7 @@ final class EditorModel: ObservableObject {
         get { trimTimeValue }
         set {
             trimTimeValue = newValue
-            if trimPreview != nil { playback.seek(to: max(0, newValue), tolerance: 1.0 / 30) }
+            if trimPreview != nil, trimPreviewIsShown { playback.seek(to: max(0, newValue), tolerance: 1.0 / 30) }
         }
     }
 
