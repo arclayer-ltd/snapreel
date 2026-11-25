@@ -54,3 +54,35 @@ def fit_filter(w: int, h: int, src: str = "in", dst: str = "out") -> str:
         f"[fd]crop={w}:{tail}:0:{h - tail}[fd1];"
         f"[fa1][fb1][fc1][fd1]vstack=inputs=4[{dst}]"
     )
+
+
+def black_behind_sheet(img: Image.Image, dark: Image.Image, drop: int = 36) -> Image.Image:
+    """A fitted screen that shows a sheet (its top edge at row 132 + SHIFT): the sheet `drop` px lower, well clear of
+    the Dynamic Island, over pure black, with the Dark screen's white status bar. Everything behind the sheet goes:
+    the strip above it and what shows past its rounded corners. `dark` is the same fitted screen in Dark."""
+    a = np.asarray(img.convert("RGB")).astype(np.float32)
+    h, w = a.shape[:2]
+    top = 132 + SHIFT
+    out = np.zeros_like(a)
+    # The status bar: white on black.
+    bar = np.asarray(dark.convert("RGB")).astype(np.float32)[:BAR]
+    out[:BAR] = np.clip((bar - 24) * 255 / (255 - 24), 0, 255)
+    # The sheet, with its corners cut out of whatever was behind them.
+    sheet = a[top:].copy()
+    fill = sheet[60, w // 2 - 200].copy()
+    depth = 330
+    for left in (True, False):
+        sx = slice(0, 190) if left else slice(w - 190, w)
+        c = sheet[:depth, sx] if left else sheet[:depth, sx][:, ::-1]
+        behind = np.median(c[:6, :20], axis=(0, 1))
+        span = float(np.abs(fill - behind).sum())
+        # Coverage: 1 on the sheet's own colour, 0 on what is behind it; only from the screen's edge inwards.
+        cover = np.clip(1 - np.abs(c - fill).sum(-1) / max(span, 1) * 1.15, 0, 1)
+        full = cover > 0.97
+        run = np.where(full.any(1), full.argmax(1), full.shape[1])
+        corner = np.arange(c.shape[1])[None, :] < run[:, None]
+        new = np.where(corner[..., None], fill * cover[..., None], c)
+        sheet[:depth, sx] = new if left else new[:, ::-1]
+    body = sheet[: h - top - drop]
+    out[top + drop : top + drop + len(body)] = body
+    return Image.fromarray(np.clip(out, 0, 255).astype(np.uint8))

@@ -15,14 +15,20 @@ For each flow and mode this writes
                                                    reduced motion, and under the video while it loads
 Then run scripts/web-screens.py to export those stills.
 
-Two fixes on the way, so the phones look like a real iPhone 16 Pro:
+Three fixes on the way, so the phones look like a real iPhone 16 Pro:
 - Every video is fitted to the site's frame (scripts/web_island.py): content moves 12 pt down to clear the
   Dynamic Island. The stills are fitted later, by web-screens.py.
 - Camera mode: the simulator has no camera, so the app's Debug build shows a still photo
   (Snapreel/Debug/fixture-camera-portrait.jpg) and the preview never moves. On a real iPhone it is live video,
   so the camera flow gets a short talking clip of the same person (art/web/flows/camera-live.mp4, made from that
   photo with Higgsfield Grok Video 1.5) under the app's own overlays: each frame's overlay (the timer, the
-  buttons, the dim and the 3-2-1 of the countdown) is recovered against the still and laid over the clip.
+  buttons, the dim and the 3-2-1 of the countdown) is recovered against the still and laid over the clip. Until
+  the countdown ends they are quiet: the preview holds one closed-mouth frame, barely moving, and the clip plays
+  on from that frame when recording starts.
+- The player (the share and comments flows): the app shows its controls for the first two seconds, so a loop made
+  them blink again and again. The player's box gets the fixture clip it is playing (Snapreel/Debug/
+  fixture-camera-desk.mp4) drawn over it, dimmed as the screen behind a sheet is, so no loop shows controls. The
+  comments flow's screen around it is one frame (its reaction chips change places in the recording).
 """
 from __future__ import annotations
 
@@ -46,10 +52,10 @@ STILLS = ROOT / "art/web/screens"
 # first and under the video) is that many seconds into the clip; a negative value counts from its end.
 FLOWS: dict[str, tuple[float, float, float]] = {
     "share": (11.0, -0.5, 0.8),
-    "comments": (8.0, 3.0, 0.8),
-    "camera": (9.0, -0.5, 0.1),
-    "voice": (9.0, -0.5, 0.1),
-    "screen": (9.0, 0.6, 0.1),
+    "comments": (6.5, 3.0, 0.8),
+    "camera": (9.0, -0.5, 0.5),
+    "voice": (9.0, -0.5, 0.5),
+    "screen": (9.0, 0.6, 0.5),
 }
 HOLD = 1.6
 # x264 quality per flow (lower is better and bigger). The live camera clip moves everywhere, so it is coded a
@@ -93,6 +99,7 @@ def size(rec: Path) -> tuple[int, int]:
 # --- Camera mode: a live preview ---------------------------------------------------------------------
 
 LIVE_CLIP = ROOT / "art/web/flows/camera-live.mp4"
+QUIET = 39  # at 30 fps: eyes open, mouth closed
 LIVE_STILL = ROOT / "Snapreel/Debug/fixture-camera-portrait.jpg"
 
 
@@ -103,14 +110,15 @@ def live_camera(rec: Path, out: Path) -> Path:
     decode = subprocess.Popen(["ffmpeg", "-v", "error", "-i", str(rec), "-vf", "fps=30", "-f", "rawvideo",
                                "-pix_fmt", "rgb24", "-"], stdout=subprocess.PIPE)
     encode = subprocess.Popen(["ffmpeg", "-v", "error", "-y", "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{w}x{h}",
-                               "-r", "30", "-i", "-", "-c:v", "libx264", "-crf", "8", "-preset", "ultrafast",
+                               "-r", "30", "-i", "-", "-c:v", "libx264", "-crf", "8", "-preset", "ultrafast", "-threads", "2",
                                "-pix_fmt", "yuv444p", str(out)], stdin=subprocess.PIPE)
     clip_raw = subprocess.run(["ffmpeg", "-v", "error", "-i", str(LIVE_CLIP), "-vf", "fps=30", "-f", "rawvideo",
                                "-pix_fmt", "rgb24", "-"], check=True, capture_output=True).stdout
     cw, ch = size(LIVE_CLIP)
     clip = np.frombuffer(clip_raw, np.uint8).reshape(-1, ch, cw, 3)
-    # Forward, then back, so the clip never jumps.
-    order = list(range(len(clip))) + list(range(len(clip) - 2, 0, -1))
+    # Until recording starts: the closed-mouth frame QUIET. Then from there forward, then back, so it never jumps.
+    order = list(range(QUIET, len(clip))) + list(range(len(clip) - 2, 0, -1))
+    dimmed, recording = 0, False
 
     rect = warp = warp_clip = corners = placed = None
     live = 0
@@ -132,10 +140,24 @@ def live_camera(rec: Path, out: Path) -> Path:
                 bw, bh = rect[2] - rect[0], rect[3] - rect[1]
                 placed = cv2.warpAffine(still, warp, (bw, bh), flags=cv2.INTER_AREA).astype(np.float32)
         if rect is not None:
-            new = _relive(frame, rect, placed, warp_clip, corners, clip[order[live % len(order)]])
-            if new is not None:
-                frame = new
-                live += 1
+            dim = _dim(frame, rect, placed)
+            if dim is not None:
+                # The countdown dims the preview for 3 s (the launch dims it for a moment too: that doesn't count).
+                recording = recording or (dimmed > 45 and dim > 0.97)
+                dimmed = dimmed + 1 if dim < 0.8 else dimmed if recording or dimmed > 45 else 0
+                if recording:
+                    talk, w2 = clip[order[live % len(order)]], warp_clip
+                    live += 1
+                else:
+                    # A hand-held phone: the frame breathes by a fraction of a percent.
+                    talk = clip[QUIET]
+                    k = 1 + 0.0025 * np.sin(seen / 30 * 2 * np.pi / 4)
+                    w2 = warp_clip.copy()
+                    bw, bh = rect[2] - rect[0], rect[3] - rect[1]
+                    w2[:] = w2 * k
+                    w2[0, 2] += (1 - k) * bw / 2
+                    w2[1, 2] += (1 - k) * bh / 2
+                frame = _relive(frame, rect, placed, w2, corners, talk, dim)
         encode.stdin.write(np.ascontiguousarray(frame).tobytes())
     encode.stdin.close()
     encode.wait()
@@ -149,7 +171,7 @@ def _find_preview(frame: np.ndarray, still: np.ndarray):
     h, w = frame.shape[:2]
     bg = frame[h - 136, 30].astype(int)
     away = np.abs(frame.astype(int) - bg).max(-1) > 30
-    rows = np.where(away[:, w // 2])[0]
+    rows = np.where(away.mean(axis=1) > 0.5)[0]  # full-width rows only: not the buttons under the preview
     rows = rows[(rows > h * 0.05) & (rows < h * 0.8)]
     if len(rows) < h * 0.4:
         return None, None, None
@@ -181,9 +203,9 @@ def _find_preview(frame: np.ndarray, still: np.ndarray):
     return (x0, y0, x1, y1), warp, corners & edge
 
 
-def _relive(frame, rect, s, warp_clip, corners, clip_frame):
-    """One frame: recover the app's overlay over the still (s, already placed in the preview box), then lay it
-    over the clip. None if the still isn't showing in this frame (the launch, the home screen)."""
+def _dim(frame, rect, s):
+    """How bright the still (s) shows in this frame (below 0.8 during the countdown), or None if it isn't showing
+    (the launch, the home screen)."""
     x0, y0, x1, y1 = rect
     bw, bh = x1 - x0, y1 - y0
     c = frame[y0:y1, x0:x1].astype(np.float32)
@@ -191,6 +213,15 @@ def _relive(frame, rect, s, warp_clip, corners, clip_frame):
     ratio = float(np.median(c[probe] / np.maximum(s[probe], 1)))
     if not 0.3 < ratio < 1.3 or float(np.abs(c[probe] - ratio * s[probe]).mean()) > 14:
         return None
+    return ratio
+
+
+def _relive(frame, rect, s, warp_clip, corners, clip_frame, ratio):
+    """One frame: recover the app's overlay over the still (s, already placed in the preview box), then lay it
+    over the clip."""
+    x0, y0, x1, y1 = rect
+    bw, bh = x1 - x0, y1 - y0
+    c = frame[y0:y1, x0:x1].astype(np.float32)
     base = ratio * s
     v = ratio * cv2.warpAffine(clip_frame, warp_clip, (bw, bh), flags=cv2.INTER_CUBIC).astype(np.float32)
     d = c - base
@@ -204,6 +235,63 @@ def _relive(frame, rect, s, warp_clip, corners, clip_frame):
     new = frame.copy()
     new[y0:y1, x0:x1] = np.clip(out, 0, 255).astype(np.uint8)
     return new
+
+
+# --- The player without its controls -----------------------------------------------------------------
+
+DESK_CLIP = ROOT / "Snapreel/Debug/fixture-camera-desk.mp4"
+PLAYER = (132, 765)  # the player's rows on the 2436 px tall screen: full width, 16:9
+
+
+def clear_player(rec: Path, out: Path, name: str, start: float) -> Path:
+    """The recording from `start` (seconds) with the player's box showing the clip alone, as a near-lossless video.
+    It starts at the same time as `rec`, so the rest of the pipeline doesn't change."""
+    w, h = size(rec)
+    raw = lambda src: subprocess.Popen(["ffmpeg", "-v", "error", "-i", str(src), "-vf", "fps=30", "-f", "rawvideo",
+                                        "-pix_fmt", "rgb24", "-"], stdout=subprocess.PIPE)
+    n = w * h * 3
+    first = round(start * 30)
+
+    def frames():
+        p = raw(rec)
+        while len(buf := p.stdout.read(n)) == n:
+            yield np.frombuffer(buf, np.uint8).reshape(h, w, 3)
+        p.stdout.close()
+        p.wait()
+
+    cw, ch = size(DESK_CLIP)
+    y0, y1 = round(PLAYER[0] * h / 2436), round(PLAYER[1] * h / 2436)
+    clip = np.frombuffer(raw(DESK_CLIP).stdout.read(), np.uint8).reshape(-1, ch, cw, 3)
+    clip = [cv2.resize(f, (w, y1 - y0), interpolation=cv2.INTER_CUBIC) for f in clip]
+
+    # What the screen behind a sheet is dimmed to: the last frame's player against the clip it shows.
+    ui = base = last = None
+    for i, f in enumerate(frames()):
+        if i == first:
+            base = f[110, w // 2].astype(np.float32)
+        if i == first + 90:
+            ui = f.copy()
+        last = f
+    box = last[y0 + 60 : y1 - 60].astype(np.float32).reshape(-1, 3).mean()
+    rest = clip[-1][60:-60].astype(np.float32).reshape(-1, 3).mean()
+    end, dim = last[110, w // 2].astype(np.float32), min(1.0, float(box / rest))
+    print(f"  player cleared, dim {dim:.2f}")
+
+    encode = subprocess.Popen(["ffmpeg", "-v", "error", "-y", "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{w}x{h}",
+                               "-r", "30", "-i", "-", "-c:v", "libx264", "-crf", "8", "-preset", "ultrafast", "-threads", "2",
+                               "-pix_fmt", "yuv444p", str(out)], stdin=subprocess.PIPE)
+    for i, f in enumerate(frames()):
+        if i >= first:
+            f = (ui if name == "comments" else f).copy()
+            away = float(np.abs(end - base).sum())
+            s = float(np.clip(np.abs(f[110, w // 2] - base).sum() / away, 0, 1)) if away > 10 else 0.0
+            k = 1 + (dim - 1) * s
+            c = clip[min(i - first, len(clip) - 1)]
+            f[y0:y1] = np.clip(c.astype(np.float32) * k + 0.5, 0, 255).astype(np.uint8)
+        encode.stdin.write(np.ascontiguousarray(f).tobytes())
+    encode.stdin.close()
+    encode.wait()
+    return out
 
 
 def main() -> None:
@@ -226,6 +314,8 @@ def main() -> None:
             if name == "camera" and LIVE_CLIP.exists():
                 rec = live_camera(rec, LIVE_CLIP.parent / f".live-{mode}.mp4")
             start = content_start(rec) + skip
+            if name in ("share", "comments"):
+                rec = clear_player(rec, LIVE_CLIP.parent / f".live-{name}-{mode}.mp4", name, start)
             length = round(min(longest, duration(rec) - start + HOLD), 2)
             end = start + length
             at_poster = poster if poster >= 0 else length - FADE + poster

@@ -220,8 +220,8 @@
       "dark": "art/web/gen2/hero-dark.webp",
       "widths": [
         1280,
-        1920,
-        2880
+        1680,
+        2560
       ],
       "mobile": [
         0.25,
@@ -230,8 +230,9 @@
         1
       ],
       "mobileWidths": [
-        800,
-        1200
+        640,
+        828,
+        1080
       ],
       "foreground": [
         0.2,
@@ -252,9 +253,10 @@
       "light": "art/web/gen2/features-light.webp",
       "dark": "art/web/gen2/features-dark.webp",
       "widths": [
-        1280,
+        960,
+        1440,
         1920,
-        2880
+        2560
       ],
       "mobile": [
         0.2,
@@ -263,8 +265,9 @@
         1
       ],
       "mobileWidths": [
-        800,
-        1200
+        640,
+        828,
+        1080
       ],
       "alt": ""
     },
@@ -273,9 +276,10 @@
       "light": "art/web/gen2/pro-light.webp",
       "dark": "art/web/gen2/pro-dark.webp",
       "widths": [
-        1280,
+        960,
+        1440,
         1920,
-        2880
+        2560
       ],
       "mobile": [
         0.25,
@@ -284,8 +288,9 @@
         1
       ],
       "mobileWidths": [
-        800,
-        1200
+        640,
+        828,
+        1080
       ],
       "alt": ""
     },
@@ -295,8 +300,9 @@
       "dark": "art/web/gen2/footer-dark.webp",
       "widths": [
         960,
-        1600,
-        2880
+        1440,
+        1920,
+        2560
       ],
       "alt": "Five friends on a picnic blanket on a grassy hill wave goodbye, with a small dog",
       "mobile": [
@@ -306,8 +312,9 @@
         1
       ],
       "mobileWidths": [
-        800,
-        1200
+        640,
+        828,
+        1080
       ]
     },
     "scene-page": {
@@ -316,8 +323,9 @@
       "dark": "art/web/gen2/page-dark.webp",
       "widths": [
         960,
-        1600,
-        2880
+        1440,
+        1920,
+        2560
       ],
       "alt": ""
     },
@@ -332,7 +340,9 @@
         0.74
       ],
       "widths": [
+        240,
         480,
+        720,
         960
       ],
       "alt": "The woman in the red hoodie films the skater mid-jump"
@@ -348,7 +358,9 @@
         0.75
       ],
       "widths": [
+        240,
         480,
+        720,
         960
       ],
       "alt": "Friends on a red bench laugh at a video on a phone"
@@ -364,7 +376,9 @@
         0.98
       ],
       "widths": [
+        240,
         480,
+        720,
         960
       ],
       "alt": "A young woman walks her dog along a meadow path"
@@ -380,7 +394,9 @@
         1.0
       ],
       "widths": [
+        240,
         480,
+        720,
         960
       ],
       "alt": "A young woman sits on a low wall reading on her phone"
@@ -396,7 +412,9 @@
         0.95
       ],
       "widths": [
+        240,
         480,
+        720,
         960
       ],
       "alt": "Two friends celebrate on a rooftop"

@@ -3,8 +3,8 @@ import type { CSSProperties } from "react";
 import Link from "next/link";
 import { AppStoreBadge } from "@/components/marketing/app-store-badge";
 import { SceneStage, Spot, sceneVars, type SceneSlot } from "@/components/marketing/art";
+import { GlassPieces } from "@/components/marketing/glass-pieces";
 import { IPhone, PeekPhone } from "@/components/marketing/iphone";
-import { lifts, type LiftName } from "@/components/marketing/lifts-manifest";
 import { Reveal } from "@/components/marketing/reveal";
 import { ShareCallouts, ShareList } from "@/components/marketing/share-callouts";
 import { getArticle } from "@/components/marketing/content";
@@ -37,15 +37,6 @@ const ways = [
   { screen: "flow-screen" as const, flow: "screen" as const, icon: "screen" as IconName, title: "Screen", text: "Your screen, with your voice over it." },
   { screen: "flow-camera" as const, flow: "camera" as const, icon: "camera" as IconName, title: "Camera", text: "Front or back, with your notes on screen." },
   { screen: "flow-voice" as const, flow: "voice" as const, icon: "mic" as IconName, title: "Voice", text: "Lock your iPhone and it keeps going." },
-];
-
-/* Your phone. Your files: pieces of the app lifted out of the Library phone's screen (scripts/web-lifts.py),
-   placed in % of the phone's box: x the left edge, y the middle, w the width; from: where they slide in from. */
-const liftPieces: { name: LiftName; x: number; y: number; w: number; from: number; behind?: boolean; alt: string }[] = [
-  { name: "saved", x: -52, y: 14, w: 62, from: 40, alt: "Saved on this iPhone" },
-  { name: "tabs", x: 46, y: 28, w: 96, from: -40, alt: "Notes, Transcript and Comments" },
-  { name: "row-feedback", x: -66, y: 64, w: 122, from: 36, alt: "A recording in the library: Feedback on the onboarding copy, in the Clients folder" },
-  { name: "actions", x: 30, y: 86, w: 112, from: -36, alt: "Edit title, Save to Photos and Watch later" },
 ];
 
 const privatePoints: { icon: IconName; title: string; text: string }[] = [
@@ -158,7 +149,7 @@ export default function Home() {
             </div>
           </div>
         </div>
-        <SceneStage slot="scene-hero" priority sizes="(min-width: 1024px) max(100vw, 1480px), 100vw">
+        <SceneStage slot="scene-hero" priority sizes="(min-width: 1024px) max(100vw, 1680px), 100vw">
           <IPhone screen="flow-share" flow="share" priority sizes="(min-width: 1024px) max(312px, 20vw), 52vw" />
         </SceneStage>
       </section>
@@ -305,25 +296,7 @@ export default function Home() {
             </div>
             <Reveal className="mk-lifts py-4 lg:py-8">
               <div className="mk-private-stage">
-                {liftPieces.map((p, i) => (
-                  <div
-                    key={p.name}
-                    className={`mk-lift-piece ${p.behind ? "mk-lift-piece--behind" : ""}`}
-                    style={{ "--x": p.x, "--y": p.y, "--w": p.w, "--from": p.from, "--d": `${150 + i * 110}ms` } as CSSProperties}
-                  >
-                    <picture>
-                      <source media="(prefers-color-scheme: dark)" srcSet={`/marketing/lifts/${p.name}-dark.webp`} />
-                      <img
-                        src={`/marketing/lifts/${p.name}-light.webp`}
-                        width={Math.round(lifts[p.name].w * 2)}
-                        height={Math.round(lifts[p.name].h * 2)}
-                        alt={p.alt}
-                        loading="lazy"
-                        decoding="async"
-                      />
-                    </picture>
-                  </div>
-                ))}
+                <GlassPieces />
                 <IPhone screen="library" sizes="(min-width: 1024px) 300px, 46vw" />
               </div>
             </Reveal>
@@ -423,7 +396,7 @@ export default function Home() {
                 return (
                   <li key={g.id}>
                     <Link href={`/help/${a.id}`} className="mk-card mk-lift group flex h-full items-stretch gap-4 overflow-hidden p-3 pr-5">
-                      <Spot slot={g.spot} sizes="140px" className="mk-squircle w-[32%] max-w-[150px] shrink-0 rounded-[calc(var(--mk-r-xl)-12px)]" />
+                      <Spot slot={g.spot} sizes="220px" className="mk-squircle w-[32%] max-w-[150px] shrink-0 rounded-[calc(var(--mk-r-xl)-12px)]" />
                       <span className="flex min-w-0 flex-col justify-center py-2">
                         <span className="text-xs font-semibold uppercase tracking-[0.08em] text-red-text">{g.tag}</span>
                         <span className="mk-display mt-1 block text-lg font-bold leading-snug">{a.title}</span>

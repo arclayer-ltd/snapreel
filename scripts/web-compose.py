@@ -10,7 +10,7 @@ Driven by art/web/screens.json (slots, lighting presets, screenshot ids). Run fr
 
 Kinds of slot:
 
-- "scene": an illustrated environment (Light and Dusk). Exported as AVIF (WebP fallback) at the
+- "scene": an illustrated environment (Light and Dusk). Exported as WebP at the
   page's widths, with an optional centre crop for phones ("mobile"), an optional foreground
   cut-out that sits in front of the phone ("foreground", e.g. the hero's flower bed) and the sky
   colour along the top edge, which the page uses above the picture. A "wide" box makes a crop
@@ -28,11 +28,13 @@ Kinds of slot:
 
 Writes web/components/marketing/art-manifest.ts with sizes and paths for the page.
 
-Needs Pillow (with AVIF), numpy and OpenCV.
+Needs Pillow, numpy and OpenCV.
 """
 from __future__ import annotations
 
 import argparse
+import base64
+import io
 import json
 import math
 import sys
@@ -710,23 +712,28 @@ def foreground_matte(img: Image.Image, box: list[float], rim: list[float]) -> Im
     return Image.fromarray(out, "RGBA")
 
 
-def save_scene(img: Image.Image, base: Path, widths: list[int], q: dict) -> dict:
+def save_scene(img: Image.Image, base: Path, widths: list[int], q: dict) -> list:
+    """WebP only, at the page's widths. Above 1920 px (a 2x screen) the quality drops: those pixels are half
+    the size on screen, so the loss can't be seen and the file stays small."""
     base.parent.mkdir(parents=True, exist_ok=True)
-    files: dict[str, list] = {"avif": [], "webp": []}
-    # WebP is only the fallback for browsers without AVIF (Safari before 16), so it stops at
-    # 1920 px wide to keep the repo and the deploy small.
-    webp_max = q.get("webpMax", 1920)
+    files: list = []
     for w in widths:
+        if w > img.width and files:
+            continue
         w = min(w, img.width)
         h = round(img.height * w / img.width)
         im = img.resize((w, h), Image.LANCZOS) if w != img.width else img
-        for ext, kw in (("avif", dict(quality=q.get("avif", 58), speed=4)), ("webp", dict(quality=q.get("webp", 80), method=5))):
-            if ext == "webp" and w > webp_max and files["webp"]:
-                continue
-            path = base.with_name(f"{base.name}-{w}.{ext}")
-            im.save(path, **kw)
-            files[ext].append([w, "/" + path.relative_to(ROOT / "web/public").as_posix()])
+        path = base.with_name(f"{base.name}-{w}.webp")
+        im.save(path, quality=q.get("webp2x", 62) if w > 1920 else q.get("webp", 74), method=6)
+        files.append([w, "/" + path.relative_to(ROOT / "web/public").as_posix()])
     return files
+
+
+def blur_of(img: Image.Image) -> str:
+    """A 24 px wide version, inlined in the page, that fills the picture's place until it has loaded."""
+    buf = io.BytesIO()
+    img.resize((24, max(1, round(img.height * 24 / img.width))), Image.BOX).save(buf, "WEBP", quality=35, method=6)
+    return "data:image/webp;base64," + base64.b64encode(buf.getvalue()).decode()
 
 
 def hex_of(rgb) -> str:
@@ -760,10 +767,12 @@ def compose_scene(name: str, slot: dict, out_dir: Path, preview: bool) -> dict:
             im = img.crop(box)
             info = entry.setdefault(crop_name, {"width": im.width, "height": im.height})
             info[mode] = save_scene(im, out_dir / f"{name}-{crop_name}-{mode}", widths, q)
+            if not name.startswith("spot-"):
+                info.setdefault("blur", {})[mode] = blur_of(im)
             if fg_img is not None:
                 fim = fg_img.crop(box)
                 finfo = entry.setdefault("fg", {}).setdefault(crop_name, {"width": fim.width, "height": fim.height})
-                finfo[mode] = save_scene(fim, out_dir / f"{name}-fg-{crop_name}-{mode}", widths[:1] + widths[1:], q)
+                finfo[mode] = save_scene(fim, out_dir / f"{name}-fg-{crop_name}-{mode}", widths, q)
             if preview:
                 prev = ROOT / "art/web/review/compose" / f"{name}-{crop_name}-{mode}.jpg"
                 prev.parent.mkdir(parents=True, exist_ok=True)

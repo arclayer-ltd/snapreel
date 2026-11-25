@@ -8,7 +8,7 @@ import { useEffect, useRef } from "react";
  * reduced motion it never plays, so the still stays. Light and Dark recordings are picked with
  * prefers-color-scheme.
  */
-export function FlowVideo({ light, dark, priority = false }: { light: string; dark: string; priority?: boolean }) {
+export function FlowVideo({ light, dark }: { light: string; dark: string }) {
   const ref = useRef<HTMLVideoElement>(null);
 
   useEffect(() => {
@@ -29,8 +29,12 @@ export function FlowVideo({ light, dark, priority = false }: { light: string; da
       },
       { rootMargin: "240px 0px" },
     );
-    observer.observe(video);
+    // Not before the page itself has loaded: on a slow line the pictures come first.
+    const start = () => observer.observe(video);
+    if (document.readyState === "complete") start();
+    else window.addEventListener("load", start, { once: true });
     return () => {
+      window.removeEventListener("load", start);
       observer.disconnect();
       video.removeEventListener("playing", show);
     };
@@ -44,7 +48,7 @@ export function FlowVideo({ light, dark, priority = false }: { light: string; da
       loop
       playsInline
       disablePictureInPicture
-      preload={priority ? "auto" : "none"}
+      preload="none"
       aria-hidden="true"
       tabIndex={-1}
     >
