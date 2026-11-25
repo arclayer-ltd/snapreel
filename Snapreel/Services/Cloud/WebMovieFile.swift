@@ -472,6 +472,24 @@ final class WebMovieFile {
                 list.u32(1)
             }
             result += WebMovieFile.box("stsc", list)
+            if !isVideo {
+                // Every AAC packet needs the one before it. With this said, Apple's players cut the encoder's delay by the
+                // edit list alone; without it they assume a delay of their own and cut it twice (sound 48 ms early).
+                list = Data()
+                list.u32(1 << 24)
+                list.ascii("roll")
+                list.u32(2)
+                list.u32(1)
+                list.u16(0xFFFF)
+                result += WebMovieFile.box("sgpd", list)
+                list = Data()
+                list.u32(0)
+                list.ascii("roll")
+                list.u32(1)
+                list.u32(UInt32(sizes.count))
+                list.u32(1)
+                result += WebMovieFile.box("sbgp", list)
+            }
             list = Data()
             list.u32(0)
             list.u32(0)
