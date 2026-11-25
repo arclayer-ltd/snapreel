@@ -538,6 +538,11 @@ final class PurchaseService: ObservableObject {
     /// device, Ask to Buy approvals, interrupted purchases. Started at launch.
     func startListening() {
         guard updatesTask == nil else { return }
+        #if DEBUG
+        // The unit tests run inside the app and make services of their own, on a test store that has to
+        // be there before the App Store is first asked for anything.
+        if self === Self.shared, ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil { return }
+        #endif
         updatesTask = Task { @MainActor [weak self] in
             for await update in Transaction.updates {
                 await self?.received(update)
