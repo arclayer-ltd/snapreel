@@ -66,12 +66,30 @@ struct EditorPanelHeight<Content: View>: View {
     @ViewBuilder let content: () -> Content
 
     var body: some View {
-        ViewThatFits(in: .vertical) {
-            content()
-            ScrollView(.vertical) { content() }
+        EditorCappedHeight(limit: limit) {
+            ViewThatFits(in: .vertical) {
+                content()
+                ScrollView(.vertical) { content() }
+            }
         }
-        .frame(maxHeight: limit)
-        .fixedSize(horizontal: false, vertical: true)
+    }
+}
+
+/// As tall as its content wants, at most `limit`.
+private struct EditorCappedHeight: Layout {
+    let limit: CGFloat
+
+    private func height(_ width: CGFloat?, _ subviews: Subviews) -> CGSize {
+        let wanted = subviews.first?.sizeThatFits(ProposedViewSize(width: width, height: nil)) ?? .zero
+        return CGSize(width: width ?? wanted.width, height: min(wanted.height, limit))
+    }
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        height(proposal.width, subviews)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        subviews.first?.place(at: bounds.origin, proposal: ProposedViewSize(bounds.size))
     }
 }
 
