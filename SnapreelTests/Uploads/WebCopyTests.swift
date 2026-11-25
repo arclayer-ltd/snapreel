@@ -4,7 +4,7 @@ import XCTest
 @testable import Snapreel
 
 /// Makes recordings of the kinds Snapreel makes, prepares them for the web, and checks the result as a player would
-/// see it. With OUT_DIR set (CI) the files are kept, to be checked again with ffprobe and Chrome.
+/// see it. The files are kept as attachments, to be checked again with ffprobe and Chrome.
 final class WebCopyTests: XCTestCase {
     private var folder: URL!
 
@@ -70,11 +70,13 @@ final class WebCopyTests: XCTestCase {
         return (await box.seen, video)
     }
 
+    /// Kept with the test's results (CI exports them), to be checked again with ffprobe and Chrome.
     private func keep(_ url: URL, as name: String) {
-        guard let out = ProcessInfo.processInfo.environment["OUT_DIR"], !out.isEmpty else { return }
-        let target = URL(fileURLWithPath: out).appendingPathComponent(name)
-        try? FileManager.default.removeItem(at: target)
-        try? FileManager.default.copyItem(at: url, to: target)
+        guard let data = try? Data(contentsOf: url) else { return }
+        let attachment = XCTAttachment(data: data, uniformTypeIdentifier: "public.mpeg-4")
+        attachment.name = name
+        attachment.lifetime = .keepAlways
+        add(attachment)
     }
 
     /// The top-level boxes, in order.

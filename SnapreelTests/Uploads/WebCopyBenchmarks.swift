@@ -7,6 +7,7 @@ import XCTest
 final class WebCopyBenchmarks: XCTestCase {
     func testBenchmarks() async throws {
         guard ProcessInfo.processInfo.environment["RUN_BENCHMARKS"] == "1" else { throw XCTSkip("RUN_BENCHMARKS isn't set") }
+        executionTimeAllowance = 3_600
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent("bench-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: folder) }
@@ -46,10 +47,7 @@ final class WebCopyBenchmarks: XCTestCase {
             try? FileManager.default.removeItem(at: source)
         }
         let report = lines.joined(separator: "\n")
-        print("BENCHMARKS\n\(report)")
-        if let out = ProcessInfo.processInfo.environment["OUT_DIR"], !out.isEmpty {
-            try report.write(toFile: out + "/benchmarks.txt", atomically: true, encoding: .utf8)
-        }
+        for line in lines { print("PERF|\(line)") }
     }
 
     @MainActor private final class FirstBytes { var at: Date? }

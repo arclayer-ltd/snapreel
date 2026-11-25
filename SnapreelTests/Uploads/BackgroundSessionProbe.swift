@@ -29,11 +29,9 @@ final class BackgroundSessionProbe: XCTestCase {
         while ended.count < count && Date() < deadline { try await Task.sleep(nanoseconds: 200_000_000) }
         let (data, _) = try await URLSession.shared.data(from: url.appendingPathComponent("report"))
         let order = ended.map { "\($0.number)" }.joined(separator: " ")
-        let report = "PROBE ended \(ended.count)/\(count), statuses \(Set(ended.map(\.status))), errors \(Set(ended.compactMap(\.error)))\nPROBE order \(order)\nPROBE server \(String(decoding: data, as: UTF8.self))"
-        print(report)
-        if let out = ProcessInfo.processInfo.environment["OUT_DIR"], !out.isEmpty {
-            try report.write(toFile: out + "/probe.txt", atomically: true, encoding: .utf8)
-        }
+        print("PERF|background session: ended \(ended.count)/\(count), statuses \(Set(ended.map(\.status))), errors \(Set(ended.compactMap(\.error)))")
+        print("PERF|background session order: \(order)")
+        print("PERF|background session server: \(String(decoding: data, as: UTF8.self))")
         transfers.cancel(id)
     }
 }
