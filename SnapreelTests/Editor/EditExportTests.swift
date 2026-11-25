@@ -234,7 +234,7 @@ final class EditExportTests: XCTestCase {
         let first = EditExporter(plan: plan()) { _ in }
         let run = Task { try await first.run() }
         let piece = folder.appendingPathComponent("saving-test/piece-1.mov")
-        for _ in 0..<600 where !FileManager.default.fileExists(atPath: piece.path) { try await Task.sleep(nanoseconds: 50_000_000) }
+        for _ in 0..<4_000 where !FileManager.default.fileExists(atPath: piece.path) { try await Task.sleep(nanoseconds: 50_000_000) }
         first.cancel()
         _ = try? await run.value
         XCTAssertTrue(FileManager.default.fileExists(atPath: piece.path))

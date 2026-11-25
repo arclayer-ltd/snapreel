@@ -152,18 +152,23 @@ final class EditorPerfTests: XCTestCase {
         }
         perf(name, "busy edit scrub main thread per tick", busyScrub.busy / 120 * 1_000, "ms")
 
-        // Memory over many changes.
-        let beforeEdits = memoryMB()
-        for round in 0..<60 {
-            model.apply { $0.audio.volume = round % 2 == 0 ? 0.5 : 0.9 }
-            model.apply { $0.crop.rect = round % 2 == 0 ? CGRect(x: 0, y: 0, width: 1, height: 1) : CGRect(x: 0, y: 0.1, width: 1, height: 0.6) }
-            let at = 5 + Double(round) * 0.7
-            model.apply { $0.remove(source: at...(at + 0.2)) }
-            model.seek(to: at)
-            try? await Task.sleep(nanoseconds: 60_000_000)
+        // Memory over many changes: the first rounds fill caches, later ones must add nothing.
+        var last = memoryMB()
+        for part in 1...4 {
+            for round in 0..<45 {
+                model.apply { $0.audio.volume = round % 2 == 0 ? 0.5 : 0.9 }
+                model.apply { $0.crop.rect = round % 2 == 0 ? CGRect(x: 0, y: 0, width: 1, height: 1) : CGRect(x: 0, y: 0.1, width: 1, height: 0.6) }
+                let at = 5 + Double(round) * 0.7 + Double(part) * 0.15
+                model.apply { $0.remove(source: at...(at + 0.12)) }
+                model.seek(to: at)
+                try? await Task.sleep(nanoseconds: 60_000_000)
+            }
+            _ = await wait(3) { settled(model) }
+            try? await Task.sleep(nanoseconds: 1_500_000_000)
+            let now = memoryMB()
+            perf(name, "memory growth, edits \((part - 1) * 135 + 1) to \(part * 135)", now - last, "MB")
+            last = now
         }
-        try? await Task.sleep(nanoseconds: 1_000_000_000)
-        perf(name, "memory growth over 180 edits", memoryMB() - beforeEdits, "MB")
         perf(name, "memory peak in the editor", peak.stop() - start, "MB")
         model.teardown()
         window?.isHidden = true
