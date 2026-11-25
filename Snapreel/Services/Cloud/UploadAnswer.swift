@@ -1,7 +1,7 @@
 import Foundation
 
 /// What Storage's answer means for an upload. One place, because the same thing arrives in different clothes: an
-/// expired token is a 400 with `"exp" claim timestamp check failed` (TUS, REST) or `ExpiredToken` (S3), and a 409
+/// expired token is `"exp" claim timestamp check failed` in a 400 (TUS, REST) or a 403 (S3), and a 409
 /// can mean "the file is already there" or "you are at the wrong offset". Measured against the live project on
 /// 25 November 2026 (docs/pro/BACKEND.md, "Uploads").
 enum UploadAnswer: Equatable {

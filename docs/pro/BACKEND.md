@@ -177,7 +177,7 @@ app then starts that file again. If the `anon` key is ever switched off, S3 answ
 
 | Answer | Meaning | The app |
 |---|---|---|
-| 400 `AccessDenied`, `"exp" claim timestamp check failed` (TUS, REST); 400 `ExpiredToken` (S3); 401 | the token ran out | refreshes once, drops transfers with the old token, goes on |
+| `AccessDenied`, `"exp" claim timestamp check failed`: 400 from TUS and REST, 403 from S3 (checked with a token left to run out for an hour; the same multipart upload goes on with a new one); 400 `ExpiredToken` (the signature's own time is over); 401 | the token ran out | refreshes once, drops transfers with the old token, goes on |
 | 409 `The resource already exists` / `KeyAlreadyExists` | the object is there. **TUS says this for ever when `x-upsert: true` is missing from the `PATCH`, even for a new upload**: that was build 47's endless loop | compares sizes: finished, or replaced |
 | 409 `Upload-Offset conflict` | TUS is at another offset | asks (`HEAD`), goes on from there |
 | 404 `NoSuchUpload` | finished earlier, aborted, or over 24 hours old | looks at the stored size: finished, or starts the file again (4 times at most) |

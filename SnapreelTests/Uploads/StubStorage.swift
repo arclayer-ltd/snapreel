@@ -205,7 +205,7 @@ final class StubStorage: UploadTransfers {
         let token = query["X-Amz-Security-Token"] ?? request.value(forHTTPHeaderField: "Authorization")?.replacingOccurrences(of: "Bearer ", with: "")
         if token != validToken {
             return path.contains("/s3/")
-                ? respond(url, 400, "<Error><Code>ExpiredToken</Code><Message>The provided token has expired.</Message></Error>")
+                ? respond(url, 403, "<Error><Code>AccessDenied</Code><Message>\"exp\" claim timestamp check failed</Message></Error>")
                 : respond(url, 400, #"{"statusCode":"403","code":"AccessDenied","error":"Unauthorized","message":"\"exp\" claim timestamp check failed"}"#)
         }
         let result = perform(operation, key: key, query: query, request: request, body: body, url: url, fault: fault)

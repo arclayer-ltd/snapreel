@@ -16,8 +16,9 @@ final class UploadUnitTests: XCTestCase {
         XCTAssertEqual(classify(409, "The resource already exists"), .exists)
         XCTAssertEqual(classify(409, "Upload-Offset conflict\n"), .offsetConflict)
         XCTAssertEqual(classify(400, #"{"statusCode":"409","error":"Duplicate","message":"The resource already exists","code":"KeyAlreadyExists"}"#), .exists)
-        // An expired token is a 400 in three costumes.
+        // An expired token has several costumes; the first two are from a token that really ran out.
         XCTAssertEqual(classify(400, #"{"statusCode":"403","code":"AccessDenied","error":"Unauthorized","message":"\"exp\" claim timestamp check failed"}"#), .tokenExpired)
+        XCTAssertEqual(classify(403, "<Error><Code>AccessDenied</Code><Message>\"exp\" claim timestamp check failed</Message></Error>"), .tokenExpired)
         XCTAssertEqual(classify(400, "<Error><Code>ExpiredToken</Code><Message>The provided token has expired.</Message></Error>"), .tokenExpired)
         XCTAssertEqual(classify(403, "<Error><Code>AccessDenied</Code><Message>signature verification failed</Message></Error>"), .tokenExpired)
         XCTAssertEqual(classify(400, #"{"statusCode":"403","error":"Unauthorized","message":"Invalid Compact JWS","code":"AccessDenied"}"#), .tokenExpired)
