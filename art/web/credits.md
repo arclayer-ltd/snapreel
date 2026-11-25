@@ -1,5 +1,9 @@
 # Higgsfield credits for the website art
 
+> **No longer used (25 Nov 2026).** The scene videos listed below (rounds 8 to 10) were dropped by the owner: the site
+> shows the still pictures. Their files, scripts, masks and prompts (`video-prompts.md`, `web-scene-video.py`,
+> `scene-nature.json`, `held/`) are in git history, last in 5c533e8. The entries stay as the record of what was spent.
+
 ## Round 2: the illustrated-world redesign (2026-11-20)
 
 Budget: at most 80 credits. Balance before the first generation: 2,986.34 (stop at 2,906.34).

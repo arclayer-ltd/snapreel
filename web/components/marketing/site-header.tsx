@@ -8,13 +8,13 @@ const nav = [
   { href: "/support", label: "Support" },
 ];
 
-/** The floating white nav pill. It takes no height, so each page's scene runs up behind it. */
+/** The floating white nav bar. It takes no height, so each page's scene runs up behind it. */
 export function SiteHeader() {
   return (
     <header className="mk-header">
       <div className="px-[var(--mk-gutter)]">
         <div className="mk-nav">
-          <Link href="/" className="flex shrink-0 items-center gap-2.5 rounded-full pr-1" aria-label="Snapreel home">
+          <Link href="/" className="flex shrink-0 items-center gap-2.5 rounded-lg pr-1" aria-label="Snapreel home">
             <AppIcon size={34} />
             <span className="mk-nav-wordmark mk-display text-[1.25rem] font-bold tracking-[-0.03em]">Snapreel</span>
           </Link>
