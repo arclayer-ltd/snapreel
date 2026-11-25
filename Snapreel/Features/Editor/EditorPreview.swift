@@ -283,14 +283,14 @@ struct EditorMovable<Content: View>: View {
             .gesture(drag)
             .overlay(alignment: .topLeading) {
                 if isSelected {
-                    corner("xmark", label: "Delete") { onDelete() }
-                        .offset(x: -22, y: -22)
+                    corner("xmark", label: "Delete", alignment: .bottomTrailing) { onDelete() }
+                        .offset(x: -32, y: -32)
                 }
             }
             .overlay(alignment: .topTrailing) {
                 if isSelected, let onEdit {
-                    corner("pencil", label: "Edit text") { onEdit() }
-                        .offset(x: 22, y: -22)
+                    corner("pencil", label: "Edit text", alignment: .bottomLeading) { onEdit() }
+                        .offset(x: 32, y: -32)
                 }
             }
             .accessibilityElement(children: .contain)
@@ -303,7 +303,10 @@ struct EditorMovable<Content: View>: View {
             }
     }
 
-    private func corner(_ systemImage: String, label: String, action: @escaping () -> Void) -> some View {
+    /// The button sits on the corner and its touch area reaches outwards: a small item's middle is for
+    /// dragging, never for deleting.
+    private func corner(_ systemImage: String, label: String, alignment: Alignment,
+                        action: @escaping () -> Void) -> some View {
         Button {
             Haptics.tap()
             action()
@@ -314,7 +317,7 @@ struct EditorMovable<Content: View>: View {
                 .frame(width: 24, height: 24)
                 .background(Circle().fill(Color.white))
                 .shadow(color: .black.opacity(0.3), radius: 2)
-                .frame(width: 44, height: 44)
+                .frame(width: 44, height: 44, alignment: alignment)
                 .contentShape(Rectangle())
         }
         .accessibilityLabel(label)
@@ -370,9 +373,9 @@ struct EditorBlurBox: View {
                     .fill(Color.white)
                     .frame(width: 18, height: 18)
                     .shadow(color: .black.opacity(0.4), radius: 2)
-                    .frame(width: 46, height: 46)
+                    .frame(width: 46, height: 46, alignment: .topLeading)
                     .contentShape(Rectangle())
-                    .offset(x: 23, y: 23)
+                    .offset(x: 37, y: 37)
                     .gesture(resize)
                     .accessibilityLabel("Resize blur")
             }
@@ -388,10 +391,10 @@ struct EditorBlurBox: View {
                         .foregroundStyle(Color.srInk)
                         .frame(width: 22, height: 22)
                         .background(Circle().fill(Color.white))
-                        .frame(width: 44, height: 44)
+                        .frame(width: 44, height: 44, alignment: .bottomTrailing)
                         .contentShape(Rectangle())
                 }
-                .offset(x: -22, y: -22)
+                .offset(x: -33, y: -33)
                 .accessibilityLabel("Delete blur")
             }
         }

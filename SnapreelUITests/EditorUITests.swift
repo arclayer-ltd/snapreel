@@ -220,7 +220,19 @@ final class EditorUITests: XCTestCase {
         tapButton("Done")
         openTool("Shapes")
         app.buttons["Add arrow"].tap()
+        XCTAssertTrue(app.buttons["Delete"].firstMatch.waitForExistence(timeout: 3))
+        XCTAssertEqual(app.buttons["Save"].firstMatch.frame.maxX, app.frame.maxX - 16, accuracy: 4, "the page is as wide as the screen")
         shot("arrow")
+        // Dragging it by its middle moves it as far as the finger (build 47 hung here on iOS 16).
+        let arrow = app.otherElements["Arrow"].firstMatch
+        XCTAssertTrue(arrow.exists)
+        let was = arrow.frame
+        let middle = app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: was.midX, dy: was.midY))
+        middle.press(forDuration: 0.1, thenDragTo: middle.withOffset(CGVector(dx: 25, dy: 60)), withVelocity: .slow, thenHoldForDuration: 0.2)
+        XCTAssertTrue(arrow.waitForExistence(timeout: 5), "still there")
+        XCTAssertEqual(arrow.frame.midY - was.midY, 60, accuracy: 14)
+        XCTAssertEqual(arrow.frame.midX - was.midX, 25, accuracy: 14)
+        shot("arrow-moved")
         tapButton("Done")
         openTool("Sound")
         app.buttons["Fade in"].tap()
