@@ -269,7 +269,7 @@ jobs:
           XCODE=$(for app in /Applications/Xcode_16*.app /Applications/Xcode*.app; do
               if echo "$app" | grep -qiE 'beta|_rc'; then continue; fi
               v=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app/Contents/Info.plist" 2>/dev/null) || continue
-              case "$v" in 16.*) echo "$v $app" ;; esac
+              if echo "$v" | grep -q '^16\.'; then echo "$v $app"; fi
             done | sort -t. -k1,1n -k2,2n -k3,3n | tail -1 | cut -d' ' -f2-)
           [ -n "$XCODE" ] && sudo xcode-select -s "$XCODE"
           xcodebuild -version
