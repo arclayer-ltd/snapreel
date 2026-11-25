@@ -5,59 +5,109 @@ import SwiftUI
 /// opens from Settings and from the limits: a recording over 5 minutes, the 26th link, or a
 /// Pro-only setting. Recording, the library and sending files stay free.
 struct PaywallView: View {
-    enum Outcome: Equatable {
-        case none
-        case purchased
-        case pending
-        case restoredNothing
+    typealias Outcome = PurchaseEnding
+
+    /// What the paywall is about right now. Every way a purchase can end has one.
+    enum Stage: Equatable {
+        /// The plans, with a note about the last try when there was one.
+        case plans
+        /// Just bought or restored.
+        case welcome
+        /// Already on Pro.
+        case active
+        /// Paid for; the server hasn't got it yet.
+        case confirming
+        /// This Apple Account's subscription is on another Snapreel account.
+        case otherAccount(hint: String?, canMove: Bool)
+        /// Paid for, and nobody signed in to have it.
+        case signInNeeded
+        /// The server doesn't accept the transaction.
+        case refused
     }
 
     let reason: PaywallReason
+    /// Something carries on after this (copying the link that met the limit).
+    let continues: Bool
     let onClose: @MainActor () -> Void
+    /// On Pro now: close, into what the person was doing.
+    let onUnlocked: @MainActor () -> Void
 
     @ObservedObject private var store = PurchaseService.shared
     @ObservedObject private var auth = AuthService.shared
     @State private var selected: String
-    @State private var outcome: Outcome
-    @State private var error: String?
+    /// Fixture screens: an ending to show without a purchase.
+    @State private var fixedOutcome: Outcome
     @State private var isRestoring = false
+    @State private var isSigningIn = false
+    @State private var asksAboutMoving = false
+    @State private var asksAboutSwitching = false
 
     init(reason: PaywallReason, selected: String = CloudConfig.yearlyProductID, outcome: Outcome = .none,
-         onClose: @escaping @MainActor () -> Void) {
+         continues: Bool = false, onClose: @escaping @MainActor () -> Void,
+         onUnlocked: (@MainActor () -> Void)? = nil) {
         self.reason = reason
+        self.continues = continues
         self.onClose = onClose
+        self.onUnlocked = onUnlocked ?? onClose
         _selected = State(initialValue: selected)
-        _outcome = State(initialValue: outcome)
+        _fixedOutcome = State(initialValue: outcome)
     }
 
     private var plans: [ProPlan] { store.plans }
     private var selectedPlan: ProPlan? { plans.first { $0.id == selected } ?? plans.first }
+    private var ending: PurchaseEnding { fixedOutcome == .none ? store.ending : fixedOutcome }
+    private var isBusy: Bool { store.activity != nil || isRestoring || isSigningIn || store.isMoving }
+
+    private var stage: Stage {
+        Self.stage(standing: store.standing, ending: ending, isPro: auth.isPro,
+                   serverIsPro: auth.me?.isPro == true, isSignedIn: auth.isSignedIn)
+    }
+
+    static func stage(standing: PurchaseService.Standing, ending: PurchaseEnding, isPro: Bool,
+                      serverIsPro: Bool, isSignedIn: Bool) -> Stage {
+        let justGotIt = ending == .purchased || ending == .restored
+        // The server has this account on Pro, whichever Apple Account pays for it.
+        if isSignedIn, serverIsPro { return justGotIt ? .welcome : .active }
+        switch standing {
+        case .confirming: return .confirming
+        case .signInNeeded: return .signInNeeded
+        case .refused: return .refused
+        case .otherAccount(let hint, let canMove): return .otherAccount(hint: hint, canMove: canMove)
+        case .none, .paymentProblem, .subscribed: break
+        }
+        if isPro { return justGotIt ? .welcome : .active }
+        return .plans
+    }
 
     var body: some View {
         // The hero runs up under the top edge; the close button stays inside the safe area.
         ZStack(alignment: .topTrailing) {
-            ScrollView {
-                VStack(spacing: 0) {
-                    hero
-                    VStack(spacing: Space.xl) {
-                        if auth.isPro && outcome == .none {
-                            activeCard
-                        } else if outcome == .purchased {
-                            welcomeCard
-                        } else {
-                            planPicker
-                            buyBlock
+            ScrollViewReader { scroller in
+                ScrollView {
+                    VStack(spacing: 0) {
+                        hero
+                        VStack(spacing: Space.xl) {
+                            VStack(spacing: Space.xl) { main }
+                                .id(Self.mainID)
+                            features
+                            finePrint
+                            links
                         }
-                        features
-                        finePrint
-                        links
+                        .padding(.horizontal, Space.gutter)
+                        .padding(.top, Space.l)
+                        .padding(.bottom, Space.xxxl)
                     }
-                    .padding(.horizontal, Space.gutter)
-                    .padding(.top, Space.l)
-                    .padding(.bottom, Space.xxxl)
+                }
+                .ignoresSafeArea(edges: .top)
+                // Restore is at the very bottom, and what came of it at the top.
+                .onChange(of: ending) { ending in
+                    guard ending != .none else { return }
+                    withAnimation(Motion.standard) { scroller.scrollTo(Self.mainID, anchor: .bottom) }
+                }
+                .onChange(of: stage) { _ in
+                    withAnimation(Motion.standard) { scroller.scrollTo(Self.mainID, anchor: .bottom) }
                 }
             }
-            .ignoresSafeArea(edges: .top)
             CircleIconButton(systemName: "xmark", label: "Close", tone: .glass, size: 32) { onClose() }
                 .padding(Space.m)
         }
@@ -70,7 +120,59 @@ struct PaywallView: View {
                 .toolbar(.visible, for: .navigationBar)
                 .background(Color.srCanvas.ignoresSafeArea())
         }
-        .task { await store.loadProducts() }
+        .animation(Motion.standard, value: stage)
+        .animation(Motion.quick, value: ending)
+        .task { await store.keepLoadingProducts() }
+        .task(id: stage) { await leaveWhenUnlocked() }
+        .onAppear { store.paywallOpened() }
+        .onDisappear { store.paywallClosed() }
+        .onChange(of: store.ending) { ending in
+            switch ending {
+            case .purchased, .restored, .alreadyYours: Haptics.success()
+            case .failed: Haptics.error()
+            case .none, .pending, .cancelled, .restoredNothing: break
+            }
+        }
+        .confirmationDialog("Move Snapreel Pro to this account?", isPresented: $asksAboutMoving, titleVisibility: .visible) {
+            Button("Move Pro here") { Task { @MainActor in await store.moveHere() } }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Pro switches off on the other account, and its links go back to the Free limits. Your Apple subscription stays the same, and you aren't charged.")
+        }
+        .confirmationDialog("Sign in to the other account?", isPresented: $asksAboutSwitching, titleVisibility: .visible) {
+            Button("Sign out and switch") { ProPresenter.switchAccount() }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("You'll sign out of \(auth.email ?? "this account") first. Your recordings stay on this iPhone, and links already shared keep working. Uploads that haven't finished stop.")
+        }
+    }
+
+    /// Met on the way to something (a long recording, the 26th link, a Pro setting): once Pro is on,
+    /// a moment to see it and then straight back to that. Opened from Settings, it stays.
+    private func leaveWhenUnlocked() async {
+        guard stage == .welcome, reason != .settings, fixedOutcome == .none,
+              !UIAccessibility.isVoiceOverRunning else { return }
+        try? await Task.sleep(nanoseconds: 1_800_000_000)
+        guard !Task.isCancelled else { return }
+        onUnlocked()
+    }
+
+    private static let mainID = "main"
+
+    /// The plans, or what became of them.
+    @ViewBuilder
+    private var main: some View {
+        switch stage {
+        case .plans:
+            planPicker
+            buyBlock
+        case .welcome: welcomeCard
+        case .active: activeCard
+        case .confirming: confirmingCard
+        case .otherAccount(let hint, let canMove): otherAccountCard(hint: hint, canMove: canMove)
+        case .signInNeeded: signInCard
+        case .refused: refusedCard
+        }
     }
 
     // MARK: Hero
@@ -107,10 +209,15 @@ struct PaywallView: View {
     }
 
     /// Already Pro, or just subscribed.
-    private var showsProHero: Bool { outcome == .purchased || (auth.isPro && outcome == .none) }
+    private var showsProHero: Bool { stage == .welcome || stage == .active }
 
     private var heroTitle: String {
-        if showsProHero { return "You're on Pro" }
+        switch stage {
+        case .welcome, .active: return "You're on Pro"
+        case .confirming: return "Almost there"
+        case .otherAccount, .refused, .signInNeeded: return "You've got Snapreel Pro"
+        case .plans: break
+        }
         switch reason {
         case .settings: return "Share without limits"
         case .duration(let seconds): return "This recording is \(Format.clock(seconds))"
@@ -120,7 +227,14 @@ struct PaywallView: View {
     }
 
     private var heroMessage: String {
-        if showsProHero { return "Thanks for supporting Snapreel. Everything below is switched on for your links." }
+        switch stage {
+        case .welcome, .active: return "Thanks for supporting Snapreel. Everything below is switched on for your links."
+        case .confirming: return "Apple has your payment. Pro is being switched on for your account."
+        case .otherAccount: return "This Apple Account pays for it, on a different Snapreel account from this one."
+        case .signInNeeded: return "This Apple Account has a subscription. Sign in to use it."
+        case .refused: return "Apple has your payment, but Snapreel's server couldn't confirm it."
+        case .plans: break
+        }
         switch reason {
         case .settings:
             return "Unlimited share links, longer videos in sharper quality, and the full story of who watched."
@@ -141,7 +255,8 @@ struct PaywallView: View {
         VStack(spacing: Space.s) {
             ForEach(plans) { plan in
                 PlanCard(plan: plan, isSelected: plan.id == selectedPlan?.id,
-                         saving: plan.period == .year ? store.yearlySaving : nil) {
+                         saving: plan.period == .year ? store.yearlySaving : nil,
+                         hasPrice: plan.isPurchasable) {
                     Haptics.selection()
                     withAnimation(Motion.quick) { selected = plan.id }
                 }
@@ -151,33 +266,25 @@ struct PaywallView: View {
 
     private var buyBlock: some View {
         VStack(spacing: Space.s) {
+            // Above the button, where the eye is after a tap and no phone is too small to show it.
+            purchaseNote
             Button {
                 buy()
             } label: {
                 HStack(spacing: Space.xs) {
-                    if store.purchasing != nil { ProgressView().tint(.white) }
+                    if store.activity != nil { ProgressView().tint(.white) }
                     Text(buyTitle)
                 }
             }
             .buttonStyle(.srPrimary)
-            .disabled(store.purchasing != nil || isRestoring || !(selectedPlan?.isPurchasable ?? false) && !isDebugPlans)
+            .disabled(isBusy || !canBuy)
 
-            if let plan = selectedPlan {
+            if let plan = selectedPlan, canBuy {
                 Text(renewalLine(plan))
                     .font(.srFootnote)
                     .foregroundStyle(Color.srTextSecondary)
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
-            }
-            if outcome == .pending {
-                note("Waiting for approval. Pro switches on as soon as the purchase is approved.", systemImage: "hourglass")
-            } else if outcome == .restoredNothing {
-                note("No Snapreel Pro subscription was found for this Apple Account.", systemImage: "info.circle.fill")
-            } else if let error {
-                note(error, systemImage: "exclamationmark.circle.fill", isError: true)
-            } else if store.loadFailed && !isDebugPlans {
-                note("The App Store isn't answering, so prices may be out of date. Check your connection.",
-                     systemImage: "wifi.exclamationmark", isError: true)
             }
             if !auth.isSignedIn {
                 Text("You'll sign in first, so Pro belongs to your Snapreel account.")
@@ -188,18 +295,71 @@ struct PaywallView: View {
         }
     }
 
-    private var isDebugPlans: Bool {
-        #if DEBUG
-        return store.debugPlans != nil
-        #else
-        return false
-        #endif
+    private var canBuy: Bool { selectedPlan?.isPurchasable == true }
+
+    /// How the last try ended, or why there's nothing to try yet.
+    @ViewBuilder
+    private var purchaseNote: some View {
+        if let activity = store.activity {
+            if activity.isSlow {
+                VStack(spacing: Space.s) {
+                    note("The App Store is taking longer than usual. If Apple's sheet isn't on screen, you can stop waiting and try again. You won't be charged twice.",
+                         systemImage: "clock.fill")
+                    Button("Stop waiting") { store.stopWaiting() }
+                        .buttonStyle(.srSecondaryCompact)
+                }
+            }
+        } else if case .failed(let message) = ending {
+            note(message, systemImage: "exclamationmark.circle.fill", isError: true)
+        } else if ending == .pending {
+            note("Waiting for approval. Pro switches on by itself as soon as the purchase is approved, also while Snapreel is closed.",
+                 systemImage: "hourglass")
+        } else if ending == .cancelled {
+            note("Not subscribed, and you haven't been charged. If Apple asked for your password, finish that step on Apple's sheet. Tap the button to try again.",
+                 systemImage: "info.circle.fill")
+        } else if ending == .restoredNothing {
+            note("No Snapreel Pro subscription was found for this Apple Account. If you bought it with another Apple Account, sign in to Snapreel with the account you used then.",
+                 systemImage: "info.circle.fill")
+        } else if store.standing == .paymentProblem {
+            VStack(spacing: Space.s) {
+                note("Apple couldn't charge your last renewal, so Pro is off. Update your payment details with Apple and it comes back by itself.",
+                     systemImage: "creditcard.trianglebadge.exclamationmark", isError: true)
+                manageButton
+            }
+        } else if !canBuy, store.loadFailed {
+            VStack(spacing: Space.s) {
+                note("The App Store isn't answering, so there are no prices yet. Trying again by itself.",
+                     systemImage: "wifi.exclamationmark", isError: true)
+                Button(store.isLoading ? "Trying…" : "Try now") { Task { @MainActor in await store.loadProducts() } }
+                    .buttonStyle(.srSecondaryCompact)
+                    .disabled(store.isLoading)
+            }
+        }
+    }
+
+    private var manageButton: some View {
+        Button {
+            store.manageSubscriptions()
+        } label: {
+            HStack(spacing: Space.xs) {
+                if store.isOpeningManage { ProgressView() }
+                Text(store.isOpeningManage ? "Opening Apple's page…" : "Manage subscription")
+            }
+        }
+        .buttonStyle(.srSecondaryCompact)
+        .disabled(store.isOpeningManage)
     }
 
     private var buyTitle: String {
         guard let plan = selectedPlan else { return "Subscribe" }
-        if store.purchasing != nil { return "Waiting for the App Store…" }
-        if !plan.isPurchasable && !isDebugPlans { return store.isLoading ? "Loading prices…" : "Subscribe" }
+        switch store.activity?.phase {
+        case .starting: return "One moment…"
+        case .appStore: return "Waiting for the App Store…"
+        case .confirming: return "Switching Pro on…"
+        case nil: break
+        }
+        if isSigningIn { return "Signing in…" }
+        if !canBuy { return store.loadFailed && !store.isLoading ? "Subscribe" : "Loading prices…" }
         if let days = plan.trialDays { return "Try \(ProPlan.trialText(days)) free" }
         return "Subscribe for \(plan.displayPrice) \(plan.periodText)"
     }
@@ -237,21 +397,160 @@ struct PaywallView: View {
                 .font(.srSubheadline)
                 .foregroundStyle(Color.srTextSecondary)
                 .fixedSize(horizontal: false, vertical: true)
-            Button("Manage subscription") { store.manageSubscriptions() }
-                .buttonStyle(.srSecondaryCompact)
+            if ending == .alreadyYours {
+                note("You already have this, so nothing was bought and you weren't charged.", systemImage: "info.circle.fill")
+            } else if ending == .cancelled {
+                note("Your plan stays as it is, and you haven't been charged.", systemImage: "info.circle.fill")
+            } else if ending == .pending {
+                note("Waiting for approval. The change happens by itself once it's approved.", systemImage: "hourglass")
+            } else if case .failed(let message) = ending {
+                note(message, systemImage: "exclamationmark.circle.fill", isError: true)
+            }
+            if reason != .settings {
+                Button(continueTitle) { onUnlocked() }
+                    .buttonStyle(.srPrimary)
+            }
+            if let yearly = yearlyUpgrade {
+                Button {
+                    buy(yearly.id)
+                } label: {
+                    HStack(spacing: Space.xs) {
+                        if store.activity != nil { ProgressView() }
+                        Text(store.activity == nil ? "Switch to yearly, \(yearly.displayPrice)" : "Waiting for the App Store…")
+                    }
+                }
+                .buttonStyle(.srSecondary)
+                .disabled(isBusy)
+                Text("Apple takes off what's left of your month.")
+                    .font(.srFootnote)
+                    .foregroundStyle(Color.srTextTertiary)
+            }
+            manageButton
         }
         .padding(Space.m)
         .srCard()
     }
 
+    /// The yearly plan, for someone paying monthly on this Apple Account.
+    private var yearlyUpgrade: ProPlan? {
+        guard store.activeProductID == CloudConfig.monthlyProductID, store.nextProductID != CloudConfig.yearlyProductID,
+              let yearly = plans.first(where: { $0.period == .year }), yearly.isPurchasable else { return nil }
+        return yearly
+    }
+
     private var activeDetail: String {
         let product = store.activeProductID ?? auth.me?.plan.productId
         let name = product == CloudConfig.monthlyProductID ? "Monthly" : "Yearly"
-        if let expiry = store.activeExpiry ?? auth.me?.plan.expiresAt {
-            let renews = store.willRenew ?? true
-            return "\(name) plan. \(renews ? "Renews" : "Ends") on \(ProText.longDate(expiry))."
+        guard let expiry = store.activeExpiry ?? auth.me?.plan.expiresAt else {
+            return "\(name) plan, managed by the App Store."
         }
-        return "\(name) plan, managed by the App Store."
+        let date = ProText.longDate(expiry)
+        if store.willRenew == false { return "\(name) plan. Ends on \(date)." }
+        if let next = store.nextProductID, next != product {
+            return "\(name) plan. Changes to \(next == CloudConfig.monthlyProductID ? "monthly" : "yearly") on \(date)."
+        }
+        return "\(name) plan. Renews on \(date)."
+    }
+
+    // MARK: Paid for, but not on here
+
+    private var confirmingCard: some View {
+        stateCard(systemImage: "checkmark.circle.fill", title: "Payment received",
+                  text: "Snapreel's server hasn't confirmed it yet, usually because of the connection. Snapreel keeps trying by itself, also after you close this. Don't buy it again.") {
+            Button {
+                Task { @MainActor in await store.confirmNow() }
+            } label: {
+                HStack(spacing: Space.xs) {
+                    ProgressView().tint(.white)
+                    Text("Try now")
+                }
+            }
+            .buttonStyle(.srPrimary)
+        }
+    }
+
+    private func otherAccountCard(hint: String?, canMove: Bool) -> some View {
+        stateCard(systemImage: "person.2.fill", title: "Pro is on another account",
+                  text: otherAccountText(hint: hint)) {
+            if case .failed(let message) = ending {
+                note(message, systemImage: "exclamationmark.circle.fill", isError: true)
+            }
+            Button("Sign in to that account") { asksAboutSwitching = true }
+                .buttonStyle(.srPrimary)
+                .disabled(isBusy)
+            if canMove {
+                Button {
+                    asksAboutMoving = true
+                } label: {
+                    HStack(spacing: Space.xs) {
+                        if store.isMoving { ProgressView() }
+                        Text(store.isMoving ? "Moving…" : "Use Pro on this account instead")
+                    }
+                }
+                .buttonStyle(.srSecondary)
+                .disabled(isBusy)
+            }
+        }
+    }
+
+    private func otherAccountText(hint: String?) -> String {
+        let whose = hint.map { "It belongs to \($0)." } ?? "It belongs to a different Snapreel account."
+        let here = auth.email.map { " You're signed in as \($0)." } ?? ""
+        return "\(whose)\(here) You don't need to buy it again."
+    }
+
+    private var signInCard: some View {
+        stateCard(systemImage: "person.crop.circle.badge.checkmark", title: "Sign in to use it",
+                  text: "Snapreel Pro belongs to a Snapreel account. Sign in with the one you use, and Pro switches on. You won't be charged again.") {
+            Button(isSigningIn ? "Signing in…" : "Sign in") { signIn() }
+                .buttonStyle(.srPrimary)
+                .disabled(isSigningIn)
+        }
+    }
+
+    private var refusedCard: some View {
+        stateCard(systemImage: "exclamationmark.triangle.fill", title: "Couldn't confirm it",
+                  text: "Your subscription is safe with Apple, and you don't need to buy it again. Update Snapreel and try again; if it still doesn't switch on, write to support@snapreel.video.") {
+            Button("Try again") { Task { @MainActor in await store.confirmNow() } }
+                .buttonStyle(.srPrimary)
+        }
+    }
+
+    private func stateCard<Actions: View>(systemImage: String, title: String, text: String,
+                                          @ViewBuilder actions: () -> Actions) -> some View {
+        VStack(spacing: Space.s) {
+            ZStack {
+                Circle().fill(Color.srRedSoft)
+                Image(systemName: systemImage)
+                    .font(.system(size: 24, weight: .bold))
+                    .foregroundStyle(Color.srRed)
+            }
+            .frame(width: 64, height: 64)
+            .accessibilityHidden(true)
+            Text(title)
+                .font(.srTitle)
+                .foregroundStyle(Color.srText)
+                .multilineTextAlignment(.center)
+            Text(text)
+                .font(.srSubheadline)
+                .foregroundStyle(Color.srTextSecondary)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+            VStack(spacing: Space.s) { actions() }
+                .padding(.top, Space.xs)
+        }
+        .padding(Space.l)
+        .frame(maxWidth: .infinity)
+        .srCard()
+    }
+
+    /// What closing a paywall someone met on the way leads to.
+    private var continueTitle: String {
+        switch reason {
+        case .duration, .links: return continues ? "Copy the link" : "Continue"
+        case .settings: return "Done"
+        case .feature: return "Continue"
+        }
     }
 
     private var welcomeCard: some View {
@@ -263,7 +562,7 @@ struct PaywallView: View {
                     .foregroundStyle(Color.srRed)
             }
             .frame(width: 64, height: 64)
-            Text("Welcome to Pro")
+            Text(ending == .restored ? "Pro is back" : "Welcome to Pro")
                 .font(.srTitle)
                 .foregroundStyle(Color.srText)
             Text("Your links can now be any length up to 2 hours, in 1080p, with passwords, expiry and full insights.")
@@ -271,7 +570,7 @@ struct PaywallView: View {
                 .foregroundStyle(Color.srTextSecondary)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
-            Button("Done") { onClose() }
+            Button(continueTitle) { onUnlocked() }
                 .buttonStyle(.srPrimary)
                 .padding(.top, Space.xs)
         }
@@ -330,7 +629,7 @@ struct PaywallView: View {
                 }
             }
             .frame(maxWidth: .infinity)
-            .disabled(isRestoring || store.purchasing != nil)
+            .disabled(isBusy)
             divider
             NavigationLink(value: LegalDocument.terms) {
                 Text("Terms of Use (EULA)")
@@ -354,52 +653,35 @@ struct PaywallView: View {
 
     // MARK: Actions
 
-    private func buy() {
-        guard let plan = selectedPlan else { return }
-        error = nil
+    /// Buys the chosen plan, signing in first when needed. `PurchaseService` takes the tap at once, so
+    /// a second one can't start another purchase.
+    private func buy(_ productID: String? = nil) {
+        guard let id = productID ?? selectedPlan?.id, !isBusy else { return }
+        store.clearEnding()
         guard auth.isSignedIn else {
+            isSigningIn = true
+            // Completes once the sign-in sheet has gone, so Apple's comes up on a still screen.
             ProPresenter.signIn(reason: .subscribe) { signedIn in
-                if signedIn { buy() }
+                isSigningIn = false
+                if signedIn { store.buy(id) }
             }
             return
         }
-        Task { @MainActor in
-            // US app-store age laws: read the declared age range first (see AgeGate).
-            let age = await AgeGate.check(.purchase)
-            if let message = AgeGate.message(for: age, moment: .purchase) {
-                Haptics.error()
-                self.error = message
-                return
-            }
-            do {
-                switch try await store.purchase(plan.id) {
-                case .purchased:
-                    Haptics.success()
-                    withAnimation(Motion.standard) { outcome = .purchased }
-                case .pending:
-                    withAnimation(Motion.standard) { outcome = .pending }
-                case .cancelled:
-                    break
-                }
-            } catch {
-                Haptics.error()
-                self.error = (error as? LocalizedError)?.errorDescription ?? (error as? CloudError)?.message
-                    ?? "The purchase didn't go through. You haven't been charged."
-            }
+        store.buy(id)
+    }
+
+    private func signIn() {
+        isSigningIn = true
+        ProPresenter.signIn(reason: .subscribe) { signedIn in
+            isSigningIn = false
+            if signedIn { Task { @MainActor in await store.confirmNow() } }
         }
     }
 
     private func restore() {
         isRestoring = true
-        error = nil
         Task { @MainActor in
-            do {
-                let found = try await store.restore()
-                Haptics.success()
-                withAnimation(Motion.standard) { outcome = found ? .purchased : .restoredNothing }
-            } catch {
-                self.error = "Restore didn't finish. Check your connection and try again."
-            }
+            await store.restoreForPaywall()
             isRestoring = false
         }
     }
@@ -412,6 +694,8 @@ private struct PlanCard: View {
     let plan: ProPlan
     let isSelected: Bool
     let saving: Int?
+    /// The App Store's price has loaded.
+    let hasPrice: Bool
     let action: @MainActor () -> Void
 
     var body: some View {
@@ -444,6 +728,7 @@ private struct PlanCard: View {
                         .font(.srFootnote)
                         .foregroundStyle(Color.srTextSecondary)
                         .fixedSize(horizontal: false, vertical: true)
+                        .redacted(reason: hasPrice ? [] : .placeholder)
                 }
                 Spacer(minLength: Space.xs)
                 VStack(alignment: .trailing, spacing: 1) {
@@ -454,6 +739,8 @@ private struct PlanCard: View {
                         .font(.srFootnote)
                         .foregroundStyle(Color.srTextTertiary)
                 }
+                .redacted(reason: hasPrice ? [] : .placeholder)
+                .accessibilityHidden(!hasPrice)
             }
             .padding(Space.m)
             .background(RoundedRectangle(cornerRadius: Radius.l, style: .continuous).fill(Color.srSurface))

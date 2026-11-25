@@ -52,14 +52,20 @@ enum ProPresenter {
     private static weak var signInController: UIViewController?
     private static weak var paywallController: UIViewController?
     private static weak var settingsController: UIViewController?
+    /// Waiting for the top of the stack to be still, or on their way up.
+    private static var arriving: Set<ObjectIdentifier> = []
 
     // MARK: Sheets
 
+    /// `completion` runs once the sheet has gone, so whatever comes next (Apple's payment sheet, the
+    /// share sheet) has a still screen to come up on. A second call while it's up does nothing: the
+    /// first one's completion stands.
     static func signIn(reason: SignInReason, completion: (@MainActor (Bool) -> Void)? = nil) {
         if AuthService.shared.isSignedIn {
             completion?(true)
             return
         }
+        guard !isShowing(signInController) else { return }
         var finished = false
         let finish: @MainActor (Bool) -> Void = { signedIn in
             guard !finished else { return }
@@ -69,17 +75,30 @@ enum ProPresenter {
         let view = SignInSheet(reason: reason, onDone: { finish($0) })
         let controller = host(view, detents: [.large()], onDismiss: { finish(AuthService.shared.isSignedIn) })
         signInController = controller
-        present(controller)
+        present(controller, orElse: { finish(false) })
     }
 
-    static func paywall(_ reason: PaywallReason) {
-        guard paywallController == nil else { return }
+    /// `then` is what the person was doing when they met the limit (copying a link, say). It runs
+    /// once they're on Pro and the paywall has gone.
+    static func paywall(_ reason: PaywallReason, then: (@MainActor () -> Void)? = nil) {
+        guard !isShowing(paywallController) else { return }
         let view = NavigationStack {
-            PaywallView(reason: reason, onClose: { dismiss(paywallController) })
+            PaywallView(reason: reason, continues: then != nil,
+                        onClose: { dismiss(paywallController) },
+                        onUnlocked: { dismiss(paywallController) { then?() } })
         }
         let controller = host(view, detents: [.large()])
         paywallController = controller
         present(controller)
+    }
+
+    /// Signs out of the account that doesn't have this Apple Account's subscription, then into the one
+    /// that does. The paywall underneath follows on its own.
+    static func switchAccount() {
+        Task { @MainActor in
+            await AuthService.shared.signOut()
+            signIn(reason: .account)
+        }
     }
 
     /// The share-link sheet for a recording (creating, uploading, ready, offline, failed).
@@ -126,29 +145,48 @@ enum ProPresenter {
         return controller
     }
 
+    /// On screen, or on its way: a second tap mustn't put up a second one, and one that has been
+    /// closed mustn't stop the next.
+    private static func isShowing(_ controller: UIViewController?) -> Bool {
+        guard let controller else { return false }
+        if arriving.contains(ObjectIdentifier(controller)) { return true }
+        return controller.presentingViewController != nil && !controller.isBeingDismissed
+    }
+
     /// Presents once the top of the stack is still (a sheet or menu the caller just closed has
-    /// finished going away).
-    private static func present(_ controller: UIViewController) {
+    /// finished going away). Gives up after about 6 seconds, and says so.
+    private static func present(_ controller: UIViewController, orElse: (@MainActor () -> Void)? = nil) {
+        let id = ObjectIdentifier(controller)
+        arriving.insert(id)
         Task { @MainActor in
             try? await Task.sleep(nanoseconds: 120_000_000)
-            for _ in 0..<25 {
+            for _ in 0..<50 {
                 if let top = ShareSheetPresenter.topViewController(), !top.isBeingPresented, !top.isBeingDismissed,
                    top.transitionCoordinator == nil, top.viewIfLoaded?.window != nil {
-                    top.present(controller, animated: true)
+                    top.present(controller, animated: true) { Task { @MainActor in arriving.remove(id) } }
+                    // Refused (UIKit logs why): the tap must not be swallowed for good.
+                    try? await Task.sleep(nanoseconds: 350_000_000)
+                    if controller.presentingViewController == nil, arriving.contains(id) {
+                        arriving.remove(id)
+                        orElse?()
+                    }
                     return
                 }
                 try? await Task.sleep(nanoseconds: 120_000_000)
             }
+            arriving.remove(id)
+            orElse?()
         }
     }
 
     private static func dismiss(_ controller: UIViewController?, then completion: (@MainActor () -> Void)? = nil) {
-        guard let controller, controller.presentingViewController != nil else {
+        guard let controller, let presenter = controller.presentingViewController else {
             completion?()
             return
         }
         (controller as? ProHostingController)?.onDismiss = nil
-        controller.dismiss(animated: true) { Task { @MainActor in completion?() } }
+        // Through the presenter: asked itself, a sheet with something over it closes that instead.
+        presenter.dismiss(animated: true) { Task { @MainActor in completion?() } }
     }
 }
 
