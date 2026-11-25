@@ -63,7 +63,8 @@ struct SharedBadge: View {
     private var label: String {
         switch state {
         case .creating, .preparing: return "Preparing link"
-        case .uploading(let value), .waitingForNetwork(let value): return "Uploading \(Int((value * 100).rounded()))%"
+        case .uploading(let value): return "Uploading \(Int((value * 100).rounded()))%"
+        case .waitingForNetwork(let value): return "Waiting · \(Int((value * 100).rounded()))%"
         case .finishing: return "Finishing upload"
         case .failed: return "Upload stopped"
         case .ready, .notShared: return link.sharedLabel
@@ -73,7 +74,8 @@ struct SharedBadge: View {
     private var icon: String {
         switch state {
         case .failed: return "exclamationmark.triangle.fill"
-        case .uploading, .waitingForNetwork, .creating, .preparing, .finishing: return "arrow.up.circle.fill"
+        case .waitingForNetwork: return "wifi.slash"
+        case .uploading, .creating, .preparing, .finishing: return "arrow.up.circle.fill"
         case .ready, .notShared: return "link"
         }
     }
@@ -146,6 +148,35 @@ struct LinkProgressBar: View {
         .accessibilityLabel("Upload progress")
         .accessibilityValue("\(Int((fraction * 100).rounded())) percent")
     }
+}
+
+/// What an upload's numbers say, the same in the share-link sheet and the uploads list.
+enum UploadText {
+    /// "Preparing 42%".
+    static func preparing(_ progress: UploadProgress?) -> String {
+        guard let progress, let prepared = progress.prepared else { return "Preparing the video" }
+        if progress.isPaused { return "Preparing paused at \(percent(prepared))" }
+        return "Preparing \(percent(prepared))"
+    }
+
+    /// "12 MB of about 73 MB sent": what is ready goes up while the rest is being made.
+    static func preparingDetail(_ progress: UploadProgress?) -> String? {
+        guard let progress, progress.sentBytes > 0, progress.totalBytes > 0 else { return nil }
+        return progress.bytesLabel + " sent"
+    }
+
+    /// "45 MB of 73 MB · About 2 min left".
+    static func uploadingDetail(_ progress: UploadProgress?) -> String? {
+        guard let progress, progress.totalBytes > 0 else { return nil }
+        return [progress.bytesLabel, progress.timeLabel].compactMap { $0 }.joined(separator: " · ")
+    }
+
+    static func waitingDetail(_ progress: UploadProgress?) -> String? {
+        guard let progress, progress.totalBytes > 0 else { return nil }
+        return progress.bytesLabel + " sent"
+    }
+
+    private static func percent(_ value: Double) -> String { "\(Int((min(1, max(0, value)) * 100).rounded()))%" }
 }
 
 /// Text helpers for the Pro screens.

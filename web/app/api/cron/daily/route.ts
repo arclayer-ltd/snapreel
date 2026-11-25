@@ -1,8 +1,9 @@
 import crypto from "node:crypto";
 import { env } from "@/lib/server/env";
 import { json, run, HttpError } from "@/lib/server/http";
-import { removePrefix, videoPaths } from "@/lib/server/storage";
+import { removeEmpty, removePrefix, videoPaths } from "@/lib/server/storage";
 import { db } from "@/lib/server/supabase";
+import { reconcileUpload } from "@/lib/server/videos";
 
 export const maxDuration = 60;
 
@@ -10,8 +11,10 @@ const DAY = 24 * 3600 * 1000;
 const ago = (ms: number) => new Date(Date.now() - ms).toISOString();
 
 // GET /api/cron/daily: Vercel Cron (web/vercel.json, 04:17 UTC) with `Authorization: Bearer $CRON_SECRET`.
-//  - uploads stuck in "uploading" for 48 hours become "failed" (the watch page says so);
-//  - failed uploads after 7 days, and links 30 days past their expiry, lose their files and become tombstones;
+//  - links whose video is stored in full but never became "ready" (the app's last call was lost) are repaired;
+//  - empty poster and preview files left by interrupted uploads are cleared;
+//  - uploads stuck in "uploading" for 48 hours become "failed" (the watch page says so; the phone can still finish);
+//  - failed uploads after 30 days, and links 30 days past their expiry, lose their files and become tombstones;
 //  - tombstones (stopped links) are purged 30 days after they stopped, so the slug then reads "not found";
 //  - subscriptions a day past expiry with no word from Apple are marked expired;
 //  - rate-limit windows older than a day and alert dedupe rows older than 90 days are cleared.
@@ -25,6 +28,27 @@ export async function GET(req: Request) {
     }
     const supabase = db();
     const report: Record<string, number> = {};
+
+    // Untouched for half an hour, so an upload that is just finishing isn't raced.
+    const unfinished = await supabase
+      .from("videos")
+      .select("*")
+      .in("status", ["uploading", "failed"])
+      .is("deleted_at", null)
+      .lt("updated_at", ago(30 * 60 * 1000))
+      .order("updated_at", { ascending: false })
+      .limit(300);
+    if (unfinished.error) throw unfinished.error;
+    report.uploadsRepaired = 0;
+    report.emptyFilesCleared = 0;
+    for (const video of unfinished.data) {
+      try {
+        if (await reconcileUpload(video)) report.uploadsRepaired += 1;
+        report.emptyFilesCleared += await removeEmpty(videoPaths(video.owner_id, video.id).base);
+      } catch (error) {
+        console.warn("[cron] reconcile", video.id, error);
+      }
+    }
 
     const stale = await supabase
       .from("videos")
@@ -42,7 +66,7 @@ export async function GET(req: Request) {
       .select("id, owner_id")
       .eq("status", "failed")
       .is("deleted_at", null)
-      .lt("updated_at", ago(7 * DAY))
+      .lt("updated_at", ago(30 * DAY))
       .limit(500);
     if (failed.error) throw failed.error;
     for (const v of failed.data) toTombstone.set(v.id, v.owner_id);

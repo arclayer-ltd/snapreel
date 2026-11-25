@@ -95,6 +95,8 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
     func application(_ application: UIApplication,
                      didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         UNUserNotificationCenter.current().delegate = self
+        // Share-link uploads that still need Snapreel (must be registered before launching ends).
+        UploadBackground.register()
         Task { @MainActor in
             RecordingLiveActivity.startObserving()
             if AppEnvironment.shared.debugScreenID == nil { CloudServices.start() }

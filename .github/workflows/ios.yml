@@ -15,6 +15,19 @@ on:
         description: Screenshot every debug screen
         type: boolean
         default: true
+      tests:
+        description: Run the unit tests (SnapreelTests)
+        type: boolean
+        default: true
+      tests_ios:
+        # For example 16: also runs the unit tests on that simulator, downloading its runtime if the runner can.
+        description: Also run the unit tests on this older iOS version (empty = no)
+        type: string
+        default: ""
+      benchmarks:
+        description: Measure preparing share links (a few minutes more)
+        type: boolean
+        default: false
       only:
         description: Only screenshot ids starting with these space-separated prefixes (empty = all)
         type: string
@@ -100,6 +113,22 @@ jobs:
             exit 1
           fi
           ls build/Build/Products/Debug-iphonesimulator/Snapreel.app/PlugIns/
+
+      - name: Unit tests
+        if: ${{ inputs.tests }}
+        env:
+          BENCHMARKS: ${{ inputs.benchmarks && '1' || '0' }}
+        run: bash scripts/ci-tests.sh ci-out/tests
+
+      - name: Unit tests on an older iOS
+        if: ${{ inputs.tests && inputs.tests_ios != '' }}
+        run: |
+          set +e
+          bash scripts/ci-tests.sh "ci-out/tests-ios${{ inputs.tests_ios }}" "${{ inputs.tests_ios }}"
+          STATUS=$?
+          # 78: the runner has no such runtime.
+          if [ "$STATUS" = "78" ]; then echo "::warning::No iOS ${{ inputs.tests_ios }} simulator on this runner"; exit 0; fi
+          exit $STATUS
 
       - name: Simulator screenshots
         if: ${{ inputs.screenshots }}

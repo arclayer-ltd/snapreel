@@ -32,7 +32,8 @@ struct ShareLinkSheet: View {
                 }
                 .padding(.horizontal, Space.gutter)
                 .padding(.bottom, Space.xl)
-                .animation(Motion.standard, value: state)
+                // Not on every percent: the numbers would cross-fade.
+                .animation(Motion.standard, value: stateKind)
             }
         }
         .background(Color.srCanvas.ignoresSafeArea())
@@ -52,6 +53,20 @@ struct ShareLinkSheet: View {
         .padding(.horizontal, Space.gutter)
         .padding(.top, Space.l)
         .padding(.bottom, Space.s)
+    }
+
+    /// The state without its numbers.
+    private var stateKind: Int {
+        switch state {
+        case .notShared: return 0
+        case .creating: return 1
+        case .preparing: return 2
+        case .uploading: return 3
+        case .waitingForNetwork: return 4
+        case .finishing: return 5
+        case .ready: return 6
+        case .failed: return 7
+        }
     }
 
     private var title: String {
@@ -146,16 +161,25 @@ struct ShareLinkSheet: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .srCard()
         case .preparing:
-            progressCard(title: "Preparing the video", fraction: nil,
-                         message: "Making a web copy. Paste the link now: it plays once the upload is done.")
+            let progress = uploader.progress(for: videoID)
+            progressCard(title: UploadText.preparing(progress), fraction: progress?.prepared,
+                         detail: UploadText.preparingDetail(progress),
+                         message: "Making a web copy. Keep Snapreel open until this part is done. Paste the link now: it plays once the upload is done.")
         case .uploading(let fraction):
+            let progress = uploader.progress(for: videoID)
             progressCard(title: "Uploading \(Int((fraction * 100).rounded()))%", fraction: fraction,
-                         message: "Paste it anywhere now. It plays once the upload is done, even if you leave Snapreel.")
+                         detail: UploadText.uploadingDetail(progress),
+                         message: "You can leave Snapreel or lock your iPhone: the upload carries on. The link plays once it's done.")
         case .waitingForNetwork(let fraction):
             VStack(alignment: .leading, spacing: Space.s) {
                 statusRow(systemImage: "wifi.slash", tint: .srTextSecondary, title: "Waiting for a connection",
-                          message: "The upload carries on by itself when you're back online.")
+                          message: "What is sent is kept. The upload carries on by itself when you're back online.")
                 LinkProgressBar(fraction: fraction)
+                if let detail = UploadText.waitingDetail(uploader.progress(for: videoID)) {
+                    Text(verbatim: detail)
+                        .font(.srFootnote.monospacedDigit())
+                        .foregroundStyle(Color.srTextSecondary)
+                }
             }
             .padding(Space.m)
             .srCard()
@@ -186,7 +210,7 @@ struct ShareLinkSheet: View {
         }
     }
 
-    private func progressCard(title: String, fraction: Double?, message: String) -> some View {
+    private func progressCard(title: String, fraction: Double?, detail: String? = nil, message: String) -> some View {
         VStack(alignment: .leading, spacing: Space.s) {
             HStack(spacing: Space.xs) {
                 Image(systemName: "arrow.up.circle.fill")
@@ -198,6 +222,12 @@ struct ShareLinkSheet: View {
                 if fraction == nil { ProgressView() }
             }
             if let fraction { LinkProgressBar(fraction: fraction) }
+            if let detail {
+                Text(verbatim: detail)
+                    .font(.srFootnote.weight(.medium).monospacedDigit())
+                    .foregroundStyle(Color.srText)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             Text(message)
                 .font(.srFootnote)
                 .foregroundStyle(Color.srTextSecondary)

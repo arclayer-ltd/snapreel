@@ -80,6 +80,9 @@ export async function createVideo(userId: string, raw: Record<string, unknown>):
     // Already shared. A link whose upload never finished (the app lost its upload job) is set back to
     // "uploading" with the phone's current file details, so the app can upload again to the same paths.
     if (existing.status === "ready") return [200, createResponse(existing, plan.tier)];
+    // The video may already be stored in full, with only the "ready" call lost: then nothing needs sending again.
+    const repaired = await reconcileUpload(existing);
+    if (repaired) return [200, createResponse(repaired, plan.tier)];
     if (input.durationS > limits.maxDurationS + 0.5) {
       throw limitError("duration", plan.isPro ? "Shared videos can be up to 2 hours." : "Free links are for videos up to 5 minutes.");
     }
@@ -149,7 +152,9 @@ function proOnly(isPro: boolean, what: string) {
 export async function updateVideo(video: VideoRow, raw: Record<string, unknown>): Promise<VideoRow> {
   const body = raw as UpdateVideoRequest & Record<string, unknown>;
   const update: TablesUpdate<"videos"> = {};
-  const plan = await getPlan(video.owner_id);
+  // Only some fields depend on the plan. Builds up to 47 send `uploadedBytes` alone after every chunk.
+  const needsPlan = ["allowDownload", "expiresAt", "cta", "password", "access"].some((k) => k in body);
+  const plan = needsPlan ? await getPlan(video.owner_id) : { isPro: false };
 
   if ("title" in body) update.title = oneLine(body.title, 200);
   if ("uploadedBytes" in body) {
@@ -215,21 +220,72 @@ export async function updateVideo(video: VideoRow, raw: Record<string, unknown>)
       throw badRequest("status must be uploading, ready or failed.");
     }
     if (body.status === "ready") {
+      // The video itself must be stored; a missing poster or preview only costs the link its picture. An empty
+      // file counts as missing. `sizeBytes` (builds after 47) is what the phone sent, so a stale object is caught.
       const files = await listFolder(videoPaths(video.owner_id, video.id).base);
-      const missing = ["video.mp4", "poster.jpg", "preview.mp4"].filter((f) => !files.has(f));
-      if (missing.length) {
-        throw new HttpError(409, "upload_incomplete", `Still missing: ${missing.join(", ")}.`, { missing });
-      }
       const size = files.get("video.mp4") ?? 0;
+      const missing = ["video.mp4", "poster.jpg", "preview.mp4"].filter((f) => !files.get(f));
+      if (body.sizeBytes !== undefined && (!is.num(body.sizeBytes) || body.sizeBytes < 0)) {
+        throw badRequest("sizeBytes must be a number.");
+      }
+      const stale = body.sizeBytes !== undefined && size > 0 && size !== body.sizeBytes;
+      if (!size || stale) {
+        const list = stale ? ["video.mp4"] : missing;
+        throw new HttpError(409, "upload_incomplete", `Still missing: ${list.join(", ")}.`, { missing: list, storedBytes: size });
+      }
       if (size > LIMITS.maxFileBytes) throw new HttpError(413, "too_large", "Videos can be up to 2 GB.");
-      update.size_bytes = size || Number(video.size_bytes);
-      update.uploaded_bytes = update.size_bytes;
+      update.size_bytes = size;
+      update.uploaded_bytes = size;
     }
     update.status = body.status;
   }
   if (!Object.keys(update).length) return video;
   const { data, error } = await db().from("videos").update(update).eq("id", video.id).select("*").single();
   if (error) throw error;
+  return data;
+}
+
+// POST /api/videos/{id}/progress: how much of the upload is stored, for the watch page. One cheap UPDATE: the app
+// sends it every 15 seconds or so instead of a full PATCH after every chunk. A finished link ignores it.
+export async function saveProgress(userId: string, id: string, raw: Record<string, unknown>): Promise<void> {
+  if (!is.uuid(id)) throw notFound();
+  const { uploadedBytes, totalBytes } = raw;
+  if (!is.num(uploadedBytes) || uploadedBytes < 0) throw badRequest("uploadedBytes must be a number.");
+  if (totalBytes !== undefined && (!is.num(totalBytes) || totalBytes < 1 || totalBytes > LIMITS.maxFileBytes)) {
+    throw badRequest("totalBytes must be between 1 and 2 GB.");
+  }
+  const update: TablesUpdate<"videos"> = {
+    uploaded_bytes: Math.floor(Math.min(uploadedBytes, totalBytes ?? LIMITS.maxFileBytes)),
+  };
+  // The web copy is usually smaller than the recording the link was made with.
+  if (totalBytes !== undefined) update.size_bytes = Math.floor(totalBytes);
+  const { error } = await db()
+    .from("videos")
+    .update(update)
+    .eq("id", id)
+    .eq("owner_id", userId)
+    .eq("status", "uploading")
+    .is("deleted_at", null);
+  if (error) throw error;
+}
+
+// A link still "uploading" or "failed" whose video is stored in full becomes ready. Storage makes an object appear
+// only once its upload is complete, so a non-empty video.mp4 means the app's last call ("ready") was lost.
+// Returns the repaired row, or null when there is nothing to repair. Never deletes anything.
+export async function reconcileUpload(video: VideoRow): Promise<VideoRow | null> {
+  if (video.status === "ready" || video.deleted_at) return null;
+  const size = (await listFolder(videoPaths(video.owner_id, video.id).base)).get("video.mp4") ?? 0;
+  if (!size || size > LIMITS.maxFileBytes) return null;
+  const { data, error } = await db()
+    .from("videos")
+    .update({ status: "ready", size_bytes: size, uploaded_bytes: size })
+    .eq("id", video.id)
+    .neq("status", "ready")
+    .is("deleted_at", null)
+    .select("*")
+    .maybeSingle();
+  if (error) throw error;
+  if (data) console.info("[uploads] repaired", video.id, size);
   return data;
 }
 

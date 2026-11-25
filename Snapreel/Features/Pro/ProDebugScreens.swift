@@ -120,6 +120,7 @@ extension DebugCatalog {
             },
             DebugScreen("share.link.preparing", "Share link [preparing the video]", wait: 4) {
                 ProDebugHost(.free, states: [ids.onboardingFeedback: .preparing],
+                             progress: [ids.onboardingFeedback: UploadProgress(prepared: 0.42, sentBytes: 12_400_000, totalBytes: 73_100_000, isEstimate: true)],
                              present: { ProPresenter.shareLink(ids.onboardingFeedback) }) {
                     player(ids.onboardingFeedback) { $0.position = 3 }
                 }
@@ -138,6 +139,27 @@ extension DebugCatalog {
                 ProDebugHost(.free, states: [ids.onboardingFeedback: .waitingForNetwork(0.38)],
                              present: { ProPresenter.shareLink(ids.onboardingFeedback) }) {
                     player(ids.onboardingFeedback) { $0.position = 3 }
+                }
+            },
+            DebugScreen("share.link.settings.sheet", "Link settings [over the share-link sheet, not loaded before]", wait: 5) {
+                ProDebugHost(.pro, present: {
+                    AppEnvironment.shared.library.updateLink(ids.checkout) { $0.detail = nil }
+                    ProPresenter.shareLink(ids.checkout)
+                    Task { @MainActor in
+                        try? await Task.sleep(nanoseconds: 1_400_000_000)
+                        ProPresenter.linkSettings(ids.checkout)
+                    }
+                }) {
+                    player(ids.checkout) { $0.position = 4 }
+                }
+            },
+            DebugScreen("share.link.settings.offline", "Link settings [didn't load, try again]", wait: 5) {
+                ProDebugHost(.pro, present: {
+                    AppEnvironment.shared.library.updateLink(ids.checkout) { $0.detail = nil }
+                    APIClient.shared.stub?.failsVideoDetail = true
+                    ProPresenter.linkSettings(ids.checkout)
+                }) {
+                    player(ids.checkout) { $0.position = 4 }
                 }
             },
             DebugScreen("share.link.failed", "Share link [failed, try again]", wait: 4) {
@@ -290,6 +312,7 @@ struct ProDebugHost<Content: View>: View {
     let scenario: CloudFixtures.Scenario
     var links = true
     var states: [UUID: LinkState] = [:]
+    var progress: [UUID: UploadProgress] = [:]
     var present: (@MainActor () -> Void)? = nil
     let content: @MainActor () -> Content
 
@@ -297,10 +320,11 @@ struct ProDebugHost<Content: View>: View {
     @State private var installed = false
 
     init(_ scenario: CloudFixtures.Scenario, links: Bool = true, states: [UUID: LinkState] = [:],
-         present: (@MainActor () -> Void)? = nil, @ViewBuilder content: @escaping @MainActor () -> Content) {
+         progress: [UUID: UploadProgress] = [:], present: (@MainActor () -> Void)? = nil, @ViewBuilder content: @escaping @MainActor () -> Content) {
         self.scenario = scenario
         self.links = links
         self.states = states
+        self.progress = progress
         self.present = present
         self.content = content
     }
@@ -314,6 +338,7 @@ struct ProDebugHost<Content: View>: View {
             guard !installed else { return }
             CloudFixtures.install(scenario, library: library, links: links)
             for (id, state) in states { ShareLinks.shared.debugStates[id] = state }
+            for (id, value) in progress { Uploader.shared.debugProgress[id] = value }
             installed = true
             if let present {
                 Task { @MainActor in
@@ -353,7 +378,10 @@ enum CloudFixtures {
         for link in sampleLinks { library.saveLink(link) }
         Uploader.shared.debugPhases = [
             FixtureStorage.IDs.onboardingFeedback: .uploading(0.64),
-            FixtureStorage.IDs.weeklyUpdate: .failed("The connection dropped too many times. What was sent is kept: try again on Wi-Fi."),
+            FixtureStorage.IDs.weeklyUpdate: .failed("Your connection keeps dropping. What was sent is kept: try again on a better connection."),
+        ]
+        Uploader.shared.debugProgress = [
+            FixtureStorage.IDs.onboardingFeedback: UploadProgress(sentBytes: 46_800_000, totalBytes: 73_100_000, rate: 310_000),
         ]
     }
 
@@ -539,6 +567,8 @@ final class CloudStub {
     var checkoutActivity = CloudFixtures.checkoutActivity
     /// Every link answers with the checkout's activity (the website's recorded flows, Debug/DebugFlows.swift).
     var activityOnEveryLink = false
+    /// Link settings can't be loaded.
+    var failsVideoDetail = false
 
     init(pro: Bool) {
         self.pro = pro
@@ -552,6 +582,8 @@ final class CloudStub {
             return try encoder.encode(CloudFixtures.me(pro: pro, links: 5))
         case ("GET", "videos", 1):
             return try encoder.encode(CloudFixtures.summaries)
+        case ("GET", "videos", 2) where failsVideoDetail:
+            throw CloudError.offline
         case ("GET", "videos", 2), ("PATCH", "videos", 2):
             guard let detail = CloudFixtures.detail(for: parts[1], pro: pro) else { throw CloudError.notFound }
             return try encoder.encode(detail)

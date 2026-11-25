@@ -107,11 +107,18 @@ final class AuthService: ObservableObject {
 
     // MARK: - Tokens
 
-    /// A current access token, refreshed first when it runs out within a minute.
-    func validAccessToken() async throws -> String {
+    /// A current access token, refreshed first when it runs out within `seconds` (a minute unless an upload needs it
+    /// to stay good longer). When refreshing fails but the token is still good, the token is used.
+    func validAccessToken(for seconds: TimeInterval = 60) async throws -> String {
         guard let current = session else { throw CloudError.signedOut }
-        if current.expiresAt.timeIntervalSinceNow > 60 { return current.accessToken }
-        return try await refresh().accessToken
+        let left = current.expiresAt.timeIntervalSinceNow
+        if left > seconds { return current.accessToken }
+        do {
+            return try await refresh().accessToken
+        } catch {
+            if left > 60, (error as? CloudError) != .signedOut { return current.accessToken }
+            throw error
+        }
     }
 
     /// Refreshes the session once, however many callers ask at the same time.
@@ -128,8 +135,8 @@ final class AuthService: ObservableObject {
                 self.store(next)
                 return next
             } catch CloudError.auth {
-                // The refresh token was revoked or used up: sign out locally.
-                self.clearLocal()
+                // The refresh token was revoked or used up: sign out locally. Uploads wait for the next sign-in.
+                self.clearLocal(keepsUploads: true)
                 throw CloudError.signedOut
             }
         }
@@ -154,13 +161,14 @@ final class AuthService: ObservableObject {
     }
 
     /// Forgets the session, the cached profile and this iPhone's copy of your links. Used
-    /// after signing out and after deleting the account.
-    func clearLocal() {
+    /// after signing out and after deleting the account. A session that ended by itself keeps its uploads, which carry
+    /// on when the same person signs in again.
+    func clearLocal(keepsUploads: Bool = false) {
         Keychain.remove(Self.sessionKey)
         Keychain.remove(Self.meKey)
         session = nil
         me = nil
-        Uploader.shared.cancelAll()
+        if !keepsUploads { Uploader.shared.cancelAll() }
         AppEnvironment.shared.library.removeAllLinks()
     }
 
@@ -198,6 +206,7 @@ final class AuthService: ObservableObject {
     private func finishSignIn(with data: Data, fullName: PersonNameComponents?) async throws {
         let next = try Self.session(from: data, fallbackEmail: nil)
         store(next)
+        Uploader.shared.cancelJobs(notOwnedBy: next.userID)
         Haptics.success()
         await refreshMe()
         if let fullName, me?.user.displayName?.isEmpty ?? true {
