@@ -523,7 +523,7 @@ enum SampleEntry {
     static func audio(_ description: CMFormatDescription) -> Data? {
         var block: CMBlockBuffer?
         let status = CMAudioFormatDescriptionCopyAsBigEndianSoundDescriptionBlockBuffer(
-            allocator: kCFAllocatorDefault, formatDescription: description, flavor: .isoFamily, blockBufferOut: &block)
+            allocator: kCFAllocatorDefault, audioFormatDescription: description, flavor: .isoFamily, blockBufferOut: &block)
         guard status == noErr, let block else { return nil }
         return tidy(block)
     }

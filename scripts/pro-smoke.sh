@@ -2,7 +2,7 @@
 # Snapreel Pro end-to-end smoke test against a running deployment (production by default).
 #
 #   bash scripts/pro-smoke.sh                       # https://snapreel.video
-#   RESOLVE_IP=76.76.21.21 bash scripts/pro-smoke.sh  # pin one Vercel IP (the owner's carrier blocks some)
+#   RESOLVE_IP=76.76.21.21 bash scripts/pro-smoke.sh  # pin one Vercel IP (for BASE's host) (the owner's carrier blocks some)
 #   BASE=http://localhost:3000 bash scripts/pro-smoke.sh
 #   BASE=https://<preview>.vercel.app BYPASS_HEADER_FILE=<file> bash scripts/pro-smoke.sh   # a protected preview
 #
@@ -20,7 +20,7 @@ NODE="${NODE:-node}"
 TMP="$(mktemp -d)"
 chmod 700 "$TMP"
 RESOLVE=()
-[ -n "${RESOLVE_IP:-}" ] && RESOLVE=(--resolve "snapreel.video:443:$RESOLVE_IP")
+[ -n "${RESOLVE_IP:-}" ] && RESOLVE=(--resolve "${BASE#https://}:443:$RESOLVE_IP")
 # A protected Vercel preview: BYPASS_HEADER_FILE holds "x-vercel-protection-bypass: <secret>". It's sent only to $BASE.
 BYPASS=()
 [ -n "${BYPASS_HEADER_FILE:-}" ] && BYPASS=(-H "@$BYPASS_HEADER_FILE")
@@ -51,6 +51,7 @@ api() {
   local args=(-sS -o "$TMP/out" -w '%{http_code}' -X "$method" "${RESOLVE[@]}" -H "user-agent: ${CALL_UA:-$UA}")
   [[ "$url" == "$BASE"* ]] && args+=("${BYPASS[@]}")
   [ -n "$data" ] && args+=(-H 'content-type: application/json' --data-binary "$data")
+  rm -f "$TMP/out" # a call that never connects mustn't show the answer before it (it may hold a token)
   CODE=$(curl "${args[@]}" "$@" "$url" 2>"$TMP/curl.err") || CODE="curl:$(head -c 120 "$TMP/curl.err")"
   OUT=$(cat "$TMP/out" 2>/dev/null || true)
 }
@@ -103,8 +104,9 @@ tus_upload() { # tus_upload FILE OBJECT CONTENT_TYPE: 6 MB chunks, as the app do
   while [ "$offset" -lt "$size" ]; do
     n=$((size - offset < chunk ? size - offset : chunk))
     tail -c +$((offset + 1)) "$file" | head -c "$n" >"$TMP/chunk"
+    # x-upsert on every PATCH too: without it a file that already exists answers 409 for ever.
     code=$(curl -sS -o /dev/null -w '%{http_code}' -X PATCH "$loc" -H "authorization: Bearer $TOKEN_A" -H @"$TMP/pub.h" \
-      -H "tus-resumable: 1.0.0" -H "upload-offset: $offset" -H "content-type: application/offset+octet-stream" --data-binary @"$TMP/chunk")
+      -H "tus-resumable: 1.0.0" -H "x-upsert: true" -H "upload-offset: $offset" -H "content-type: application/offset+octet-stream" --data-binary @"$TMP/chunk")
     [ "$code" = 204 ] || { echo "TUS chunk at $offset failed: $code"; return 1; }
     offset=$((offset + n))
     CHUNKS=$((CHUNKS + 1))
@@ -242,8 +244,62 @@ else
   ok "user B can't upload into A's folder (create refused: $EVIL)"
 fi
 
+CHUNKS=0
+tus_upload "$TMP/poster.jpg" "$PPATH" image/jpeg && ok "TUS overwrites a file that is already there" || bad "TUS over an existing file"
+TUS_AGAIN=$(curl -sS -o "$TMP/out" -w '%{http_code}' -X PATCH "$(curl -sS -D - -o /dev/null -X POST "$STORAGE/storage/v1/upload/resumable" \
+  -H "authorization: Bearer $TOKEN_A" -H @"$TMP/pub.h" -H "tus-resumable: 1.0.0" -H "upload-length: 4" -H "x-upsert: true" \
+  -H "upload-metadata: bucketName $(b64 videos),objectName $(b64 "$PPATH"),contentType $(b64 image/jpeg)" | tr -d '\r' | awk 'tolower($1)=="location:"{print $2}')" \
+  -H "authorization: Bearer $TOKEN_A" -H @"$TMP/pub.h" -H "tus-resumable: 1.0.0" -H "upload-offset: 0" -H "content-type: application/offset+octet-stream" --data-binary abcd)
+check "$TUS_AGAIN" "409" "TUS without x-upsert on the chunk is 409 (build 47's loop)"
+
+# --- The app's way: S3 multipart pieces with the session token, one at a time from the end, and what can go wrong
+printf %s "$TOKEN_A" >"$TMP/token_a"
+printf %s "$TOKEN_B" >"$TMP/token_b"
+chmod 600 "$TMP/token_a" "$TMP/token_b"
+ANON=$(grep -oE 'anonKey = "[^"]+"' "$ROOT/Snapreel/Services/Cloud/CloudConfig.swift" | cut -d'"' -f2)
+if S3_OUT=$(SB="$SB" ANON="$ANON" TOKEN_FILE="$(cygpath -m "$TMP/token_a" 2>/dev/null || echo "$TMP/token_a")" \
+  OTHER_TOKEN_FILE="$(cygpath -m "$TMP/token_b" 2>/dev/null || echo "$TMP/token_b")" \
+  "$NODE" "$ROOT/scripts/s3-upload.mjs" "$(cygpath -m "$TMP/video.mp4" 2>/dev/null || echo "$TMP/video.mp4")" "$VPATH" 3 checks 2>&1); then
+  ok "S3 multipart upload over the existing video"
+else
+  bad "S3 multipart upload"
+fi
+echo "$S3_OUT" | sed 's/^/      /'
+PASS=$((PASS + $(grep -c '^PASS' <<<"$S3_OUT")))
+FAIL=$((FAIL + $(grep -c '^FAIL' <<<"$S3_OUT")))
+
+# --- Upload progress (one cheap call) and what "ready" checks
+as_a POST "/api/videos/$VID/progress" "{\"uploadedBytes\":1000000,\"totalBytes\":4000000}"
+expect 204 "POST progress"
+viewer GET "/api/public/v/$SLUG"
+check "$(j 'v.uploadProgress')" "0.25" "the watch page shows it"
+as_b POST "/api/videos/$VID/progress" "{\"uploadedBytes\":3000000,\"totalBytes\":4000000}"
+expect 204 "B's progress call is accepted"
+viewer GET "/api/public/v/$SLUG"
+check "$(j 'v.uploadProgress')" "0.25" "and changes nothing of A's"
+as_a POST "/api/videos/$VID/progress" "{\"uploadedBytes\":-1}"
+expect 400 "negative progress is refused"
+as_a PATCH "/api/videos/$VID" '{"uploadedBytes":2000000}'
+expect 200 "build 47's uploadedBytes still works"
+as_a PATCH "/api/videos/$VID" "{\"status\":\"ready\",\"sizeBytes\":$((SIZE + 1))}"
+expect 409 "ready with another size than what is stored is refused"
+check "$(j 'v.error + "/" + v.missing.join() + "/" + v.storedBytes')" "upload_incomplete/video.mp4/$SIZE" "and says which file"
+# A finished upload whose "ready" call was lost: asking to upload again repairs the link instead.
+as_a POST /api/videos "$CREATE"
+expect 200 "asking to upload again when the video is stored"
+check "$(j 'v.status')" "ready" "repairs the link"
+as_a PATCH "/api/videos/$VID" '{"status":"uploading"}'
+# A missing or empty preview doesn't hold the video back.
+admin DELETE "/storage/v1/object/videos" "{\"prefixes\":[\"$RPATH\"]}"
+as_a PATCH "/api/videos/$VID" "{\"status\":\"ready\",\"sizeBytes\":$SIZE}"
+expect 200 "ready without a preview"
+viewer GET "/api/public/v/$SLUG"
+check "$(j 'v.status + "/" + (v.videoUrl !== null) + "/" + v.previewUrl')" "ready/true/null" "the link plays without a preview"
+CHUNKS=0
+tus_upload "$TMP/preview.mp4" "$RPATH" video/mp4 && ok "preview back in place" || bad "preview again"
+
 as_a PATCH "/api/videos/$VID" '{"status":"ready","title":"Smoke test ready"}'
-expect 200 "PATCH status ready"
+expect 200 "PATCH status ready (as build 47 sends it)"
 check "$(j 'v.status + "/" + v.sizeBytes')" "ready/$SIZE" "ready with the stored size"
 
 # --- Public watch flow

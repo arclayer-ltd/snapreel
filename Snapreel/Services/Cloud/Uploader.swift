@@ -123,9 +123,9 @@ final class Uploader: ObservableObject {
         (transfers as? BackgroundTransfers)?.onEventsDelivered = { [weak self] in self?.backgroundEventsDelivered() }
         if watchesNetwork {
             let monitor = NWPathMonitor()
-            monitor.pathUpdateHandler = { path in
+            monitor.pathUpdateHandler = { [weak self] path in
                 let online = path.status == .satisfied
-                Task { @MainActor [weak self] in self?.networkChanged(online: online) }
+                Task { @MainActor in self?.networkChanged(online: online) }
             }
             monitor.start(queue: DispatchQueue(label: "co.arclayer.snapreel.network"))
             self.monitor = monitor
