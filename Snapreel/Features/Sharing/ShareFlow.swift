@@ -70,7 +70,7 @@ final class ShareFlow: ObservableObject {
         switch phase {
         case .idle: return false
         case .preparing: return true
-        case .opening: return Date().timeIntervalSince(openedAt) < ShareSheetPresenter.patience * 2
+        case .opening: return sheet?.isPending ?? (Date().timeIntervalSince(openedAt) < ShareSheetPresenter.patience)
         case .sheet: return sheet?.isOnScreen ?? false
         }
     }
@@ -379,6 +379,7 @@ final class ShareFlow: ObservableObject {
         // a finished one stays for the next time.
         if phase == .preparing { job?.cancel() }
         job = nil
+        sheet?.abandon()
         sheet = nil
         hideCard()
         stayAwake(false)

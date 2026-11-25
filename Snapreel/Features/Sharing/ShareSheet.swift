@@ -30,6 +30,10 @@ struct ShareSheetRequest {
 @MainActor
 protocol ShareSheetHandle: AnyObject {
     var isOnScreen: Bool { get }
+    /// Asked for, and neither up nor given up on.
+    var isPending: Bool { get }
+    /// No longer wanted: if it isn't up yet, it doesn't come up.
+    func abandon()
 }
 
 /// Presents the share sheet from the topmost view controller of the key window, so it works
@@ -86,6 +90,7 @@ enum ShareSheetPresenter {
             }
             try? await Task.sleep(nanoseconds: 120_000_000)
         }
+        guard session.isPending else { return }
         guard let presenter else { return session.failed() }
         if let popover = controller.popoverPresentationController {
             popover.sourceView = presenter.view
@@ -96,12 +101,12 @@ enum ShareSheetPresenter {
         presenter.present(controller, animated: true) { session.shown() }
         // iOS can refuse a presentation without saying so.
         // Counted in looks, not by the clock: a main thread busy loading the sheet must not use it up.
-        for _ in 0..<Int(patience * 10) where !session.wasShown {
+        for _ in 0..<Int(patience * 10) where session.isPending {
             if controller.viewIfLoaded?.window != nil { return session.shown() }
             try? await Task.sleep(nanoseconds: 100_000_000)
             if UIApplication.shared.applicationState != .active { await BackgroundTime.waitUntilActive() }
         }
-        guard !session.wasShown else { return }
+        guard session.isPending else { return }
         // Too late now: it must not come up after the person was told that it didn't.
         controller.presentingViewController?.dismiss(animated: false)
         session.failed()
@@ -186,8 +191,20 @@ final class ShareSheetSession: ShareSheetHandle {
 
     var isOnScreen: Bool { controller?.presentingViewController != nil || controller?.viewIfLoaded?.window != nil }
 
+    var isPending: Bool { !wasShown && !isFinished }
+
+    func abandon() {
+        guard isPending else { return }
+        isFinished = true
+        controller?.presentingViewController?.dismiss(animated: false)
+    }
+
     func shown() {
-        guard !wasShown, !isFinished else { return }
+        guard !wasShown else { return }
+        guard !isFinished else {
+            controller?.presentingViewController?.dismiss(animated: false)
+            return
+        }
         wasShown = true
         onShown?()
         request.onShown()

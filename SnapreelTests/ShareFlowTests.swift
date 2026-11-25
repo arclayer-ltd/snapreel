@@ -134,6 +134,22 @@ final class ShareFlowTests: XCTestCase {
         await until("end") { self.ends == 1 }
     }
 
+    /// Tapped again while a slow sheet is on its way: there is only one.
+    func testASecondTapIsIgnoredWhileTheSheetOpens() async {
+        world.holdsSheet = true
+        let video = addVideo()
+        start(video)
+        await until("asked") { self.world.sheets.count == 1 }
+        try? await Task.sleep(nanoseconds: 100_000_000)
+        XCTAssertEqual(flow.phase, .opening)
+        XCTAssertTrue(flow.isBusy(with: video.id))
+        start(video)
+        XCTAssertEqual(world.sheets.count, 1)
+        // Another recording replaces it.
+        start(addVideo())
+        XCTAssertTrue(world.sheets[0].wasAbandoned)
+    }
+
     func testASheetThatCantOpenEndsWithAMessage() async {
         world.opens = false
         let video = addVideo()
@@ -302,6 +318,7 @@ final class FakeWorld {
     var planFails = false
     var usesRealPlan = false
     var isWarm = true
+    var holdsSheet = false
     private(set) var plans = 0
     private(set) var sheets: [FakeSheet] = []
     private var waiters: [UUID: [CheckedContinuation<Void, Never>]] = [:]
@@ -332,7 +349,10 @@ final class FakeWorld {
                 let sheet = FakeSheet(request)
                 self.sheets.append(sheet)
                 let opens = self.opens
+                if self.holdsSheet { return sheet }
                 Task { @MainActor in
+                    sheet.isPending = false
+                    guard !sheet.wasAbandoned else { return }
                     if opens {
                         sheet.isOnScreen = true
                         request.onShown()
@@ -351,8 +371,12 @@ final class FakeWorld {
 final class FakeSheet: ShareSheetHandle {
     let request: ShareSheetRequest
     var isOnScreen = false
+    var isPending = true
+    private(set) var wasAbandoned = false
 
     init(_ request: ShareSheetRequest) { self.request = request }
+
+    func abandon() { wasAbandoned = true }
 
     func close(smaller: SmallerCopyPlan? = nil) {
         isOnScreen = false
