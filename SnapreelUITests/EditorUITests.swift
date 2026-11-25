@@ -239,8 +239,8 @@ final class EditorUITests: XCTestCase {
         if app.buttons["Allow microphone"].waitForExistence(timeout: 3) {
             app.buttons["Allow microphone"].tap()
             let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
-            for title in ["Allow", "OK"] where springboard.buttons[title].waitForExistence(timeout: 3) {
-                springboard.buttons[title].tap()
+            for title in ["Allow", "OK"] where springboard.buttons[title].firstMatch.waitForExistence(timeout: 3) {
+                springboard.buttons[title].firstMatch.tap()
                 break
             }
         }

@@ -220,6 +220,13 @@ final class EditorFaultTests: XCTestCase {
         let (library, id) = try await TestMedia.library(with: url)
         let recipe = EditRecipe.original(sourceID: id, duration: length)
         let (video, file) = try await TestMedia.export(recipe, library: library)
+        let tracks = try await AVURLAsset(url: file).load(.tracks)
+        for track in tracks {
+            let range = try await track.load(.timeRange)
+            print("NOTE|short picture \(track.mediaType.rawValue) \(range.start.seconds)-\(range.end.seconds)")
+        }
+        let frames = try await TestMedia.readFrames(file)
+        print("NOTE|short picture frames \(frames.count), last at \(frames.suffix(4).map(\.time))")
         let end = try await TestMedia.color(file, at: max(0, video.duration - 0.1), x: 0.5, y: 0.5)
         XCTAssertGreaterThan(end.0 + end.1 + end.2, 0.3, "the end of the edit is black")
     }

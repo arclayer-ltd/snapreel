@@ -66,10 +66,12 @@ final class EditorPlayback {
             player.publisher(for: \.timeControlStatus)
                 .removeDuplicates()
                 .receive(on: DispatchQueue.main)
-                .sink { [weak self] status in
+                .sink { [weak self] _ in
                     MainActor.assumeIsolated {
                         guard let self, index == self.front else { return }
-                        self.onPlayingChanged?(status != .paused)
+                        // What it does now, not what it did when this was sent: a pause and a play right
+                        // after it arrive here late, and must not stop the video again.
+                        self.onPlayingChanged?(self.players[index].timeControlStatus != .paused)
                     }
                 }
                 .store(in: &observers)

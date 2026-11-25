@@ -409,8 +409,10 @@ final class EditExporter: @unchecked Sendable {
                 }
                 let boundary = pieces[pieceIndex].end
                 if pieceIndex + 1 < pieces.count, boundary > cursor { following = CMTimeMinimum(following, boundary) }
-                // A repeat right before the next frame would only make the picture stutter.
-                guard (next - following).seconds > 0.008 else { break }
+                // A repeat right before the next frame would only make the picture stutter. A piece always
+                // starts with a frame, though: its file would otherwise start later than it should.
+                let startsPiece = pieceIndex + 1 < pieces.count && following == boundary
+                guard (next - following).seconds > (startsPiece ? 0 : 0.008) else { break }
                 try emit(held.buffer, at: following)
                 cursor = following
             }
@@ -817,6 +819,8 @@ private final class PieceFeed {
     private var pending: CMSampleBuffer?
     private var queued: [CMSampleBuffer] = []
     private var asset: AVAsset?
+    /// How far the piece's own clock is from the edit's: its first frame is at its start.
+    private var shift: CMTime?
 
     init(pieces: [(url: URL, start: CMTime, end: CMTime)]) {
         self.pieces = pieces
@@ -854,14 +858,16 @@ private final class PieceFeed {
                 if let sample = output.copyNextSampleBuffer() {
                     let count = CMSampleBufferGetNumSamples(sample)
                     guard count > 0, CMSampleBufferGetDataBuffer(sample) != nil else { continue }
-                    if count == 1 { return try shifted(sample, by: pieces[index].start) }
+                    let shift = self.shift ?? pieces[index].start - CMSampleBufferGetPresentationTimeStamp(sample)
+                    self.shift = shift
+                    if count == 1 { return try shifted(sample, by: shift) }
                     for position in 0..<count {
                         var one: CMSampleBuffer?
                         CMSampleBufferCopySampleBufferForRange(allocator: nil, sampleBuffer: sample,
                                                                sampleRange: CFRange(location: position, length: 1),
                                                                sampleBufferOut: &one)
                         guard let one else { throw EditExportFailure.failed(nil) }
-                        queued.append(try shifted(one, by: pieces[index].start))
+                        queued.append(try shifted(one, by: shift))
                     }
                     continue
                 }
@@ -870,6 +876,7 @@ private final class PieceFeed {
                 self.output = nil
             }
             index += 1
+            shift = nil
             guard index < pieces.count else { return nil }
             let asset = AVURLAsset(url: pieces[index].url)
             guard let track = asset.tracks(withMediaType: .video).first else { throw EditExportFailure.failed(nil) }

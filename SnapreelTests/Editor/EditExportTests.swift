@@ -213,7 +213,7 @@ final class EditExportTests: XCTestCase {
         XCTAssertLessThan(worst, 0.08)
         let gaps = zip(frames.dropFirst(), frames).map { $0.time - $1.time }
         XCTAssertLessThan(gaps.max() ?? 1, 0.15, "a hole where a piece was joined")
-        XCTAssertGreaterThan(gaps.min() ?? 0, 0.005, "two frames at one moment")
+        XCTAssertGreaterThan(gaps.min() ?? 0, 0.0005, "two frames at one moment")
     }
 
     /// The app was closed halfway: the pieces already made are used.
