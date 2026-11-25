@@ -493,6 +493,27 @@ final class UploaderTests: XCTestCase {
         XCTAssertLessThan(server.log.count, 200)
     }
 
+    func testFortyPiecesFailingTogetherAreOneEvent() async {
+        video = Self.noise(Self.piece * 40)
+        server.holdsTransfers = true
+        let uploader = makeUploader()
+        start(uploader)
+        await until("the first transfers") { self.server.activeTags.filter { $0.part == .video }.count == 3 }
+        uploader.willLeave()
+        await until("all handed over", seconds: 30) { self.server.activeTags.filter { $0.part == .video }.count == 40 }
+        var dropping = true
+        server.fault = { operation, _ in
+            guard dropping, case .piece = operation else { return nil }
+            return .dropped
+        }
+        server.holdsTransfers = false
+        server.release()
+        try? await Task.sleep(nanoseconds: 30_000_000)
+        dropping = false
+        await until("the upload to end", seconds: 30) { uploader.jobs[self.id].map { $0.stage == .done || $0.stage == .failed } ?? true }
+        expectDone(uploader)
+    }
+
     // MARK: - Relaunch
 
     func testRelaunchCarriesOnWithoutSendingPiecesAgain() async {

@@ -998,6 +998,8 @@ final class Uploader: ObservableObject {
     private func wait(_ id: UUID, for cause: Cause) {
         guard jobs[id]?.isActive == true else { return }
         var counts = trouble[id] ?? Trouble()
+        // Many pieces failing together are one event: the pause for it is already running.
+        if let until = counts.until, until > environment.now() { return }
         let count: Int, delay: Double
         switch cause {
         case .network:
@@ -1083,6 +1085,7 @@ final class Uploader: ObservableObject {
                 // `ask` keeps the server's clock from the next answer.
                 wait(id, for: .temporary(403))
             case .denied:
+                if isRefreshing { return }
                 var counts = trouble[id] ?? Trouble()
                 counts.denied += 1
                 trouble[id] = counts
