@@ -32,6 +32,24 @@ final class EditExportTests: XCTestCase {
         XCTAssertLessThan(TestMedia.fileSize(file), TestMedia.fileSize(url))
     }
 
+    /// A drawn edit of a whole camera clip (30 a second, no sound) keeps every frame and its full length.
+    func testWholeClipKeepsItsLastFrame() async throws {
+        let (_, times, library, id) = try await clip("even6", duration: 6.033) {
+            $0.variableFrameRate = false
+            $0.audioDuration = nil
+            $0.size = CGSize(width: 640, height: 360)
+        }
+        var recipe = EditRecipe.original(sourceID: id, duration: 6.033)
+        recipe.stickers = [EditSticker(kind: .arrow, start: 0, end: 3)]
+        let (video, file) = try await TestMedia.export(recipe, library: library)
+        let frames = try await TestMedia.readFrames(file)
+        let length = try await AVURLAsset(url: file).load(.duration).seconds
+        print("NOTE|whole clip \(times.count) frames in, \(frames.count) out, last \(frames.suffix(3).map(\.time)), file \(length), row \(video.duration)")
+        XCTAssertEqual(frames.last?.index, times.count - 1, "the last frame is there")
+        XCTAssertEqual(length, 6.033, accuracy: 0.02)
+        XCTAssertEqual(video.duration, 6.033, accuracy: 0.02)
+    }
+
     /// Half speed and double speed keep the picture and sound together.
     func testSpeedKeepsPictureAndSoundTogether() async throws {
         for speed in [0.5, 1.5, 2.0] {
