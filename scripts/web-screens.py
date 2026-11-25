@@ -2,11 +2,11 @@
 """Export the app screens the website shows inside its iPhone, and the app icon the site uses as its logo.
 
 The iPhone itself is drawn in CSS (web/components/marketing/iphone.tsx, .mk-iphone in marketing.css). This
-script only prepares what goes on its glass: real Snapreel screenshots, Light and Dark, as AVIF with a WebP
-fallback at two widths. The page swaps Light and Dark with prefers-color-scheme, so a Light page only ever
+script only prepares what goes on its glass: real Snapreel screenshots, Light and Dark, as WebP at four
+widths. The page swaps Light and Dark with prefers-color-scheme, so a Light page only ever
 shows Light screens and a Dark page Dark ones.
 
-Run from the repo root (Pillow with AVIF, numpy):
+Run from the repo root (Pillow, numpy):
 
     python scripts/web-screens.py                 # every screen, the icons and the manifest
     python scripts/web-screens.py --preview       # also writes JPEG previews to art/web/review/screens/
@@ -22,7 +22,7 @@ The flow-* stills are frames of the recorded app flows (scripts/web-flows.py wri
 art/web/screens/); the page plays the flow's video over its still.
 
 Outputs:
-    web/public/marketing/screens/{slug}-{light|dark}-{width}.{avif|webp}
+    web/public/marketing/screens/{slug}-{light|dark}-{width}.webp
     web/components/marketing/screens-manifest.ts
     web/public/marketing/app-icon-{64,128,192}.webp       (nav and footer logo)
     web/app/favicon.ico, web/app/icon.png, web/app/apple-icon.png
@@ -36,7 +36,7 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
-from web_island import fit_image
+from web_island import black_behind_sheet, fit_image
 
 ROOT = Path(__file__).resolve().parent.parent
 SRC = ROOT / "art/web/screens"
@@ -45,7 +45,7 @@ MANIFEST = ROOT / "web/components/marketing/screens-manifest.ts"
 ICON = ROOT / "Snapreel/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon-1024.png"
 PREVIEW = ROOT / "art/web/review/screens"
 
-WIDTHS = [400, 800]
+WIDTHS = [240, 400, 600, 800]
 SCREEN = (1125, 2436)  # the CI simulator, 375 x 812 pt at 3x
 
 # slug: screenshot id, alt text, optional composite.
@@ -63,7 +63,7 @@ SCREENS: dict[str, dict] = {
     "flow-voice": {"id": "flow.voice", "alt": "Snapreel recording a voice memo, with its live waveform"},
     "flow-screen": {"id": "flow.screen", "alt": "Snapreel's three steps before a screen recording"},
     "library": {"id": "lib.videos", "alt": "The Snapreel library: recordings with titles, folders and tags"},
-    "insights": {"id": "insights.pro", "alt": "A shared recording's stats in Snapreel Pro: 128 views, 64 unique viewers and where people stopped"},
+    "insights": {"id": "insights.pro", "alt": "A shared recording's stats in Snapreel Pro: 128 views, 64 unique viewers and where people stopped", "blackBehindSheet": True},
     "paywall": {"id": "pro.paywall", "alt": "Snapreel Pro in the app: $39.99 a year with a week free, or $5.99 a month"},
     "account": {"id": "account.page.pro", "alt": "Snapreel's Account page with Snapreel Pro, shared links and Manage subscription"},
     "help": {"id": "help.home", "alt": "Snapreel's help centre in the app"},
@@ -84,8 +84,7 @@ def save(img: Image.Image, slug: str, mode: str) -> None:
     for w in WIDTHS:
         h = round(img.height * w / img.width)
         small = img.resize((w, h), Image.LANCZOS)
-        small.save(OUT / f"{slug}-{mode}-{w}.avif", quality=64, speed=4)
-        small.save(OUT / f"{slug}-{mode}-{w}.webp", quality=84, method=6)
+        small.save(OUT / f"{slug}-{mode}-{w}.webp", quality=82, method=6)
 
 
 def hexcol(rgb) -> str:
@@ -134,6 +133,9 @@ def main() -> None:
             bgs[mode] = hexcol(img.getpixel((SCREEN[0] // 2, 6)))
             # Content and sheets start 12 pt lower, below the 16 Pro frame's Dynamic Island (web_island.py).
             img = fit_image(img)
+            if spec.get("blackBehindSheet"):
+                img = black_behind_sheet(img, fit_image(Image.open(find(spec["id"], "dark")).convert("RGB")))
+                bgs[mode] = "#000000"
             if not args.slugs or slug in args.slugs:
                 save(img, slug, mode)
                 if args.preview:

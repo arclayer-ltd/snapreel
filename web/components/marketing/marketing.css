@@ -116,6 +116,11 @@
     .mk-tile,
     .mk-panel,
     .mk-icon,
+    .mk-nav,
+    .mk-nav-link,
+    .mk-nav .mk-button,
+    .mk-nav .mk-button-dot,
+    .mk-glass,
     .mk-squircle,
     .mk-appicon {
       corner-shape: superellipse(1.6);
@@ -460,8 +465,8 @@
     height: 60px;
     margin: 12px auto 0;
     max-width: 1120px;
-    border-radius: 999px;
-    padding: 0 0.5rem 0 0.75rem;
+    border-radius: var(--mk-r-l);
+    padding: 0 8px 0 13px;
     background: rgb(255 255 255 / 0.9);
     color: #13141b;
     box-shadow:
@@ -479,11 +484,20 @@
         0 8px 24px -10px rgb(0 0 0 / 0.55);
     }
   }
+  /* The button and its arrow sit inside the bar's corners: each radius is the one around it less the gap. */
+  .mk-nav .mk-button {
+    border-radius: calc(var(--mk-r-l) - 7px);
+    padding-left: 1.1rem;
+    padding-right: 6px;
+  }
+  .mk-nav .mk-button-dot {
+    border-radius: calc(var(--mk-r-l) - 12px);
+  }
   .mk-nav-link {
     display: inline-flex;
     align-items: center;
     min-height: 44px;
-    border-radius: 999px;
+    border-radius: calc(var(--mk-r-l) - 7px);
     padding: 0 0.7rem;
     font-size: 0.9375rem;
     font-weight: 500;
@@ -570,9 +584,26 @@
   }
   .mk-scene-art {
     z-index: 0;
+    /* a tiny blurred copy of the picture (inlined by art.tsx) until the real one has loaded */
+    background: var(--lq-m) center / 100% 100% no-repeat;
     /* fade the picture's top edge into the sky colour */
     -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 14%);
     mask-image: linear-gradient(to bottom, transparent 0, #000 14%);
+  }
+  @media (prefers-color-scheme: dark) {
+    .mk-scene-art {
+      background-image: var(--lq-md);
+    }
+  }
+  @media (min-width: 1024px) {
+    .mk-scene-art {
+      background-image: var(--lq);
+    }
+  }
+  @media (min-width: 1024px) and (prefers-color-scheme: dark) {
+    .mk-scene-art {
+      background-image: var(--lq-d);
+    }
   }
   .mk-scene-fg {
     z-index: 2;
@@ -591,33 +622,6 @@
     height: 100%;
     object-fit: cover;
     user-select: none;
-  }
-  /* The scene's video loop (scene-video.tsx): exactly over the picture, faded in once it plays. Its
-     first frame is the picture, so the fade can't be seen; it fades out again to swap files. */
-  .mk-scene-video {
-    position: absolute;
-    left: 0;
-    top: 0;
-    display: block;
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    pointer-events: none;
-    opacity: 0;
-    transition: opacity 0.6s ease;
-  }
-  .mk-scene-video[data-on] {
-    opacity: 1;
-  }
-  /* The foreground cut-out redrawn from the video (the hero's front flower bed, in front of the phone):
-     a canvas over the cut-out's box, placed by scene-video.tsx. Once it has faded in, the cut-out
-     picture under it is hidden. */
-  .mk-scene-video--fg {
-    width: auto;
-    height: auto;
-  }
-  .mk-scene-fg[data-live] > picture {
-    visibility: hidden;
   }
   .mk-scene-phone {
     position: absolute;
@@ -900,7 +904,7 @@
 
   /* Your phone. Your files: a dark panel with the Library on an iPhone and pieces of the app lifted out of its
      screen around it, some in front and some behind. Pieces are placed in % of the phone's box (--x: left
-     edge, --y: middle, --w: width), so the composition scales as one. */
+     edge, --y: middle, --w: width) and sized in its width (cqw), so the composition scales as one. */
   .mk-private {
     position: relative;
     isolation: isolate;
@@ -917,6 +921,7 @@
   }
   .mk-private-stage {
     position: relative;
+    container-type: inline-size;
     width: min(50%, 290px);
     margin-inline: auto;
   }
@@ -925,49 +930,152 @@
       width: min(44%, 290px);
     }
   }
-  .mk-lift-piece {
+  /* Liquid glass, as the panel's own feature cards: what is behind shows through, blurred and darkened, with a
+     sheen from the top left and a bright hairline along the top edge. No filter here: it would stop the blur. */
+  .mk-glass {
     position: absolute;
     z-index: 3;
     left: calc(var(--x) * 1%);
     top: calc(var(--y) * 1%);
     width: calc(var(--w) * 1%);
     translate: 0 -50%;
-    filter: drop-shadow(0 2px 3px rgb(0 0 0 / 0.18)) drop-shadow(0 18px 28px rgb(0 0 0 / 0.38));
+    border-radius: 7cqw;
+    background:
+      linear-gradient(135deg, rgb(255 255 255 / 0.2), rgb(255 255 255 / 0.04) 42%, rgb(255 255 255 / 0.09)),
+      rgb(24 25 33 / 0.72);
+    -webkit-backdrop-filter: blur(18px) saturate(1.6);
+    backdrop-filter: blur(18px) saturate(1.6);
+    color: #fff;
+    font-size: 4.6cqw;
+    line-height: 1.2;
+    box-shadow:
+      inset 0 0 0 1px rgb(255 255 255 / 0.13),
+      inset 0 1px 0 rgb(255 255 255 / 0.28),
+      0 1px 2px rgb(0 0 0 / 0.16),
+      0 10px 28px -8px rgb(0 0 0 / 0.42);
+    user-select: none;
   }
-  .mk-lift-piece img {
-    display: block;
-    width: 100%;
+  .mk-glass svg {
+    flex-shrink: 0;
+    width: 1.25em;
+    height: 1.25em;
+  }
+  .mk-glass--pill {
+    border-radius: 99px;
+    corner-shape: round;
+  }
+  .mk-glass-saved {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.45em;
+    padding: 2.5cqw 0;
+    font-weight: 500;
+    white-space: nowrap;
+  }
+  .mk-glass-tabs {
+    display: grid;
+    grid-template-columns: 1fr 1.25fr 1.3fr;
+    align-items: center;
+    padding: 1.3cqw;
+    font-weight: 500;
+    color: rgb(255 255 255 / 0.78);
+  }
+  .mk-glass-tabs span {
+    border-radius: 99px;
+    padding: 2.5cqw 0;
+    text-align: center;
+  }
+  .mk-glass-tabs span[data-on] {
+    background: rgb(255 255 255 / 0.94);
+    color: #13141b;
+    font-weight: 600;
+  }
+  .mk-glass-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 3.4cqw;
+    padding: 4cqw;
+  }
+  .mk-glass-row img {
+    flex-shrink: 0;
+    width: 41cqw;
     height: auto;
+    border-radius: 3.6cqw;
   }
-  .mk-lift-piece--behind {
-    z-index: 0;
-    opacity: 0.55;
-    filter: blur(0.6px) drop-shadow(0 18px 28px rgb(0 0 0 / 0.35));
+  .mk-glass-row-text {
+    display: flex;
+    min-width: 0;
+    flex: 1;
+    flex-direction: column;
+    gap: 1.1cqw;
+    color: rgb(255 255 255 / 0.74);
   }
-  @media (prefers-color-scheme: dark) {
-    /* Dark pieces on the dark panel: a faint light edge, as a lit card has. */
-    .mk-lift-piece:not(.mk-lift-piece--behind) {
-      filter: drop-shadow(0 0 0.6px rgb(255 255 255 / 0.55)) drop-shadow(0 2px 3px rgb(0 0 0 / 0.3))
-        drop-shadow(0 18px 28px rgb(0 0 0 / 0.5));
-    }
+  .mk-glass-row-text b {
+    color: #fff;
+    font-size: 5.5cqw;
+    font-weight: 600;
+    line-height: 1.22;
+  }
+  .mk-glass-row-text span {
+    display: flex;
+    align-items: center;
+    gap: 0.35em;
+  }
+  .mk-glass-dots {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    gap: 0.9cqw;
+    width: 9.6cqw;
+    height: 9.6cqw;
+    border-radius: 50%;
+    background: rgb(255 255 255 / 0.14);
+  }
+  .mk-glass-dots i {
+    width: 1.25cqw;
+    height: 1.25cqw;
+    border-radius: 50%;
+    background: rgb(255 255 255 / 0.85);
+  }
+  .mk-glass-actions {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 2cqw;
+    padding: 2.2cqw;
+    font-size: 4.3cqw;
+    font-weight: 500;
+  }
+  .mk-glass-actions span {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1.6cqw;
+    border-radius: 5cqw;
+    padding: 3.2cqw 0 2.8cqw;
+    background: rgb(255 255 255 / 0.1);
+    box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.08);
+    white-space: nowrap;
+  }
+  .mk-glass-actions svg {
+    width: 1.5em;
+    height: 1.5em;
   }
   .mk-private-stage .mk-iphone {
     position: relative;
     z-index: 1;
   }
-  .mk-lifts[data-anim] .mk-lift-piece {
+  .mk-lifts[data-anim] .mk-glass {
     opacity: 0;
     transform: translateX(calc(var(--from, 0) * 1%)) scale(0.92);
     transition:
       opacity 0.6s ease var(--d),
       transform 0.9s cubic-bezier(0.2, 0.8, 0.2, 1) var(--d);
   }
-  .mk-lifts[data-in] .mk-lift-piece {
+  .mk-lifts[data-in] .mk-glass {
     opacity: 1;
     transform: none;
-  }
-  .mk-lifts[data-in] .mk-lift-piece--behind {
-    opacity: 0.55;
   }
 
   /* ---------------------------------------------------------------- The dark panel */
@@ -979,6 +1087,75 @@
     box-shadow:
       inset 0 0 0 1px var(--mk-panel-line),
       var(--mk-shadow-panel);
+  }
+
+  /* ---------------------------------------------------------------- Support
+
+     Flat pastel tiles with room inside and between them; no shadows. */
+  .mk-help-tile {
+    padding: 28px;
+    scroll-margin-top: 6rem;
+  }
+  .mk-help-tile .mk-icon {
+    width: 52px;
+    height: 52px;
+    border-radius: var(--mk-r-l);
+  }
+  .mk-help-tile h2 {
+    margin-top: 20px;
+    font-size: 1.625rem;
+    font-weight: 700;
+    line-height: 1.15;
+    letter-spacing: -0.02em;
+  }
+  .mk-help-tile .mk-prose {
+    margin-top: 14px;
+    color: inherit;
+    font-size: 1.0625rem;
+    line-height: 1.65;
+  }
+  @media (min-width: 640px) {
+    .mk-help-tile {
+      padding: 44px;
+    }
+    .mk-help-tile h2 {
+      margin-top: 24px;
+      font-size: 2rem;
+    }
+  }
+  /* The two steps as numbered discs. */
+  .mk-help-tile .mk-prose ol {
+    list-style: none;
+    padding-left: 0;
+    counter-reset: step;
+  }
+  .mk-help-tile .mk-prose ol > li {
+    position: relative;
+    min-height: 32px;
+    padding: 2px 0 2px 46px;
+    counter-increment: step;
+  }
+  .mk-help-tile .mk-prose ol > li::before {
+    content: counter(step);
+    position: absolute;
+    left: 0;
+    top: 0;
+    display: grid;
+    place-items: center;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: var(--sr-red-deep);
+    color: #fff;
+    font-size: 0.9375rem;
+    font-weight: 600;
+    line-height: 1;
+  }
+  .mk-help-tile .mk-prose ol > li + li {
+    margin-top: 0.75rem;
+  }
+  .mk-who {
+    box-shadow: inset 0 0 0 1px var(--mk-panel-line);
   }
 
   /* ---------------------------------------------------------------- FAQ */

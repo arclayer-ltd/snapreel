@@ -1,4 +1,5 @@
 import { Outfit } from "next/font/google";
+import { BannerWarm } from "./art";
 import { SiteFooter } from "./site-footer";
 import { SiteHeader } from "./site-header";
 import "./marketing.css";
@@ -23,6 +24,7 @@ export function MarketingShell({ children }: { children: React.ReactNode }) {
         {children}
       </main>
       <SiteFooter />
+      <BannerWarm />
     </div>
   );
 }

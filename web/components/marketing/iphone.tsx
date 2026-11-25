@@ -5,8 +5,8 @@ import type { CSSProperties } from "react";
 import { FlowVideo } from "./flow-video";
 import { SCREEN_SIZE, SCREEN_WIDTHS, screens, type ScreenSlug } from "./screens-manifest";
 
-function srcSet(slug: ScreenSlug, mode: "light" | "dark", ext: "avif" | "webp") {
-  return SCREEN_WIDTHS.map((w) => `/marketing/screens/${slug}-${mode}-${w}.${ext} ${w}w`).join(", ");
+function srcSet(slug: ScreenSlug, mode: "light" | "dark") {
+  return SCREEN_WIDTHS.map((w) => `/marketing/screens/${slug}-${mode}-${w}.webp ${w}w`).join(", ");
 }
 
 /**
@@ -61,12 +61,10 @@ export function IPhone({
       <span className="mk-iphone-shadow" aria-hidden="true" />
       <div className="mk-iphone-screen">
         <picture>
-          <source media="(prefers-color-scheme: dark)" type="image/avif" sizes={sizes} srcSet={srcSet(screen, "dark", "avif")} />
-          <source media="(prefers-color-scheme: dark)" type="image/webp" sizes={sizes} srcSet={srcSet(screen, "dark", "webp")} />
-          <source type="image/avif" sizes={sizes} srcSet={srcSet(screen, "light", "avif")} />
+          <source media="(prefers-color-scheme: dark)" type="image/webp" sizes={sizes} srcSet={srcSet(screen, "dark")} />
           <img
             src={`/marketing/screens/${screen}-light-${SCREEN_WIDTHS[0]}.webp`}
-            srcSet={srcSet(screen, "light", "webp")}
+            srcSet={srcSet(screen, "light")}
             sizes={sizes}
             width={SCREEN_SIZE.width}
             height={SCREEN_SIZE.height}
