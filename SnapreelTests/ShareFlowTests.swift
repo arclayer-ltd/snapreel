@@ -86,6 +86,16 @@ final class ShareFlowTests: XCTestCase {
         XCTAssertNotNil(world.sheets[1].request.smaller)
     }
 
+    /// The first sheet after launch is slow to build: the card is up before that.
+    func testFirstSheetAfterLaunchShowsACardFirst() async {
+        world.isWarm = false
+        start(addVideo())
+        await until("card") { self.flow.card?.step == .opening }
+        XCTAssertTrue(world.sheets.isEmpty)
+        await until("sheet") { self.flow.phase == .sheet }
+        XCTAssertNil(flow.card)
+    }
+
     // MARK: The second tap
 
     func testASecondTapIsIgnoredWhileTheSheetIsUp() async {
@@ -291,6 +301,7 @@ final class FakeWorld {
     var opens = true
     var planFails = false
     var usesRealPlan = false
+    var isWarm = true
     private(set) var plans = 0
     private(set) var sheets: [FakeSheet] = []
     private var waiters: [UUID: [CheckedContinuation<Void, Never>]] = [:]
@@ -316,6 +327,7 @@ final class FakeWorld {
             },
             copy: { ShareCopies.shared.job(for: $0, source: $1, kind: $2, root: $3) },
             waitUntilActive: {},
+            isSheetWarm: { self.isWarm },
             present: { request in
                 let sheet = FakeSheet(request)
                 self.sheets.append(sheet)

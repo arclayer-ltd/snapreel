@@ -56,7 +56,7 @@ final class ShareFlow: ObservableObject {
     private var keepsAwake = false
 
     /// Work shorter than this never shows its card.
-    static let quiet: TimeInterval = 0.25
+    nonisolated static let quiet: TimeInterval = 0.25
     /// A movie up to this size is also offered as an MP4, made while the share sheet is up.
     static let largestQuickCopy: Int64 = 600_000_000
 
@@ -115,6 +115,15 @@ final class ShareFlow: ObservableObject {
         do {
             let file = try await readyFile(requested, library: library, smaller: smaller, token: mine)
             guard token == mine else { return }
+            if !ports.isSheetWarm() {
+                // The first share sheet after launch can hold up the main thread for a moment: the card
+                // has to be on screen before that.
+                phase = .opening
+                openedAt = Date()
+                show(file.video, .opening, token: mine, after: 0) { nil }
+                try? await Task.sleep(nanoseconds: 120_000_000)
+                guard token == mine else { return }
+            }
             open(file, library: library, token: mine)
         } catch {
             guard token == mine else { return }
@@ -314,7 +323,7 @@ final class ShareFlow: ObservableObject {
         let wasUp = card != nil
         if wasUp { card = Card(video: video, step: step, progress: progress()) }
         watcher = Task { @MainActor [weak self] in
-            if !wasUp { try? await Task.sleep(nanoseconds: UInt64(quiet * 1_000_000_000)) }
+            if !wasUp, quiet > 0 { try? await Task.sleep(nanoseconds: UInt64(quiet * 1_000_000_000)) }
             var announced = wasUp
             while !Task.isCancelled {
                 guard let self, self.token == mine, self.phase == .preparing || self.phase == .opening else { return }
@@ -396,6 +405,8 @@ struct ShareFlowPorts {
     var plan: (URL, _ isScreen: Bool) async throws -> MoviePlan
     var copy: (Video, URL, ShareCopies.Kind, _ root: URL) -> ShareCopyJob
     var waitUntilActive: () async -> Void
+    /// The first share sheet since launch has already been up.
+    var isSheetWarm: () -> Bool
     var present: (ShareSheetRequest) -> ShareSheetHandle
     /// An alert with OK.
     var tell: (_ title: String, _ message: String) async -> Void
@@ -410,6 +421,7 @@ struct ShareFlowPorts {
             plan: { try await MoviePlan.make(for: $0, isScreenRecording: $1) },
             copy: { ShareCopies.shared.job(for: $0, source: $1, kind: $2, root: $3) },
             waitUntilActive: { await BackgroundTime.waitUntilActive() },
+            isSheetWarm: { ShareSheetPresenter.isWarm },
             present: { ShareSheetPresenter.present($0) },
             tell: { _ = await ShareSheetPresenter.alert(title: $0, message: $1, accept: nil) },
             ask: { await ShareSheetPresenter.alert(title: $0, message: $1, accept: $2) })

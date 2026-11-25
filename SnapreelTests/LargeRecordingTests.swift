@@ -171,8 +171,10 @@ final class LargeRecordingTests: MovieTestCase {
             XCTAssertEqual(flow.phase, .sheet, "\(video.title) \(flow.toast?.text ?? "") state \(UIApplication.shared.applicationState.rawValue)")
             let sheet = ShareSheetPresenter.topViewController()
             XCTAssertTrue(sheet is UIActivityViewController, "\(String(describing: sheet))")
-            measure(String(format: "tap to share sheet, %@ (%.0f MB): %.2f s, card after %@, +%.0f MB", video.title,
-                           Double(video.fileSize) / 1_000_000, seconds, cardAt.map { String(format: "%.2f s", $0) } ?? "none needed", peak.stop()))
+            measure(String(format: "tap to share sheet, %@ (%.0f MB): %.2f s, card after %@, sheet built in %.2f s, up after %.2f s, +%.0f MB",
+                           video.title, Double(video.fileSize) / 1_000_000, seconds,
+                           cardAt.map { String(format: "%.2f s", $0) } ?? "none needed",
+                           ShareSheetPresenter.lastBuild, ShareSheetPresenter.lastOpen, peak.stop()))
             // Closing the sheet ends the flow, so the next tap works.
             sheet?.dismiss(animated: true)
             for _ in 0..<500 where !ended { try await Task.sleep(nanoseconds: 10_000_000) }

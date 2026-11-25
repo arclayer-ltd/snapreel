@@ -36,14 +36,27 @@ protocol ShareSheetHandle: AnyObject {
 /// from tab roots, sheets, the player and the recorder (both full-screen covers).
 @MainActor
 enum ShareSheetPresenter {
+    /// False until the first share sheet after launch has come up. iOS loads a good deal for that one
+    /// on the main thread, which is felt on an older iPhone.
+    private(set) static var isWarm = false
+    /// Seconds the last sheet took to build and to come up, for the tests and the debug trace.
+    private(set) static var lastBuild: TimeInterval = 0
+    private(set) static var lastOpen: TimeInterval = 0
+
     @discardableResult
     static func present(_ request: ShareSheetRequest) -> ShareSheetHandle {
+        let started = Date()
         let item = ShareItemProvider(file: request.file, copy: request.copy, title: request.title,
                                      thumbnailURL: request.thumbnailURL, isAudio: request.isAudio, root: request.root)
         let activities = request.smaller.map { [SmallerCopyActivity(estimatedBytes: $0.estimatedBytes)] } ?? []
         let controller = ShareActivityController(activityItems: [item], applicationActivities: activities)
         controller.excludedActivityTypes = [.assignToContact, .addToReadingList, .print, .openInIBooks, .markupAsPDF]
         let session = ShareSheetSession(request: request, controller: controller)
+        lastBuild = Date().timeIntervalSince(started)
+        session.onShown = {
+            isWarm = true
+            lastOpen = Date().timeIntervalSince(started)
+        }
         controller.onGone = { session.gone() }
         controller.completionWithItemsHandler = { activity, completed, _, _ in
             Task { @MainActor in session.handle(activity: activity, completed: completed) }
@@ -164,6 +177,7 @@ final class ShareSheetSession: ShareSheetHandle {
     private var isFinished = false
     private var choseSmaller = false
     private var watch: Task<Void, Never>?
+    fileprivate var onShown: (@MainActor () -> Void)?
 
     init(request: ShareSheetRequest, controller: UIViewController) {
         self.request = request
@@ -175,6 +189,7 @@ final class ShareSheetSession: ShareSheetHandle {
     func shown() {
         guard !wasShown, !isFinished else { return }
         wasShown = true
+        onShown?()
         request.onShown()
     }
 
@@ -218,7 +233,7 @@ final class ShareSheetSession: ShareSheetHandle {
 /// The file plus the title and thumbnail the share sheet shows in its header. The sheet appears at
 /// once with the recording's own file; an app that is better served by an MP4 gets the one made
 /// meanwhile, waiting for it if need be. If it isn't there in time, the recording itself goes.
-final class ShareItemProvider: UIActivityItemProvider {
+final class ShareItemProvider: UIActivityItemProvider, @unchecked Sendable {
     private let file: URL
     private let copy: ShareCopyOutcome?
     private let title: String
