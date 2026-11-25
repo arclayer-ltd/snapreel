@@ -122,11 +122,11 @@ jobs:
         run: bash scripts/ci-tests.sh ci-out/tests "" "${{ inputs.only_tests }}"
 
       - name: Simulator screenshots
-        if: ${{ inputs.screenshots }}
+        if: ${{ !cancelled() && steps.sim.outcome == 'success' && inputs.screenshots }}
         run: bash scripts/ci-screenshots.sh build/Build/Products/Debug-iphonesimulator/Snapreel.app ci-out/screenshots "${{ inputs.only }}" light
 
       - name: Simulator screenshots (Dark mode)
-        if: ${{ inputs.screenshots && inputs.dark != 'none' }}
+        if: ${{ !cancelled() && steps.sim.outcome == 'success' && inputs.screenshots && inputs.dark != 'none' }}
         run: bash scripts/ci-screenshots.sh build/Build/Products/Debug-iphonesimulator/Snapreel.app ci-out/dark/screenshots "${{ inputs.dark }}" dark
 
       - name: Record app flows

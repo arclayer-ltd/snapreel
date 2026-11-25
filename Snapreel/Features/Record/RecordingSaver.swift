@@ -331,6 +331,7 @@ final class RecordingSaver {
             }
             let inBackground = UIApplication.shared.applicationState == .background
             background.end()
+            if problem != nil { removeScratch(of: written) }
             if let problem {
                 // iOS ended the time in the background (or refused something there): start again when
                 // Snapreel is back, which doesn't count as a failed attempt.
@@ -355,6 +356,16 @@ final class RecordingSaver {
             }
         }
         return false
+    }
+
+    /// AVFoundation's own scratch files next to a file it was stopped writing ("<name>.sb-…").
+    private func removeScratch(of url: URL) {
+        let fm = FileManager.default
+        let folder = url.deletingLastPathComponent()
+        for item in (try? fm.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)) ?? []
+        where item.lastPathComponent.hasPrefix(url.lastPathComponent) {
+            try? fm.removeItem(at: item)
+        }
     }
 
     /// The new file plays for as long as the original, so nothing is lost by replacing it.

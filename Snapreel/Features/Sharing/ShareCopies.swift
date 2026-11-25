@@ -69,7 +69,7 @@ final class ShareCopies {
     /// Copies take real space, so there is only ever one finished one. Whoever still reads an older
     /// one has its own link to it.
     private func removeOthers(in folder: URL, keeping name: String) {
-        let busy = Set(jobs.values.flatMap { [$0.target.lastPathComponent, $0.partial.lastPathComponent] })
+        let busy = Set(jobs.values.flatMap { [$0.target.lastPathComponent, $0.workshop.lastPathComponent] })
         let fm = FileManager.default
         for item in (try? fm.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)) ?? []
         where item.lastPathComponent != name && !busy.contains(item.lastPathComponent)
@@ -85,7 +85,8 @@ final class ShareCopyJob: ObservableObject {
     /// 0...1.
     @Published private(set) var progress: Double = 0
     let target: URL
-    let partial: URL
+    /// Everything written on the way, AVFoundation's own scratch files included. Goes when the job ends.
+    let workshop: URL
     /// The result, for threads that can't await (`ShareItemProvider`).
     nonisolated let outcome = ShareCopyOutcome()
 
@@ -98,7 +99,7 @@ final class ShareCopyJob: ObservableObject {
         self.source = source
         self.target = target
         self.kind = kind
-        partial = target.deletingLastPathComponent().appendingPathComponent("\(UUID().uuidString).partial.mp4")
+        workshop = target.deletingLastPathComponent().appendingPathComponent("\(UUID().uuidString).partial", isDirectory: true)
     }
 
     /// The finished copy's file.
@@ -116,12 +117,13 @@ final class ShareCopyJob: ObservableObject {
             Task { @MainActor in self?.progress = value }
         }
         self.control = control
-        ShareFilesInUse.add(partial.lastPathComponent)
+        ShareFilesInUse.add(workshop.lastPathComponent)
         let background = BackgroundTime("Preparing a recording to share") { control.interrupt() }
         task = Task { @MainActor in
             defer {
                 background.end()
-                ShareFilesInUse.remove(partial.lastPathComponent)
+                try? FileManager.default.removeItem(at: workshop)
+                ShareFilesInUse.remove(workshop.lastPathComponent)
                 onEnd()
             }
             do {
@@ -142,7 +144,8 @@ final class ShareCopyJob: ObservableObject {
             return target
         }
         do {
-            try fm.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try fm.createDirectory(at: workshop, withIntermediateDirectories: true)
+            let partial = workshop.appendingPathComponent("copy.mp4")
             switch kind {
             case .complete(let plan):
                 let first = ShareCopies.putsIndexFirst(bytes: MediaInspector.fileSize(source))
@@ -154,7 +157,6 @@ final class ShareCopyJob: ObservableObject {
             try fm.moveItem(at: partial, to: target)
             return target
         } catch {
-            try? fm.removeItem(at: partial)
             let reason = MoviePump.explain(error, control: control)
             // Off screen, iOS can refuse the encoder with any of several errors.
             if reason == .failed, UIApplication.shared.applicationState == .background { throw MovieRewriteError.interrupted }
