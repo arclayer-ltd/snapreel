@@ -272,7 +272,10 @@ class IOSDriver:
                 print("boot try %d: %d after %.0f s: %s" % (attempt + 1, done.returncode, time.time() - begun,
                                                             done.stdout.strip()[-300:]), flush=True)
                 if done.returncode == 0:
-                    self._prepare()
+                    try:
+                        self._prepare()
+                    except (subprocess.TimeoutExpired, StepError) as error:
+                        print("settings not all applied: %s" % error, flush=True)
                     return
             except subprocess.TimeoutExpired as error:
                 print("boot try %d: not up after 10 minutes: %s" % (attempt + 1, str(error.stdout)[-300:]), flush=True)
@@ -357,7 +360,8 @@ class IOSDriver:
                 self.screenshot()
                 self.read_tree(timeout=60)
                 return
-            except (Hang, StepError, OSError):
+            except Exception as error:  # the first look is only to have it done; the next one will tell
+                print("first look: %s: %s" % (type(error).__name__, error), flush=True)
                 time.sleep(1)
 
     # ---- talking to the touch driver -------------------------------------------------------
@@ -1256,8 +1260,14 @@ class IOSDriver:
         except OSError:
             pass  # it has ended and the file is whole
         small = path.replace(".mp4", "-s.mp4")
-        # A third of the pixels: easy to send, still readable.
-        run("avconvert", "--preset", "Preset960x540", "--source", path, "--output", small, "--replace", check=False, timeout=600)
+        if os.path.exists(path) and os.path.getsize(path) > 30e6:
+            try:  # too much to send: fewer pixels (slow on these Macs, so only when needed)
+                run("avconvert", "--preset", "Preset960x540", "--source", path, "--output", small, "--replace", check=False, timeout=200)
+            except subprocess.TimeoutExpired:
+                run("pkill", "-9", "-x", "avconvert", check=False)
+                raise StepError("the recording is too long to send; record shorter pieces")
+        if not os.path.exists(path):
+            raise StepError("the recording was lost (the rig started its own side again meanwhile); start a new one")
         best = small if os.path.exists(small) and os.path.getsize(small) > 1000 else path
         with open(best, "rb") as f:
             return f.read()

@@ -818,6 +818,9 @@ def main():
     finally:
         live.status(why, "failed" if code else "ended")
         driver.stop()
+    if code and args.kind == "phone":
+        with open(os.path.join(os.path.dirname(os.path.abspath(args.work)), "failed.txt"), "a") as f:
+            f.write("%s: %s\n" % (args.sid, why))
     return code
 
 

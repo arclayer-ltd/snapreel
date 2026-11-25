@@ -156,6 +156,7 @@ jobs:
           tail -n +1 -F "$W"/agent-*.log & TAIL=$!
           while pgrep -f ui-rig/agent.py > /dev/null; do sleep 3; done
           sleep 2
+          if [ -f "$W/failed.txt" ]; then cat "$W/failed.txt"; exit 1; fi
 
       - name: Keep the results
         if: ${{ always() && env.KIND != 'build' }}
