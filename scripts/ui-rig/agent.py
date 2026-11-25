@@ -24,7 +24,7 @@ from ios_driver import Hang, IOSDriver, StepError  # noqa: E402
 
 HELP = ("tap doubletap press drag swipe scrollto pinch rotate type key clear back home open reopen background switcher "
         "tray orient theme textsize contrast allow deny ask photo launch kill wait waitfor gone shot full zoom tree video "
-        "log crashes hangs perf hangcheck net plan clipboard settle")
+        "log crashes hangs perf hangcheck net plan store links mail clipboard settle")
 
 
 def seconds(text, default):
@@ -296,6 +296,24 @@ class Steps:
     def do_store(self, a):
         places = self.d.practice_store()
         return "put the practice store in %d places; `launch` and open the Pro page: it works if the prices are 6.11 and 41.11" % len(places)
+
+    def do_links(self, a):
+        """The made-up links of the practice website."""
+        with open(self.d.opt.get("links", "")) as f:
+            data = json.load(f)
+        return "\n".join("%-30s open %s" % (k, v) for k, v in data["links"].items()) + "".join(
+            "\n(not made: %s)" % p.split(":")[0] for p in data["problems"])
+
+    def do_mail(self, a):
+        """The newest emails the practice website sent."""
+        import urllib.request
+        base = self.d.opt.get("mail")
+        if not base:
+            raise StepError("this session has no mail box")
+        with urllib.request.urlopen(base + "/api/v1/messages?limit=5", timeout=10) as reply:
+            found = json.load(reply).get("messages", [])
+        return "\n".join("%s to %s: %s: %s" % (m["Created"][11:19], ", ".join(t["Address"] for t in m["To"]), m["Subject"],
+                                              m.get("Snippet", "")) for m in found) or "no mail yet"
 
     def do_clipboard(self, a):
         if a:

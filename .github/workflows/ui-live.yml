@@ -159,18 +159,16 @@ jobs:
           import json, os
           s = json.loads(os.environ["SESSION"])
           for i, p in enumerate(s["phones"]):
-              p.update(minutes=s["minutes"], idle=s["idle"])
+              p.update(minutes=s["minutes"], idle=s["idle"], links=os.path.abspath("w/links.json"), mail="http://127.0.0.1:54324")
               json.dump(p, open("w/web-%d.json" % i, "w")); open("w/sids.txt", "a").write(p["sid"] + "\n")
           PY
-          for sid in $(cat w/sids.txt); do
-            python3 -c "import json;json.dump({'say_state':'starting'},open('w/say.json','w'))"
-            python3 rig/scripts/ui-rig/agent.py --sid "$sid" --options w/say.json --work w --say "building the website in preview mode" || true
-          done
+          echo '{"say_state": "starting"}' > w/say.json
+          say() { for sid in $(cat w/sids.txt); do python3 rig/scripts/ui-rig/agent.py --sid "$sid" --options w/say.json --work w --say "$1" || true; done; }
+          say "building the website with its own database"
           pip install -q "playwright==1.*" > /dev/null && playwright install ffmpeg > /dev/null
-          ( cd src/web && npm ci --no-audit --no-fund > ../../w/npm.log 2>&1 && npm run build > ../../w/build.log 2>&1 ) || { tail -40 w/npm.log w/build.log; exit 1; }
-          ( cd src/web && nohup npm start -- -p 3000 > ../../w/site.log 2>&1 & )
-          for _ in $(seq 1 60); do curl -sf -o /dev/null http://localhost:3000/ && break; sleep 1; done
-          # A trusted https address for the local site is not needed: browsers treat localhost as secure.
+          if ! bash rig/scripts/ui-rig/site_local.sh src w; then
+            echo '{"say_state": "failed"}' > w/say.json; say "the website did not start; see the run log"; exit 1
+          fi
           i=0
           for sid in $(cat w/sids.txt); do
             nohup python3 rig/scripts/ui-rig/agent.py --sid "$sid" --kind web --options "w/web-$i.json" --work "w/web-$i" > "w/agent-$sid.log" 2>&1 < /dev/null &
@@ -182,6 +180,14 @@ jobs:
           tail -n +1 -F w/agent-*.log & TAIL=$!
           while pgrep -f ui-rig/agent.py > /dev/null; do sleep 3; done
           kill $TAIL
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ui-rig-web-${{ github.run_id }}
+          path: |
+            w/*.log
+          retention-days: 7
+          if-no-files-found: ignore
       - name: Remove the throwaway branch
         if: always()
         run: |

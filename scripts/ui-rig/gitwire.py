@@ -325,6 +325,8 @@ class Wire:
             running -= 1
             if problem is None:
                 self.good_lane = index
+                if self.conn is None:
+                    self.conn, self.lanes[index][0].conn = self.lanes[index][0].conn, None
             return problem is None
 
         running, problem = 0, None
@@ -332,6 +334,11 @@ class Wire:
             index = (self.good_lane + step) % lanes
             if self.lanes[index][1] is not None and self.lanes[index][1].is_alive():
                 continue  # still busy with an earlier message
+            lane = self.lanes[index][0]
+            if lane.conn is None and self.conn is not None:
+                lane.conn, self.conn = self.conn, None  # lend the open connection instead of making another
+            for ref, sha in self.known.items():
+                lane.known.setdefault(ref, sha)
             self.lanes[index][1] = threading.Thread(target=attempt, args=(index,), daemon=True)
             self.lanes[index][1].start()
             running += 1

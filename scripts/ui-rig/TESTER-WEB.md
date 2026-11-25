@@ -13,18 +13,18 @@ python scripts/ui-rig/rig.py start NAME --web phone         (375x812, touch)
 python scripts/ui-rig/rig.py start NAME --web desktop       (1440x900, mouse)
 ```
 
-It opens a private copy of the site in practice mode: the accounts, videos and comments are made up, and nothing
-you do reaches anyone. `open pricing` opens a page of this copy; `open https://snapreel.video/` opens the real
+It opens a private copy of the whole site with its own database: the accounts, videos and comments are made up, and
+nothing you do reaches anyone. `open pricing` opens a page of this copy; `open https://snapreel.video/` opens the real
 site, where you may **look only**: never send a form, a comment, a report, a sign-in or an email there.
 Never use another browser or open a window on the owner's PC.
 
 | Page | How to get there |
 | --- | --- |
 | Home, pricing, help, support, privacy, terms | `open home`, or `open pricing`, `open help`, `open support`, `open privacy`, `open terms` (but mostly by the links on the page) |
-| Sign in | `open login`; any email, then the code the page tells you about |
+| Sign in | `open login`. `pro@example.com` is a Pro customer with videos, `free@example.com` a Free one; any other `...@example.com` is new. The code comes by email: `mail` shows the newest emails |
 | Dashboard | after signing in, or `open app` |
-| Watch pages | `open v/Lx7kQ2mN9a` (wide video), `open v/Pt3vR8wZ1c` (tall), `open v/Vn4bA6sD2e` (voice), `open v/Kq9pW3xY5f` (locked, password `snapreel`), `open v/Up0lD4gH7j` (still uploading), `open v/Ex2pQ8rT4k` (expired), `open v/Fa1lU5rE3m` (failed), `open v/nothing` (does not exist) |
-| The player inside another page | `open v/Lx7kQ2mN9a/embed` |
+| Watch pages | `links` lists them: wide, tall, voice, locked (password `snapreel`), with a button, expired, failed, still uploading, stopped; and `open v/nothing` |
+| The player inside another page | the same address with `/embed` at the end |
 
 `home` goes to the first page, `back` is the browser's Back, `swipe up` scrolls down, `key tab` moves the focus,
 `log` shows what the browser complained about, `theme dark` asks for Dark, `launch fresh` forgets every cookie,
@@ -35,7 +35,7 @@ Never use another browser or open a window on the owner's PC.
 1. **As a person first.** Without exploring, do these and note each moment you hesitated: understand from the
    first page what Snapreel is, what it costs and how to get it; watch a video somebody sent you, find a
    sentence in it, leave a comment with your name at a moment, react; open a locked one; sign in, find out who
-   watched your video, change its title, put a password on it, stop sharing it; find out how to delete your account;
+   watched your video (`pro@example.com`), change its title, put a password on it, stop sharing it; find out how to delete your account;
    find out how to get help.
 2. **Every link, button and field** on every page in the table, on a map you write down (page, then everything on it).
    Follow each link once, also in the footer and in the help articles. Try the keyboard on desktop: Tab through the
@@ -54,12 +54,12 @@ Faults, severities and the report are the same as in [TESTER.md](TESTER.md) ("Wh
 report"). Say for each finding whether it is on phone, desktop or both, and whether the real site
 (https://snapreel.video/) shows it too when it is a page you may look at there.
 
-**Not testable here**: real sign-in emails, Sign in with Apple, payments, real view counts, speed for real visitors.
+**Not testable here**: how emails look when they arrive, Sign in with Apple, payments, uploading from the app, visitors' countries, speed for real visitors.
 
 ## Areas
 
 | # | Area | Sizes |
 | --- | --- | --- |
 | W1 | Home, pricing, help and its articles, support, privacy, terms, header, footer, a page that does not exist | phone and desktop |
-| W2 | Watch pages (all eight), comments, reactions, transcript, report, share, the embedded player | phone and desktop |
+| W2 | Watch pages (all of `links`), comments, reactions, transcript, report, share, the embedded player | phone and desktop |
 | W3 | Sign-in, dashboard, one video's page, its settings, insights and comments, account, signing out; once as Free and once as Pro | desktop, then phone |

@@ -211,7 +211,9 @@ def send(sid, steps, opts=None, limit=None):
     started = time.time()
     request = {"id": uuid.uuid4().hex, "steps": steps, "opts": opts or {}, "sent": time.time()}
     out_ref, in_ref = "refs/rig/%s/out" % sid, "refs/rig/%s/in" % sid
-    seen = w.refs(out_ref + "/")
+    refs = w.refs("refs/rig/%s/" % sid)
+    seen = {ref: sha for ref, sha in refs.items() if ref.startswith(out_ref)}
+    w.known.update((in_ref + "/%d" % lane, refs.get(in_ref + "/%d" % lane, "0" * 40)) for lane in range(4))
     if not seen:
         remember(sid, over=True)
         die("there is no session called %s (it may have ended); open sessions: %s" % (sid, ", ".join(known_sessions()) or "none"))
