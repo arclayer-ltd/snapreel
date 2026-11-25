@@ -153,12 +153,15 @@ final class EditorPlayback {
         }
     }
 
+    /// Never waits for ever: a seek whose item is replaced meanwhile may not report back.
     private func seekExactly(_ player: AVPlayer, to time: Double) async {
-        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-            player.seek(to: CMTime(seconds: time, preferredTimescale: 90_000), toleranceBefore: .zero, toleranceAfter: .zero) { _ in
-                continuation.resume()
-            }
+        final class Flag { var isDone = false }
+        let flag = Flag()
+        player.seek(to: CMTime(seconds: time, preferredTimescale: 90_000), toleranceBefore: .zero, toleranceAfter: .zero) { _ in
+            DispatchQueue.main.async { flag.isDone = true }
         }
+        let mine = generation
+        await wait(3) { flag.isDone || mine != self.generation }
     }
 
     private func wait(_ timeout: Double, until done: () -> Bool) async {
