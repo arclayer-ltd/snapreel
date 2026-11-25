@@ -99,6 +99,7 @@ class Steps:
             x2, y2, _ = self.d.point(rest[0])
             rest = rest[1:]
         self.d.drag(x1, y1, x2, y2, seconds(rest[0] if rest else "", 0.6))
+        self.d.settle(1.5)  # what is still sliding is not where it seems to be
         return "dragged %s to %d,%d" % (what, x2, y2)
 
     def do_swipe(self, a):
@@ -115,6 +116,7 @@ class Steps:
                 rest = rest[1:]
             x, y, _ = self.d.point(" ".join(rest))
         self.d.swipe(way, x, y, amount)
+        self.d.settle(1.5)
         return "swiped " + way
 
     def do_scrollto(self, a):

@@ -107,7 +107,7 @@ class IOSDriver:
         self.hang_after = float(options.get("hang_after", 8))
         self.conn = None
         self.wda_stuck = False  # the touch driver is still waiting for a hung app
-        self.ocr, self.ocr_used, self.no_ocr = None, False, False
+        self.ocr, self.ocr_used, self.no_ocr, self.words = None, False, False, []
         self.photos_ready = False
         self.preloaded, self.restored = set(), False
         self.slow_mac = 0       # how often the Mac, not the app, was the slow one
@@ -130,14 +130,16 @@ class IOSDriver:
         self._warm_up()
 
     def state(self):
-        return {k: getattr(self, k) for k in ("udid", "device", "ios", "size", "pid", "expected_gone", "app", "crashes", "hangs")}
+        return {k: getattr(self, k) for k in ("udid", "device", "ios", "size", "pid", "expected_gone", "app", "crashes", "hangs",
+                                                  "video", "hung", "away", "photos_ready", "restored")} | {
+            "preloaded": sorted(self.preloaded), "seen_reports": sorted(self.seen_reports)}
 
     def pause(self):
         self._drop()
 
     def resume(self, state):
         self.__dict__.update(state)
-        self.size = tuple(self.size)
+        self.size, self.preloaded, self.seen_reports = tuple(self.size), set(self.preloaded), set(self.seen_reports)
         try:
             self._open_session()
         except (Hang, StepError, OSError, http.client.HTTPException, KeyError):
@@ -300,6 +302,9 @@ class IOSDriver:
         env = dict(os.environ, SIMCTL_CHILD_USE_PORT=str(self.port), SIMCTL_CHILD_MJPEG_SERVER_PORT=str(self.port + 1000))
         problem = ""
         again = self.session is not None  # it ran before: do not spend minutes on it now
+        if again:
+            # One that waits for a hung app does not even let itself be closed.
+            run("pkill", "-9", "-f", "Devices/%s/.*WebDriverAgentRunner" % self.udid, check=False)
         for attempt in range(2 if again else 4):
             try:
                 out = subprocess.run(["xcrun", "simctl", "launch", "--terminate-running-process",
@@ -483,6 +488,7 @@ class IOSDriver:
         if layers:
             hidden = self._hidden_layers(found, layers)
             found = [e for e in found if not hidden.intersection(e["layers"])]
+            self._shift_picker(found)
         unique, seen = [], set()
         named = {(e["label"], round(e["x"] + e["w"] / 2), round(e["y"] + e["h"] / 2)) for e in found if e["kind"] in INTERACTIVE}
         for e in found:
@@ -566,9 +572,22 @@ class IOSDriver:
         walk(node, 0, "", ())
         return found, layers
 
+    def _shift_picker(self, found):
+        """iOS 16 gives the Photos picker's things positions inside its sheet, not on the screen: move them down."""
+        for index, e in enumerate(found):
+            if e["kind"] == "Button" and e["label"] == "Cancel" and e["y"] < 30:
+                real = [y + h / 2 for text, x, y, w, h in self.words if text.strip() == "cancel" and x < self.size[0] / 2]
+                down = real[0] - (e["y"] + e["h"] / 2) if real else 0
+                if down > 15:
+                    for other in found[index:]:
+                        other["y"] += down
+                        other["onscreen"] = 0 <= other["y"] + other["h"] / 2 <= self.size[1]
+                return
+
     def _hidden_layers(self, found, layers):
         """Which of the overlapping layers a person cannot see: their words are not in the picture."""
         words = self._read_words()
+        self.words = words or []
         if words is None or len(words) < 2:
             return set()  # no words read: nothing can be told from that
         hidden, best = set(), (0, None)
@@ -685,16 +704,19 @@ class IOSDriver:
         if match and match.group(1) in INTERACTIVE | {"StaticText", "Image", "Other"}:
             kind, text = match.group(1), match.group(2)
         low = text.lower()
+        whole = re.compile(r"(?<![a-z0-9])" + re.escape(low) + r"(?![a-z0-9])")
         pool = [e for e in self.elements if e["onscreen"] and (kind is None or e["kind"] == kind)]
         for test in (lambda e: e["label"] == text, lambda e: e["label"].lower() == low,
                      lambda e: e["id"] == text, lambda e: e["value"].lower() == low,
+                     lambda e: e["label"].lower().startswith(low) and whole.search(e["label"].lower()),
+                     lambda e: whole.search(e["label"].lower()),
                      lambda e: e["label"].lower().startswith(low), lambda e: low in e["label"].lower(),
                      lambda e: low in e["value"].lower()):
             found = [e for e in pool if test(e)]
             if found:
                 if kind is None:
                     # A control wins over the plain text inside or beside it.
-                    found.sort(key=lambda e: e["kind"] not in INTERACTIVE)
+                    found.sort(key=lambda e: (e["kind"] not in INTERACTIVE, e["w"] * e["h"]))
                 if nth:
                     found = sorted(found, key=lambda e: (e["y"], e["x"]))
                     return found[nth - 1:nth]
@@ -1180,18 +1202,25 @@ class IOSDriver:
         end = time.time() + 10
         while time.time() < end and "Recording started" not in open(path + ".log").read():
             time.sleep(0.1)
-        self.video = (proc, path)
+        self.video = (proc.pid, path)
 
     def video_stop(self):
         if not self.video:
             raise StepError("no recording is running")
-        proc, path = self.video
+        pid, path = self.video
         self.video = None
-        proc.send_signal(signal.SIGINT)
+        end = time.time() + 60
         try:
-            proc.wait(timeout=60)
-        except subprocess.TimeoutExpired:
-            proc.kill()
+            os.kill(pid, signal.SIGINT)
+            while time.time() < end:
+                try:
+                    os.waitpid(pid, os.WNOHANG)
+                except ChildProcessError:
+                    pass
+                os.kill(pid, 0)
+                time.sleep(0.3)
+        except OSError:
+            pass  # it has ended and the file is whole
         small = path.replace(".mp4", "-s.mp4")
         # A third of the pixels: easy to send, still readable.
         run("avconvert", "--preset", "Preset960x540", "--source", path, "--output", small, "--replace", check=False, timeout=600)
@@ -1201,7 +1230,10 @@ class IOSDriver:
 
     def stop(self):
         if self.video:
-            self.video[0].send_signal(signal.SIGINT)
+            try:
+                os.kill(self.video[0], signal.SIGINT)
+            except OSError:
+                pass
         if self.udid:
             subprocess.run(["xcrun", "simctl", "shutdown", self.udid], capture_output=True)
             subprocess.run(["xcrun", "simctl", "delete", self.udid], capture_output=True)
