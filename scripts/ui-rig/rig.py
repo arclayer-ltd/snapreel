@@ -104,7 +104,7 @@ def bundle(extra=None):
         files[".github/workflows/ui-live.yml"] = f.read().replace(b"\r\n", b"\n")
     for name in os.listdir(HERE):
         path = os.path.join(HERE, name)
-        if os.path.isfile(path) and name.endswith((".py", ".sh", ".json", ".storekit", ".swift")):
+        if os.path.isfile(path) and name.endswith((".py", ".sh", ".json", ".swift")):
             with open(path, "rb") as f:
                 files["scripts/ui-rig/" + name] = f.read().replace(b"\r\n", b"\n")
     files.update(extra or {})
@@ -226,7 +226,7 @@ def step_limit(line):
         return 0
     if words[0] in ("wait", "waitfor", "gone", "background", "perf", "settle"):
         return 30 + (numbers[-1] if numbers else 20)
-    return {"photo": 900, "launch": 240, "scrollto": 240, "video": 240, "log": 180, "store": 120}.get(words[0], 45)
+    return {"photo": 900, "launch": 240, "scrollto": 240, "video": 240, "log": 180}.get(words[0], 45)
 
 
 def send(sid, steps, opts=None, limit=None):

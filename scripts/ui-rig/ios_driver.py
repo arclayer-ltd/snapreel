@@ -1005,29 +1005,6 @@ class IOSDriver:
     def contrast(self, value):
         simctl("ui", self.udid, "increase_contrast", "enabled" if value == "on" else "disabled")
 
-    def practice_store(self):
-        """Xcode's StoreKit testing without Xcode: the simulator's store daemon reads a configuration Xcode
-        would have put there. Undocumented, so it may stop working with any iOS; the prices tell."""
-        base = os.path.expanduser("~/Library/Developer/CoreSimulator/Devices/%s/data" % self.udid)
-        source = os.path.join(os.path.dirname(os.path.abspath(__file__)), "practice.storekit")
-        places = [os.path.join(base, "Library/Caches/com.apple.storekitagent/Octane", BUNDLE)]
-        for daemon in glob.glob(os.path.join(base, "Containers/Data/InternalDaemon/*")):
-            plist = os.path.join(daemon, ".com.apple.mobile_container_manager.metadata.plist")
-            try:
-                with open(plist, "rb") as f:
-                    if b"storekit" in f.read().lower():
-                        places.append(os.path.join(daemon, "Library/Caches/Octane", BUNDLE))
-                        places.append(os.path.join(daemon, "Library/Caches/com.apple.storekitagent/Octane", BUNDLE))
-            except OSError:
-                pass
-        for place in places:
-            os.makedirs(place, exist_ok=True)
-            shutil.copy(source, os.path.join(place, "Configuration.storekit"))
-        simctl("spawn", self.udid, "launchctl", "kickstart", "-k", "user/501/com.apple.storekitd", check=False)
-        simctl("spawn", self.udid, "launchctl", "kickstart", "-k", "system/com.apple.storekitd", check=False)
-        run("pkill", "-f", "%s.*storekit" % self.udid, check=False)
-        return places
-
     def add_photo(self, path, limit=None):
         if not self.photos_ready:
             # A new simulator has no photo library until Photos has run; adding to it then can hang.

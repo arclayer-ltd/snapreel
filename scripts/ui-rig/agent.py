@@ -25,7 +25,7 @@ from ios_driver import Hang, IOSDriver, StepError  # noqa: E402
 
 HELP = ("tap doubletap press drag swipe scrollto pinch rotate type key clear back home open reopen background switcher "
         "tray orient theme textsize contrast allow deny ask photo launch kill wait waitfor gone shot full zoom tree video "
-        "log crashes hangs perf hangcheck net plan store links mail clipboard settle")
+        "log crashes hangs perf hangcheck net plan links mail clipboard settle")
 
 
 def seconds(text, default):
@@ -300,10 +300,6 @@ class Steps:
             raise StepError("this session has no practice server (it was started with --cloud off)")
         return self.control(key, value)
 
-    def do_store(self, a):
-        places = self.d.practice_store()
-        return "put the practice store in %d places; `launch` and open the Pro page: it works if the prices are 6.11 and 41.11" % len(places)
-
     def do_links(self, a):
         """The made-up links of the practice website."""
         with open(self.d.opt.get("links", "")) as f:
@@ -553,7 +549,7 @@ def step_limit(line):
         return 0
     if words[0] in ("wait", "waitfor", "gone", "background", "perf", "settle"):
         return 30 + (numbers[-1] if numbers else 20)
-    return {"photo": 900, "launch": 240, "scrollto": 240, "video": 240, "log": 180, "store": 120}.get(words[0], 45)
+    return {"photo": 900, "launch": 240, "scrollto": 240, "video": 240, "log": 180}.get(words[0], 45)
 
 
 # ---- live mode -------------------------------------------------------------------------------
@@ -577,7 +573,7 @@ class Live:
         """For whoever works on the rig: new rig files for a running phone, without starting it again."""
         here = os.path.dirname(os.path.abspath(__file__))
         for name, data in files.items():
-            if re.fullmatch(r"[a-z_]+\.(py|sh|json|storekit|swift)", name) and name != "req.json":
+            if re.fullmatch(r"[a-z_]+\.(py|sh|json|swift)", name) and name != "req.json":
                 with open(os.path.join(here, name), "wb") as f:
                     f.write(data)
         self.start_over(agent, deadline, idle_minutes)
