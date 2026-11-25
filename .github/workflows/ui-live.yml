@@ -120,7 +120,6 @@ jobs:
       - name: Start the phones (in the background)
         if: ${{ env.KIND != 'build' }}
         run: |
-          WDA=https://github.com/appium/WebDriverAgent/releases/download/v16.15.3/WebDriverAgentRunner-Build-Sim-arm64.zip
           i=0
           for SID in $(cat "$W/sids.txt"); do
             SCRIPT=""; [ -f "rig/steps-$SID.txt" ] && SCRIPT="$PWD/rig/steps-$SID.txt"
@@ -129,9 +128,7 @@ jobs:
                 --wait-for "$W/wda.ready" --script "$SCRIPT" > "$W/agent-$SID.log" 2>&1 < /dev/null ) &
             i=$((i + 1))
           done
-          cd "$W" && curl -sL --retry 5 -o wda.zip "$WDA" \
-            && echo "02f22b68338bd9c63b30626bb0c639f9e7d6fb260d3b9e30e72c3eb2dd710e1e  wda.zip" | shasum -a 256 -c \
-            && mkdir -p wda && unzip -qo wda.zip -d wda && touch wda.ready
+          bash rig/scripts/ui-rig/get_wda.sh "$W/wda" && touch "$W/wda.ready"
 
       - name: Store the new build
         if: ${{ steps.app.outputs.built == '1' }}
@@ -238,9 +235,7 @@ jobs:
           json.dump(dict(s["phones"][0], ios=s["ios"], prepare=True), open(os.environ["W"] + "/phone.json", "w"))
           open(os.environ["W"] + "/sid.txt", "w").write(s["phones"][0]["sid"])
           PY
-          curl -sL --retry 5 -o "$W/wda.zip" https://github.com/appium/WebDriverAgent/releases/download/v16.15.3/WebDriverAgentRunner-Build-Sim-arm64.zip
-          echo "02f22b68338bd9c63b30626bb0c639f9e7d6fb260d3b9e30e72c3eb2dd710e1e  $W/wda.zip" | shasum -a 256 -c
-          unzip -qo "$W/wda.zip" -d "$W/wda"
+          bash rig/scripts/ui-rig/get_wda.sh "$W/wda"
           bash rig/scripts/ui-rig/get_media.sh small "$W/phone/media"
           python3 rig/scripts/ui-rig/agent.py --sid "$(cat "$W/sid.txt")" --options "$W/phone.json" --work "$W/phone" \
             --wda "$W/wda/WebDriverAgentRunner-Runner.app" --prepare "$W/out"

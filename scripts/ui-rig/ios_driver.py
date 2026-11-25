@@ -53,7 +53,7 @@ IDLE_JOBS = ["assistantd", "searchd", "corespotlightd", "photoanalysisd", "media
              "proactived", "healthd", "newsd", "weatherd", "ap.adprivacyd", "ap.promotedcontentd", "tipsd", "biomed",
              "intelligenceplatformd", "generativeexperiencesd", "modelmanagerd", "knowledgeconstructiond", "siriknowledged",
              "siriinferenced", "financed", "passd", "gamed", "homed", "sportsd", "stocksd", "milod", "routined", "navd",
-             "maps.destinationd", "itunescloudd", "bookdatastored", "remindd", "calaccessd", "appstored.updates"]
+             "maps.destinationd", "apsd", "itunescloudd", "bookdatastored", "remindd", "calaccessd", "appstored.updates"]
 
 PERMISSIONS = {
     "photos": "photos", "photos-add": "photos-add", "microphone": "microphone", "mic": "microphone",
@@ -172,7 +172,8 @@ class IOSDriver:
     # ---- prepared phones: one that was started, settled and filled with samples once, and put away
 
     def _image_name(self, version):
-        return "ui-device-%s-%s-v1" % (self.opt.get("device", "small"), version)
+        chip = "" if os.uname().machine == "arm64" else "-intel"
+        return "ui-device-%s-%s%s-v1" % (self.opt.get("device", "small"), version, chip)
 
     def _restore(self, version):
         """Brings back the prepared phone of this kind, if one is stored. Much faster than a new one."""
