@@ -232,6 +232,42 @@ final class EditorUITests: XCTestCase {
         shot("playing")
     }
 
+    /// The microphone prompt, the countdown, a take and using it (a CI Mac may have no microphone:
+    /// then the editor must say so and stay usable).
+    func testVoiceOver() {
+        openTool("Voice-over")
+        if app.buttons["Allow microphone"].waitForExistence(timeout: 3) {
+            app.buttons["Allow microphone"].tap()
+            let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+            for title in ["Allow", "OK"] where springboard.buttons[title].waitForExistence(timeout: 3) {
+                springboard.buttons[title].tap()
+                break
+            }
+        }
+        let record = app.buttons["Record voice-over"]
+        XCTAssertTrue(record.waitForExistence(timeout: 5))
+        record.tap()
+        XCTAssertTrue(app.staticTexts["Get ready…"].waitForExistence(timeout: 3))
+        XCTAssertFalse(app.buttons["Save"].firstMatch.isEnabled, "nothing else while it counts and records")
+        shot("countdown")
+        if app.buttons["Stop recording"].waitForExistence(timeout: 8) {
+            RunLoop.current.run(until: Date().addingTimeInterval(3))
+            shot("recording")
+            app.buttons["Stop recording"].tap()
+            XCTAssertTrue(app.buttons["Use take"].waitForExistence(timeout: 5))
+            app.buttons["Use take"].tap()
+            XCTAssertTrue(app.buttons["Record another"].waitForExistence(timeout: 5))
+            print("NOTE|voice-over recorded")
+        } else {
+            print("NOTE|no microphone on this Mac")
+            XCTAssertTrue(record.waitForExistence(timeout: 5), "the panel is back after the microphone failed")
+        }
+        shot("after")
+        tapButton("Done")
+        app.buttons["Play"].tap()
+        XCTAssertTrue(wait(8) { self.time.now >= 2 }, "plays after a voice-over")
+    }
+
     func testTranscriptCutAndSpeed() {
         openTool("Transcript")
         let line = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Line number 3,'")).firstMatch
