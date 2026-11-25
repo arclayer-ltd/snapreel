@@ -96,6 +96,8 @@ class PurchaseTestCase: XCTestCase {
         session.resetToDefaultState()
         session.clearTransactions()
         session.disableDialogs = true
+        // The iOS 26 simulators on GitHub's runners take no settings and refuse every purchase ("notEntitled").
+        try XCTSkipUnless(session.disableDialogs, "This simulator's StoreKit test store doesn't work")
         suite = "purchase-tests-\(UUID().uuidString)"
         defaults = UserDefaults(suiteName: suite)
         backend = FakeBackend(user: alice)
@@ -107,7 +109,7 @@ class PurchaseTestCase: XCTestCase {
 
     override func tearDown() async throws {
         session?.clearTransactions()
-        defaults?.removePersistentDomain(forName: suite)
+        if !suite.isEmpty { defaults?.removePersistentDomain(forName: suite) }
         service = nil
         session = nil
         try await super.tearDown()
