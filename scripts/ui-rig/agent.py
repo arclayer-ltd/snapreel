@@ -467,7 +467,7 @@ class Agent:
         use = self.d.usage()
         answer.update(size=list(self.d.size), keyboard=getattr(self.d, "keyboard", False), running=self.d.alive(),
                       cpu=use[0] if use else None, memory=use[1] if use else None, app=getattr(self.d, "app_label", ""),
-                      took=round(time.time() - started_all, 1), crashes=len(self.d.crashes), hangs=len(self.d.hangs))
+                      slow_mac=getattr(self.d, "slow_mac", 0), took=round(time.time() - started_all, 1), crashes=len(self.d.crashes), hangs=len(self.d.hangs))
         return answer, {k: v for k, v in files.items() if v}
 
     def _quiet_shot(self, settle=False):
@@ -579,7 +579,12 @@ class Live:
                     self.reload(agent, self.wire.fetch(sha), deadline, idle_minutes)
                 print("[%s] %s" % (self.sid, "; ".join(request["steps"])[:300]), flush=True)
                 got = time.time()
-                answer, files = agent.perform(request["steps"], request.get("opts", {}))
+                try:
+                    answer, files = agent.perform(request["steps"], request.get("opts", {}))
+                except Exception as error:  # whatever goes wrong, the phone stays and the tester hears about it
+                    traceback.print_exc()
+                    answer, files = {"results": [{"step": "; ".join(request["steps"]), "ok": False, "text": "rig error: %s: %s" % (
+                        type(error).__name__, str(error)[:300])}], "size": list(agent.d.size)}, {}
                 answer.update(id=request["id"], ends=deadline, waited=round(got - request.get("sent", got), 1), wire=self.wire.notes)
                 self.wire.notes = []
                 files = dict(files)

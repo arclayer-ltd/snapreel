@@ -108,6 +108,7 @@ class IOSDriver:
         self.conn = None
         self.wda_stuck = False  # the touch driver is still waiting for a hung app
         self.photos_ready = False
+        self.slow_mac = 0       # how often the Mac, not the app, was the slow one
         self.away = False       # a hung app was left for another one
         self.hung = False       # the app's main thread was busy and not answering when last looked at
         os.makedirs(work, exist_ok=True)
@@ -385,7 +386,16 @@ class IOSDriver:
                               timeout=timeout or self.hang_after)["value"]
         except Hang:
             self.wda_stuck = True
-            raise
+            found = self.main_thread(2)
+            if found and found[0] > 0.5:
+                raise  # the app really is busy
+            # Its main thread has nothing to do, so it is the Mac that is slow: wait for it.
+            self.slow_mac += 1
+            try:
+                node = self._http("GET", "/session/%s/source%s" % (self.session, self.SOURCE), timeout=60)["value"]
+                self.wda_stuck = False
+            except Hang:
+                raise StepError("the Mac is too busy to read the screen at the moment (the app itself is idle); try again")
         except (ConnectionError, http.client.HTTPException, OSError):
             self._start_wda()
             node = self._wda("GET", "/source" + self.SOURCE, timeout=30)
@@ -900,8 +910,12 @@ class IOSDriver:
         if not self.alive():
             return None
         path = os.path.join(self.work, "sample.txt")
-        run("sudo", "sample", self.pid, seconds, 5, "-mayDie", "-file", path, check=False, timeout=seconds + 60)
-        run("sudo", "chmod", "644", path, check=False)
+        try:
+            run("sudo", "rm", "-f", path, check=False)
+            run("sudo", "sample", self.pid, seconds, 5, "-mayDie", "-file", path, check=False, timeout=seconds + 90)
+            run("sudo", "chmod", "644", path, check=False)
+        except subprocess.TimeoutExpired:
+            return None
         try:
             with open(path, errors="replace") as f:
                 text = f.read()

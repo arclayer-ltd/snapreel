@@ -307,6 +307,8 @@ def show(answer, saved, took, quiet=False):
         state.append("memory %s MB" % answer["memory"])
     if answer.get("answer_time") is not None:
         state.append("the app answered in %.1f s" % answer["answer_time"])
+    if answer.get("slow_mac"):
+        state.append("the Mac was slow %d time(s)" % answer["slow_mac"])
     if answer.get("crashes"):
         state.append("%d crash(es) so far" % answer["crashes"])
     if answer.get("hangs"):
