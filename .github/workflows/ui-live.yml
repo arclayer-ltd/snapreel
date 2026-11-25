@@ -55,18 +55,31 @@ jobs:
               echo "$v $app"
             done | sort -t. -k1,1n -k2,2n -k3,3n | tail -1 | cut -d' ' -f2-)
           sudo xcode-select -s "$XCODE"
-          if [ "$IOS" = "16.4" ]; then
-            # The iOS 16.4 simulator is a 6 GB download from Apple, about 2 minutes. It can hang, so each try gets 6 minutes.
-            ( for BUILD in 16.4 20E247 16.4 20E247; do
-                perl -e 'alarm shift; exec @ARGV' 360 xcodebuild -downloadPlatform iOS -buildVersion $BUILD > "$W/runtime.log" 2>&1
-                xcrun simctl list runtimes | grep -q "iOS 16.4" && break
-                sleep 5
-              done; touch "$W/runtime.done" ) > /dev/null 2>&1 &
-          else
-            touch "$W/runtime.done"
-          fi
           echo "BUILD_XCODE=$XCODE" >> "$GITHUB_ENV"
           xcodebuild -version
+
+      # A 6 GB download from Apple, about 2 minutes. In the foreground and before anything else touches the
+      # network settings: it has hung in the background. Each try gets 6 minutes.
+      - name: iOS 16.4 simulator
+        if: ${{ env.IOS == '16.4' }}
+        run: |
+          echo '{}' > "$W/say.json"
+          for SID in $(cat "$W/sids.txt" 2> /dev/null); do
+            python3 rig/scripts/ui-rig/agent.py --sid "$SID" --options "$W/say.json" --work "$W" --say "downloading the iOS 16.4 simulator" || true
+          done
+          xcrun simctl list runtimes | grep iOS || true
+          for BUILD in 16.4 20E247 16.4; do
+            perl -e 'alarm shift; exec @ARGV' 360 xcodebuild -downloadPlatform iOS -buildVersion $BUILD < /dev/null > "$W/runtime.log" 2>&1 || true
+            tail -c 300 "$W/runtime.log"
+            xcrun simctl list runtimes | grep "iOS 16.4" && break
+            sleep 5
+          done
+          xcrun simctl list runtimes | grep -q "iOS 16.4" || {
+            echo '{"say_state": "failed"}' > "$W/say.json"
+            for SID in $(cat "$W/sids.txt" 2> /dev/null); do
+              python3 rig/scripts/ui-rig/agent.py --sid "$SID" --options "$W/say.json" --work "$W" --say "the iOS 16.4 simulator could not be downloaded; try again" || true
+            done
+            exit 1; }
 
       - uses: actions/checkout@v4
         with: { path: src, ref: "${{ fromJSON(github.event.head_commit.message).app_ref }}", persist-credentials: false }
@@ -92,7 +105,6 @@ jobs:
               exit 1
             fi
           fi
-          [ "$IOS" = "16.4" ] && [ ! -f "$W/runtime.done" ] && say "downloading the iOS 16.4 simulator" || true
 
       - name: Start the phones (in the background)
         if: ${{ env.KIND != 'build' }}
@@ -101,8 +113,7 @@ jobs:
           i=0
           for SID in $(cat "$W/sids.txt"); do
             SCRIPT=""; [ -f "rig/steps-$SID.txt" ] && SCRIPT="$PWD/rig/steps-$SID.txt"
-            ( while [ ! -f "$W/runtime.done" ]; do sleep 1; done
-              cd "$W" && exec nohup python3 "$GITHUB_WORKSPACE/rig/scripts/ui-rig/agent.py" --sid "$SID" --options "$W/phone-$i.json" \
+            ( cd "$W" && exec nohup python3 "$GITHUB_WORKSPACE/rig/scripts/ui-rig/agent.py" --sid "$SID" --options "$W/phone-$i.json" \
                 --work "$W/phone-$i" --app "$W/app/Snapreel.app" --wda "$W/wda/WebDriverAgentRunner-Runner.app" \
                 --wait-for "$W/wda.ready" --script "$SCRIPT" > "$W/agent-$SID.log" 2>&1 < /dev/null ) &
             i=$((i + 1))
@@ -171,18 +182,31 @@ jobs:
               echo "$v $app"
             done | sort -t. -k1,1n -k2,2n -k3,3n | tail -1 | cut -d' ' -f2-)
           sudo xcode-select -s "$XCODE"
-          if [ "$IOS" = "16.4" ]; then
-            # The iOS 16.4 simulator is a 6 GB download from Apple, about 2 minutes. It can hang, so each try gets 6 minutes.
-            ( for BUILD in 16.4 20E247 16.4 20E247; do
-                perl -e 'alarm shift; exec @ARGV' 360 xcodebuild -downloadPlatform iOS -buildVersion $BUILD > "$W/runtime.log" 2>&1
-                xcrun simctl list runtimes | grep -q "iOS 16.4" && break
-                sleep 5
-              done; touch "$W/runtime.done" ) > /dev/null 2>&1 &
-          else
-            touch "$W/runtime.done"
-          fi
           echo "BUILD_XCODE=$XCODE" >> "$GITHUB_ENV"
           xcodebuild -version
+
+      # A 6 GB download from Apple, about 2 minutes. In the foreground and before anything else touches the
+      # network settings: it has hung in the background. Each try gets 6 minutes.
+      - name: iOS 16.4 simulator
+        if: ${{ env.IOS == '16.4' }}
+        run: |
+          echo '{}' > "$W/say.json"
+          for SID in $(cat "$W/sids.txt" 2> /dev/null); do
+            python3 rig/scripts/ui-rig/agent.py --sid "$SID" --options "$W/say.json" --work "$W" --say "downloading the iOS 16.4 simulator" || true
+          done
+          xcrun simctl list runtimes | grep iOS || true
+          for BUILD in 16.4 20E247 16.4; do
+            perl -e 'alarm shift; exec @ARGV' 360 xcodebuild -downloadPlatform iOS -buildVersion $BUILD < /dev/null > "$W/runtime.log" 2>&1 || true
+            tail -c 300 "$W/runtime.log"
+            xcrun simctl list runtimes | grep "iOS 16.4" && break
+            sleep 5
+          done
+          xcrun simctl list runtimes | grep -q "iOS 16.4" || {
+            echo '{"say_state": "failed"}' > "$W/say.json"
+            for SID in $(cat "$W/sids.txt" 2> /dev/null); do
+              python3 rig/scripts/ui-rig/agent.py --sid "$SID" --options "$W/say.json" --work "$W" --say "the iOS 16.4 simulator could not be downloaded; try again" || true
+            done
+            exit 1; }
 
       - name: Make the phone
         id: make
@@ -197,7 +221,6 @@ jobs:
           echo "02f22b68338bd9c63b30626bb0c639f9e7d6fb260d3b9e30e72c3eb2dd710e1e  $W/wda.zip" | shasum -a 256 -c
           unzip -qo "$W/wda.zip" -d "$W/wda"
           bash rig/scripts/ui-rig/get_media.sh small "$W/phone/media"
-          while [ ! -f "$W/runtime.done" ]; do sleep 2; done
           python3 rig/scripts/ui-rig/agent.py --sid "$(cat "$W/sid.txt")" --options "$W/phone.json" --work "$W/phone" \
             --wda "$W/wda/WebDriverAgentRunner-Runner.app" --prepare "$W/out"
       - uses: actions/upload-artifact@v4
