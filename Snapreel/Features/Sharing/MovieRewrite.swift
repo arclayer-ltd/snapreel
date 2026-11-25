@@ -410,6 +410,8 @@ private final class MoviePumpJob: @unchecked Sendable {
                 }
                 guard more else { break }
             }
+            // Calling this, or finishing, on a writer that has just failed (a full disk) is a crash.
+            guard writer.status == .writing else { throw writer.error ?? MovieRewriteError.failed }
             lane.input.markAsFinished()
         } catch {
             note(error)
@@ -428,6 +430,7 @@ private final class MoviePumpJob: @unchecked Sendable {
         guard isLast else { return }
         if let failure { return abort(failure) }
         guard reader.status == .completed else { return abort(reader.error ?? MovieRewriteError.failed) }
+        guard writer.status == .writing else { return abort(writer.error ?? MovieRewriteError.failed) }
         writer.finishWriting { [self] in
             if writer.status != .completed {
                 end(.failure(writer.error ?? MovieRewriteError.failed))

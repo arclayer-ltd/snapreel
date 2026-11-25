@@ -229,6 +229,8 @@ final class BroadcastWriter {
         }
         if let appAudioInput { drain(&appSound, into: appAudioInput) }
         if let micAudioInput { drain(&micSound, into: micAudioInput) }
+        // The last sound can be what fills the disk.
+        guard writer.status == .writing else { return keepPartialIfAny() }
         videoInput?.markAsFinished()
         appAudioInput?.markAsFinished()
         micAudioInput?.markAsFinished()
