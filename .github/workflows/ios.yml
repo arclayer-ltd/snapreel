@@ -34,6 +34,10 @@ on:
         description: Run the unit tests (SnapreelTests)
         type: boolean
         default: true
+      benchmarks:
+        description: With the tests, also measure preparing share links and iOS's background session
+        type: boolean
+        default: false
       ios16:
         # A second job that runs the tests on an iOS 16 simulator, the oldest iOS Snapreel supports.
         # It downloads the runtime (about 7 GB) on an older macOS image.
@@ -111,9 +115,34 @@ jobs:
           fi
           ls build/Build/Products/Debug-iphonesimulator/Snapreel.app/PlugIns/
 
+      # The background-session probe (SnapreelTests/Uploads) needs a signed app (ad hoc) and a slow local HTTPS server.
+      - name: Background session probe
+        if: ${{ inputs.tests && inputs.benchmarks }}
+        continue-on-error: true
+        timeout-minutes: 30
+        run: |
+          mkdir -p ci-out/tests
+          UDID=$(xcrun simctl create "Snapreel Probe" "iPhone 17" 2>/dev/null || xcrun simctl create "Snapreel Probe" "iPhone 16")
+          xcrun simctl boot "$UDID"; xcrun simctl bootstatus "$UDID" -b > /dev/null || true
+          PEM="$RUNNER_TEMP/probe"; mkdir -p "$PEM"
+          openssl req -x509 -newkey rsa:2048 -nodes -days 30 -keyout "$PEM/key.pem" -out "$PEM/cert.pem" -subj "/CN=localhost" \
+            -addext "subjectAltName=DNS:localhost,IP:127.0.0.1" -addext "extendedKeyUsage=serverAuth"
+          xcrun simctl keychain "$UDID" add-root-cert "$PEM/cert.pem" || true
+          nohup node scripts/h2-probe-server.mjs "$PEM/key.pem" "$PEM/cert.pem" 8443 > ci-out/tests/probe-server.log 2>&1 &
+          TEST_RUNNER_PROBE_URL="https://localhost:8443/" xcodebuild test -project Snapreel.xcodeproj -scheme Snapreel \
+            -configuration Debug -destination "id=$UDID" -derivedDataPath build-signed -parallel-testing-enabled NO \
+            -only-testing:SnapreelTests/BackgroundSessionProbe CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY=- DEVELOPMENT_TEAM= \
+            PROVISIONING_PROFILE_SPECIFIER= ONLY_ACTIVE_ARCH=YES > ci-out/tests/probe.log 2>&1 || true
+          grep -E "MEASURE |error:|Test Case" ci-out/tests/probe.log | cut -c1-900 || true
+          xcrun simctl delete "$UDID" || true
+
       - name: Unit tests
         if: ${{ inputs.tests }}
         timeout-minutes: 45
+        env:
+          # Settings for the tests' own process travel as TEST_RUNNER_<name>.
+          TEST_RUNNER_OUT_DIR: ${{ github.workspace }}/ci-out/tests/media
+          TEST_RUNNER_RUN_BENCHMARKS: ${{ inputs.benchmarks && '1' || '0' }}
         run: bash scripts/ci-tests.sh ci-out/tests
 
       - name: Simulator screenshots
@@ -286,6 +315,8 @@ jobs:
           exit 0
 
       - name: Unit tests on iOS 16
+        env:
+          TEST_RUNNER_OUT_DIR: ${{ github.workspace }}/ci-out/tests-ios16/media
         run: bash scripts/ci-tests.sh ci-out/tests-ios16 16
 
       - uses: actions/upload-artifact@v4

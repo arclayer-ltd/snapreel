@@ -70,8 +70,15 @@ final class WebCopyTests: XCTestCase {
         return (await box.seen, video)
     }
 
-    /// Kept with the test's results (CI exports them), to be checked again with ffprobe and Chrome.
+    /// Kept for CI (OUT_DIR, else with the test's results), to be checked again with ffprobe and Chrome.
     private func keep(_ url: URL, as name: String) {
+        if let out = ProcessInfo.processInfo.environment["OUT_DIR"], !out.isEmpty {
+            let target = URL(fileURLWithPath: out).appendingPathComponent(name)
+            try? FileManager.default.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try? FileManager.default.removeItem(at: target)
+            try? FileManager.default.copyItem(at: url, to: target)
+            return
+        }
         guard let data = try? Data(contentsOf: url) else { return }
         let attachment = XCTAttachment(data: data, uniformTypeIdentifier: "public.mpeg-4")
         attachment.name = name
@@ -221,10 +228,10 @@ final class WebCopyTests: XCTestCase {
             }
             let range = try await track.load(.timeRange)
             let segments = try await track.load(.segments)
-            print("PERF|sound \(name): offset \(offset ?? -1) range \(range.start.seconds)+\(range.duration.seconds) segments \(segments.map { "\($0.timeMapping.source.start.seconds)->\($0.timeMapping.target.start.seconds) empty \($0.isEmpty)" })\(text)")
+            print("MEASURE sound \(name): offset \(offset ?? -1) range \(range.start.seconds)+\(range.duration.seconds) segments \(segments.map { "\($0.timeMapping.source.start.seconds)->\($0.timeMapping.target.start.seconds) empty \($0.isEmpty)" })\(text)")
         }
         let (flash, beep) = try await flashAndBeep(movie)
-        print("PERF|sound in the recording: flash \(flash) beep \(beep ?? -1)")
+        print("MEASURE sound in the recording: flash \(flash) beep \(beep ?? -1)")
     }
 
     // MARK: - Copying
@@ -270,9 +277,14 @@ final class WebCopyTests: XCTestCase {
         let source = folder.appendingPathComponent("turned.mov")
         try await Maker(width: 886, height: 1_918, seconds: 11, bitRate: 1_500_000, frames: .even(30), soundSeconds: 11,
                         transform: CGAffineTransform(a: 0, b: 1, c: -1, d: 0, tx: 1_918, ty: 0)).write(to: source)
-        for (long, name) in [(1_920, "copy-turned.mp4"), (1_280, "encode-turned.mp4")] {
-            let (seen, video) = try await prepare(source, long: long, duration: 11, into: name)
-            try await check(video, seen, source: source, keepAs: name)
+        // The screen recorder writes the turn without its shift.
+        let unshifted = folder.appendingPathComponent("turned-unshifted.mov")
+        try await Maker(width: 886, height: 1_918, seconds: 11, bitRate: 1_500_000, frames: .even(30), soundSeconds: 11,
+                        transform: CGAffineTransform(rotationAngle: .pi / 2)).write(to: unshifted)
+        for (input, long, name) in [(source, 1_920, "copy-turned.mp4"), (source, 1_280, "encode-turned.mp4"),
+                                    (unshifted, 1_920, "copy-turned-unshifted.mp4"), (unshifted, 1_280, "encode-turned-unshifted.mp4")] {
+            let (seen, video) = try await prepare(input, long: long, duration: 11, into: name)
+            try await check(video, seen, source: input, keepAs: name)
             let track = try await AVURLAsset(url: video).loadTracks(withMediaType: .video)[0]
             let size = try await track.load(.naturalSize), turn = try await track.load(.preferredTransform)
             let shown = CGRect(origin: .zero, size: size).applying(turn)

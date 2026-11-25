@@ -47,7 +47,7 @@ final class WebCopyBenchmarks: XCTestCase {
             try? FileManager.default.removeItem(at: source)
         }
         let report = lines.joined(separator: "\n")
-        for line in lines { print("PERF|\(line)") }
+        for line in lines { print("MEASURE \(line)") }
     }
 
     @MainActor private final class FirstBytes { var at: Date? }

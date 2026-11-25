@@ -487,7 +487,11 @@ final class WebPreparer {
     private func finish(_ movie: WebMovieFile, _ sound: SoundReader?, _ facts: VideoFacts, _ plan: WebPlan, _ box: StateBox) throws {
         try sound?.write(until: .infinity, to: movie)
         guard let entry = box.value.videoEntry, movie.records.contains(where: \.isVideo) else { throw WebExport.Failure.cannotExport(nil) }
-        let transform = plan.copies ? facts.transform : plan.transform(of: facts)
+        // The turn with its shift worked out again: recordings from the screen recorder carry a turn without one, which
+        // browsers ignore but Apple's players follow, drawing the picture off the canvas.
+        let size = plan.copies ? CGSize(width: facts.encodedWidth, height: facts.encodedHeight)
+            : CGSize(width: plan.encodedWidth, height: plan.encodedHeight)
+        let transform = facts.isHDR && !plan.copies ? .identity : WebExport.upright(facts.transform, size: size, scale: 1)
         let origin = box.value.origin?.time ?? .zero
         let end = ticks(CMTime(seconds: facts.end, preferredTimescale: 90_000), from: origin)
         let video = WebMovieFile.Track(timescale: WebMovieFile.videoTimescale, entry: entry,
@@ -697,21 +701,6 @@ struct WebPlan: Codable, Equatable {
         let rate = plan.copies ? facts.bitRate : Double(plan.bitRate) * (isScreen ? 0.85 : 1)
         plan.estimatedBytes = Int64((rate + 128_000) * facts.duration / 8)
         return plan
-    }
-
-    /// The turn that shows the smaller picture upright.
-    func transform(of facts: VideoFacts) -> CGAffineTransform {
-        if facts.isHDR { return .identity }
-        var turn = facts.transform
-        // Only the shift depends on the size.
-        turn.tx = turn.tx * CGFloat(encodedWidth) / CGFloat(max(1, facts.encodedWidth))
-        turn.ty = turn.ty * CGFloat(encodedHeight) / CGFloat(max(1, facts.encodedHeight))
-        if abs(facts.transform.b) > 0.5 {
-            // Turned on its side: the shift is measured along the other edge.
-            turn.tx = facts.transform.tx * CGFloat(encodedHeight) / CGFloat(max(1, facts.encodedHeight))
-            turn.ty = facts.transform.ty * CGFloat(encodedWidth) / CGFloat(max(1, facts.encodedWidth))
-        }
-        return turn
     }
 }
 
