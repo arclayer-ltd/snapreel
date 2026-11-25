@@ -570,8 +570,8 @@ def main():
     subs = parser.add_subparsers(dest="command")
 
     def phone_options(p):
-        p.add_argument("--device", default="small", choices=DEVICES, help="small (375x812), se, normal, large, iphonex")
-        p.add_argument("--ios", default="27", help="27 (newest), 26, 18 or 16")
+        p.add_argument("--device", default="iphonex", choices=DEVICES, help="iphonex, small (both 375x812), se, normal, large")
+        p.add_argument("--ios", default="16", help="16 (oldest supported, fastest here), 18, 26 or 27 (newest)")
         p.add_argument("--app", default="main", help="branch or commit of the app")
         p.add_argument("--theme", default="light", choices=("light", "dark"))
         p.add_argument("--photos", default="", help="samples to put in Photos at the start, e.g. short,4min")

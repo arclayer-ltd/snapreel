@@ -237,6 +237,10 @@ class IOSDriver:
         for bundle in ("com.apple.mobileslideshow", "com.apple.Preferences", "com.apple.mobilesafari"):
             simctl("launch", self.udid, bundle, check=False, timeout=120)
             time.sleep(8)
+            try:  # Photos asks to send notifications; unanswered, the question would lie over every later screen
+                self.press_alert("Allow")
+            except (StepError, Hang, OSError):
+                pass
             simctl("terminate", self.udid, bundle, check=False)
         end = time.time() + 420
         while time.time() < end and os.getloadavg()[0] > 2.0:  # let first-start work finish
@@ -596,7 +600,7 @@ class IOSDriver:
             for e in found:
                 if layer not in e["layers"] or hidden.intersection(e["layers"]) or not e["onscreen"]:
                     continue
-                wanted = [w for w in re.findall(r"[a-z0-9]{3,}", e["label"].lower())][:8]
+                wanted = [w for w in re.findall(r"[a-z0-9]{3,}", plain(e["label"]))][:8]
                 if not wanted or e["kind"] not in ("StaticText", "Button", "Link", "Cell") or e["h"] > self.size[1] * 0.5:
                     continue
                 near = " ".join(text for text, x, y, w, h in words if x < e["x"] + e["w"] + 12 and x + w > e["x"] - 12
@@ -703,15 +707,16 @@ class IOSDriver:
         match = re.fullmatch(r"([A-Z][A-Za-z]+):(.+)", text)
         if match and match.group(1) in INTERACTIVE | {"StaticText", "Image", "Other"}:
             kind, text = match.group(1), match.group(2)
-        low = text.lower()
+        plain = lambda t: t.lower().replace("\u2019", "'").replace("\u2018", "'")
+        low = plain(text)
         whole = re.compile(r"(?<![a-z0-9])" + re.escape(low) + r"(?![a-z0-9])")
         pool = [e for e in self.elements if e["onscreen"] and (kind is None or e["kind"] == kind)]
-        for test in (lambda e: e["label"] == text, lambda e: e["label"].lower() == low,
-                     lambda e: e["id"] == text, lambda e: e["value"].lower() == low,
-                     lambda e: e["label"].lower().startswith(low) and whole.search(e["label"].lower()),
-                     lambda e: whole.search(e["label"].lower()),
-                     lambda e: e["label"].lower().startswith(low), lambda e: low in e["label"].lower(),
-                     lambda e: low in e["value"].lower()):
+        for test in (lambda e: e["label"] == text, lambda e: plain(e["label"]) == low,
+                     lambda e: e["id"] == text, lambda e: plain(e["value"]) == low,
+                     lambda e: plain(e["label"]).startswith(low) and whole.search(plain(e["label"])),
+                     lambda e: whole.search(plain(e["label"])),
+                     lambda e: plain(e["label"]).startswith(low), lambda e: low in plain(e["label"]),
+                     lambda e: low in plain(e["value"])):
             found = [e for e in pool if test(e)]
             if found:
                 if kind is None:
@@ -843,7 +848,8 @@ class IOSDriver:
             time.sleep(2)
             self.away = True
             return
-        self._wda("POST", "/wda/homescreen", {}, timeout=20)
+        self._wda("GET", "/window/size", timeout=20)  # (restarts the touch driver if it is stuck)
+        self._http("POST", "/wda/homescreen", {}, timeout=20)
 
     def back(self):
         width, height = self.size
@@ -862,7 +868,12 @@ class IOSDriver:
                 "landscape-right": "UIA_DEVICE_ORIENTATION_LANDSCAPERIGHT"}
         if way not in ways:
             raise StepError("orient: portrait, landscape, landscape-right")
-        self._wda("POST", "/orientation", {"orientation": ways[way]}, timeout=20)
+        try:
+            self._wda("POST", "/orientation", {"orientation": ways[way]}, timeout=20)
+        except StepError as error:
+            if "Rotate" in str(error):
+                raise StepError("this screen stays as it is when the phone is turned to " + way)
+            raise
         time.sleep(0.8)
         size = self._wda("GET", "/window/size")
         self.size = (int(size["width"]), int(size["height"]))

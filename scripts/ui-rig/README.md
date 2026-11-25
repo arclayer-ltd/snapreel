@@ -11,14 +11,15 @@ emails and the rig's own sample videos. Never real accounts, passwords, or anyon
 ## Start and stop
 
 ```
-rig start mia --device small                         a phone called mia; prints READY with its size
+rig start mia                                        a phone called mia; prints READY with its size
 rig -s mia do "launch fresh"                         the app, as if just installed
 rig -s mia look                                      picture and list of the screen
 rig stop mia                                         always, when you are done
 ```
 
-Choose a name nobody else uses. `--device`: `small` (375x812), `se` (375x667), `normal`, `large`, `iphonex`.
-`--ios`: `27` (newest), `26`, `18`, `16` (the oldest the app supports). `--app BRANCH` tests a branch (default `main`).
+Choose a name nobody else uses. Without options you get an iPhone X (375x812) with iOS 16, the oldest the app supports and
+by far the fastest here. `--ios 27` is the newest (slow, use it when asked), `26` and `18` exist too. `--device`: `iphonex`,
+`small` (375x812), `se` (375x667), `normal`, `large`. `--app BRANCH` tests a branch (default `main`).
 `--theme dark`, `--minutes 120` (it stops by itself then, and after 20 idle minutes: `--idle`), `--cloud off` (every
 online service unreachable). Starting takes 6 to 9 minutes once a Mac is free, and all five Mac runners may be taken;
 leave it and run `rig status mia` later (`--no-wait`). `rig list` shows every session, `rig stop --all` stops yours. With one session open, `-s` is not needed.
@@ -61,14 +62,14 @@ Open the picture each time (the Read tool shows it); its pixels are the numbers 
 4 s for a name to appear, and the picture is taken when the screen stops moving. `*** HANG` means the app's main
 thread was busy and did not answer for 8 s; `*** CRASH` comes with the crash. After a hang, try `home`, `reopen`,
 and then `launch`. `[the screen did not change]` (with `do --each`) hints at a dead control. System questions
-("Allow Photos?") are answered with `tap "Allow"`.
+("Allow Photos?") are answered with `tap "Allow"` and stay over everything until they are.
 The list can still name something that lies **behind** a sheet (the tab bar); the picture decides. Videos in the Photos
 picker have no usable names: tap them by point. **The Mac is slow and shared**: a few seconds' delay, or "the Mac was slow",
 is not the app's fault; `hangcheck` tells you whether the app itself was busy. If you read "stuck ... the rig started its
 own side again", just `look`.
 Pictures, a `history.txt` of every step, crash and hang files stay in `%TEMP%\snapreel-rig\NAME`.
 
-Without a person: `rig batch steps.txt --device small --photos 4min` runs a file of steps (one per line, `#` comments)
+Without a person: `rig batch steps.txt` runs a file of steps (one per line, `#` comments)
 and downloads a picture per step, a video, the log, crashes, hangs and a report.
 A browser instead of a phone: `rig start wes --web phone` or `--web desktop` (see [TESTER-WEB.md](TESTER-WEB.md)).
 
@@ -77,6 +78,6 @@ steps done, 1 the rig could not, 2 a step failed.
 
 For whoever runs the testers: `rig build --app BRANCH` once before starting them (sessions then skip the 8-minute build;
 builds are kept 30 days and reused for any commit with the same app source). Every 90 days, or when an iOS is new:
-`rig media` (sample videos) and `rig image --device small --ios 27` per kind of phone (a phone that is started, settled and
+`rig media` (sample videos) and `rig image --device iphonex --ios 16` per kind of phone (a phone that is started, settled and
 filled once and stored; without one a session still works but takes much longer). `rig clean` afterwards removes what ended
 sessions left on GitHub. One Mac runner per phone, five at a time for the whole organisation.
