@@ -55,7 +55,10 @@ final class Uploader: ObservableObject {
     private var preparingID: UUID?
     private var preparation: Task<Void, Never>?
     private var lastPreparation: Task<Void, Never>?
-    private var lastRefresh = Date.distantPast
+    /// The token each transfer carries (not known for those found after a relaunch), and the last one refreshed to.
+    private var carried: [TransferTag: String] = [:]
+    private var refreshedToken: String?
+    private var isRefreshing = false
     /// Server time minus this phone's.
     private var clockOffset: TimeInterval = 0
     private var speeds: [UUID: [(time: Date, bytes: Int64)]] = [:]
@@ -323,7 +326,7 @@ final class Uploader: ObservableObject {
 
     private func forget(_ videoID: UUID) {
         transfers.cancel(videoID)
-        for tag in Array(inFlight.keys) where tag.videoID == videoID { inFlight[tag] = nil; startedAt[tag] = nil }
+        for tag in Array(inFlight.keys) where tag.videoID == videoID { inFlight[tag] = nil; startedAt[tag] = nil; carried[tag] = nil }
         if preparingID == videoID {
             preparation?.cancel()
             preparation = nil
@@ -392,7 +395,7 @@ final class Uploader: ObservableObject {
     private func pump(_ id: UUID) {
         guard started, let job = jobs[id], job.isActive, environment.isConfigured(), environment.isSignedIn() else { return }
         if job.stage == .preparing { startPreparing() }
-        guard isOnline else { return }
+        guard isOnline, !isRefreshing else { return }
         if let until = trouble[id]?.until, until > environment.now() { return }
         guard !control.contains(id) else { return }
         if job.stage == .finishing || (job.stage == .uploading && job.parts.allSatisfy(\.isComplete) && !job.parts.isEmpty) {
@@ -426,6 +429,10 @@ final class Uploader: ObservableObject {
         if part.size > CloudConfig.maxFileBytes {
             fail(id, WebExport.Failure.tooLarge.errorDescription ?? "")
             return true
+        }
+        if !isFinal {
+            part.layOutPieces()
+            if part.pieces?.isEmpty != false { return false }
         }
         if part.method == nil || (job.usesTUS == true && part.method == .multipart) {
             let large = !isFinal || part.size > CloudConfig.singleLimit
@@ -504,7 +511,7 @@ final class Uploader: ObservableObject {
 
     /// The next file or piece to start, oldest job first, small files before the video.
     private func nextWork() -> Work? {
-        guard started, isOnline, environment.isSignedIn() else { return nil }
+        guard started, isOnline, !isRefreshing, environment.isSignedIn() else { return nil }
         let now = environment.now()
         let videoInFlight = inFlight.keys.filter { $0.part == .video }.count
         var videoAllowed = queuesEverything
@@ -542,7 +549,8 @@ final class Uploader: ObservableObject {
             let token = try await environment.token(2_700)
             let file = folder(for: work.id).appendingPathComponent(work.tag.fileName)
             let md5 = try await writePiece(work, to: file)
-            guard var job = jobs[work.id], job.isActive, isCurrent(work.tag, in: job), let index = job.index(of: work.part.kind) else {
+            guard inFlight[work.tag] != nil, var job = jobs[work.id], job.isActive, isCurrent(work.tag, in: job),
+                  let index = job.index(of: work.part.kind) else {
                 drop(work.tag)
                 return
             }
@@ -556,6 +564,7 @@ final class Uploader: ObservableObject {
             } else {
                 request = try singleRequest(job, work.part, token: token)
             }
+            carried[work.tag] = token
             transfers.start(request, file: file, tag: work.tag)
         } catch {
             drop(work.tag)
@@ -599,6 +608,7 @@ final class Uploader: ObservableObject {
     private func drop(_ tag: TransferTag) {
         inFlight[tag] = nil
         startedAt[tag] = nil
+        carried[tag] = nil
         try? FileManager.default.removeItem(at: folder(for: tag.videoID).appendingPathComponent(tag.fileName))
         publishLive(tag.videoID, force: true)
     }
@@ -838,6 +848,7 @@ final class Uploader: ObservableObject {
             request.setValue("true", forHTTPHeaderField: "x-upsert")
             request.setValue(String(part.offset), forHTTPHeaderField: "Upload-Offset")
             request.setValue("application/offset+octet-stream", forHTTPHeaderField: "Content-Type")
+            carried[tag] = token
             transfers.start(request, file: file, tag: tag)
         } catch {
             drop(tag)
@@ -906,7 +917,7 @@ final class Uploader: ObservableObject {
     }
 
     private func transferFinished(_ tag: TransferTag, _ result: TransferResult) {
-        let began = startedAt[tag]
+        let used = carried[tag]
         drop(tag)
         noteClock(result.header("Date"))
         guard var job = jobs[tag.videoID], job.isActive, isCurrent(tag, in: job), let index = job.index(of: tag.part) else { return }
@@ -949,7 +960,7 @@ final class Uploader: ObservableObject {
             runControl(id) { try await self.checkStored(id, tag.part) }
         case .tokenExpired:
             tusSynced.remove(id)
-            refreshToken(for: id, transferStarted: began)
+            refreshToken(for: id, used: used)
         case let answer:
             tusSynced.remove(id)
             handle(Refused(answer: answer), for: id, part: tag.part)
@@ -1028,11 +1039,12 @@ final class Uploader: ObservableObject {
         }
     }
 
-    /// The token ran out while something waited: get a new one once, drop the transfers that still carry the old
-    /// one, and go on.
-    private func refreshToken(for id: UUID, transferStarted: Date?) {
-        // Another transfer already had it refreshed after this one started.
-        if let transferStarted, transferStarted < lastRefresh, environment.now().timeIntervalSince(lastRefresh) < 120 {
+    /// The token ran out while something waited. Gets a new one, once however many transfers ran into it, drops the
+    /// transfers that still carry an old one, and goes on.
+    private func refreshToken(for id: UUID, used: String?) {
+        if isRefreshing { return }
+        if let used, let refreshedToken, used != refreshedToken {
+            // It was already replaced while this transfer was under way.
             pump(id)
             return
         }
@@ -1043,14 +1055,21 @@ final class Uploader: ObservableObject {
             fail(id, "Your sign-in wasn't accepted. Sign out and in again, then try again.")
             return
         }
-        runControl(id) {
-            try await self.environment.refreshToken()
-            let now = self.environment.now()
-            self.lastRefresh = now
-            let stale = self.inFlight.keys.filter { (self.startedAt[$0] ?? .distantPast) < now }
-            let staleTags = Set(stale)
-            self.transfers.cancel { staleTags.contains($0) }
-            for tag in stale { self.drop(tag) }
+        isRefreshing = true
+        Task { @MainActor in
+            do {
+                try await self.environment.refreshToken()
+                let token = try await self.environment.token(60)
+                self.refreshedToken = token
+                let stale = Set(self.inFlight.keys.filter { self.carried[$0] != token })
+                self.transfers.cancel { stale.contains($0) }
+                for tag in stale { self.drop(tag) }
+                self.isRefreshing = false
+            } catch {
+                self.isRefreshing = false
+                self.handle(error, for: id)
+            }
+            self.pumpAll()
         }
     }
 
@@ -1059,7 +1078,7 @@ final class Uploader: ObservableObject {
         if let refused = error as? Refused {
             switch refused.answer {
             case .ok: break
-            case .tokenExpired: refreshToken(for: id, transferStarted: nil)
+            case .tokenExpired: refreshToken(for: id, used: nil)
             case .clockSkew:
                 // `ask` keeps the server's clock from the next answer.
                 wait(id, for: .temporary(403))
@@ -1070,7 +1089,7 @@ final class Uploader: ObservableObject {
                 if counts.denied > Limits.denied {
                     fail(id, "snapreel.video refused the upload. Sign out and in again, then try again.")
                 } else {
-                    refreshToken(for: id, transferStarted: nil)
+                    refreshToken(for: id, used: nil)
                 }
             case .keyRefused:
                 guard var job = jobs[id] else { return }

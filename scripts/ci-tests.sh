@@ -1,7 +1,8 @@
 #!/bin/bash
 # Runs the SnapreelTests unit tests on a simulator. Usage: ci-tests.sh <out-dir> [ios-major]
 # With an iOS major version (for example 16) it uses that runtime, downloading it when the runner has none, and says so
-# when it can't be had. BENCHMARKS=1 also measures preparing (a few minutes). Files the tests make land in <out-dir>/media.
+# when it can't be had. BENCHMARKS=1 also measures preparing (a few minutes), PROBE=1 how iOS's background session sends many
+# pieces at once. Files the tests make land in <out-dir>/media.
 set -uo pipefail
 OUT="$1"
 MAJOR="${2:-}"
@@ -46,6 +47,17 @@ done
 echo "Testing on $RUNTIME ($DEVICE)" | tee "$OUT/device.txt"
 xcrun simctl bootstatus "$DEVICE" -b > "$OUT/boot.log" 2>&1 || true
 
+# A slow local HTTPS server the background session probe uploads to (PROBE=1).
+if [ "${PROBE:-0}" = "1" ] && command -v node > /dev/null; then
+  PEM="$(mktemp -d)"
+  openssl req -x509 -newkey rsa:2048 -nodes -days 30 -keyout "$PEM/key.pem" -out "$PEM/cert.pem" -subj "/CN=localhost" \
+    -addext "subjectAltName=DNS:localhost,IP:127.0.0.1" -addext "extendedKeyUsage=serverAuth" > "$OUT/probe-cert.log" 2>&1
+  xcrun simctl keychain "$DEVICE" add-root-cert "$PEM/cert.pem" >> "$OUT/probe-cert.log" 2>&1 || true
+  node scripts/h2-probe-server.mjs "$PEM/key.pem" "$PEM/cert.pem" 8443 > "$OUT/probe-server.log" 2>&1 &
+  PROBE_PID=$!
+  export TEST_RUNNER_PROBE_URL="https://localhost:8443/"
+fi
+
 # Settings for the tests' process travel as TEST_RUNNER_<name>.
 export TEST_RUNNER_OUT_DIR="$OUT/media"
 export TEST_RUNNER_RUN_BENCHMARKS="${BENCHMARKS:-0}"
@@ -66,6 +78,8 @@ grep -E "failed \(" "$OUT/results.txt" || true
 head -120 "$OUT/errors.txt"
 [ "$STATUS" = "0" ] || tail -30 "$OUT/tests.log"
 rm -rf "$OUT/tests.xcresult"
+[ -n "${PROBE_PID:-}" ] && kill "$PROBE_PID" 2>/dev/null
+[ -f "$OUT/media/probe.txt" ] && cat "$OUT/media/probe.txt"
 xcrun simctl shutdown "$DEVICE" > /dev/null 2>&1 || true
 xcrun simctl delete "$DEVICE" > /dev/null 2>&1 || true
 exit $STATUS

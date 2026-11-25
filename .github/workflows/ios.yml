@@ -25,7 +25,7 @@ on:
         type: string
         default: ""
       benchmarks:
-        description: Measure preparing share links (a few minutes more)
+        description: Measure preparing share links and the background session (a few minutes more)
         type: boolean
         default: false
       only:
@@ -118,6 +118,7 @@ jobs:
         if: ${{ inputs.tests }}
         env:
           BENCHMARKS: ${{ inputs.benchmarks && '1' || '0' }}
+          PROBE: ${{ inputs.benchmarks && '1' || '0' }}
         run: bash scripts/ci-tests.sh ci-out/tests
 
       - name: Unit tests on an older iOS
