@@ -70,7 +70,17 @@ final class StubStorage: UploadTransfers {
 
     var activeTags: [TransferTag] { Array(active.keys) }
 
-    func start(_ request: URLRequest, file: URL, tag: TransferTag) {
+    /// When the transfers handed over may begin.
+    private(set) var begins: [TransferTag: Date] = [:]
+    var now: () -> Date = { Date() }
+
+    func cancelWaiting() {
+        let waiting = Set(begins.filter { $0.value > now() }.keys)
+        cancel { waiting.contains($0) }
+    }
+
+    func start(_ request: URLRequest, file: URL, tag: TransferTag, begins: Date?) {
+        self.begins[tag] = begins
         // iOS takes the file as it is when the task starts.
         let data = (try? Data(contentsOf: file)) ?? Data()
         XCTAssertFalse(data.isEmpty, "an empty transfer was started: \(tag.text)")

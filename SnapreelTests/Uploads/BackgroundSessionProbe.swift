@@ -23,7 +23,9 @@ final class BackgroundSessionProbe: XCTestCase {
             try UploaderTests.noise(2_000_000).write(to: file)
             var request = URLRequest(url: url.appendingPathComponent("piece/\(number)"))
             request.httpMethod = "PUT"
-            transfers.start(request, file: file, tag: tag)
+            // Three batches, the way the uploader hands them over: at once, after 8 seconds, after 16.
+            let batch = (number - 1) / 8
+            transfers.start(request, file: file, tag: tag, begins: batch == 0 ? nil : Date().addingTimeInterval(Double(batch) * 8))
         }
         let deadline = Date().addingTimeInterval(240)
         while ended.count < count && Date() < deadline { try await Task.sleep(nanoseconds: 200_000_000) }

@@ -9,9 +9,10 @@ import UIKit
 ///   being made.
 /// - Small files go up in one request. The video goes up as S3 multipart pieces of 5 MB, signed with the person's own
 ///   session token: pieces can go in any order, several at once, and sending one twice is harmless, so a lost answer
-///   costs nothing. While Snapreel is open three are under way; when it leaves the screen every remaining piece is
-///   handed to iOS's background session at once, which keeps sending them while Snapreel is suspended or closed or
-///   the phone is locked. (TUS, the old way, needs the app woken for every next chunk; it stays as the fallback for
+///   costs nothing. While Snapreel is open three are under way; when it leaves the screen the remaining pieces are
+///   handed to iOS's background session, which keeps sending them while Snapreel is suspended or closed or the phone
+///   is locked. iOS sends all it has at the same time, and a dropped connection loses whatever was under way, so it
+///   gets about two minutes' worth at once and the rest with times to begin. (TUS, the old way, needs the app woken for every next chunk; it stays as the fallback for
 ///   when the S3 endpoint refuses its key.)
 /// - Every answer goes through `UploadAnswer`; every way to try again has a pause and a cap, and ends in progress or
 ///   in a failed state with Try again. What is on the server stays there for Try again.
@@ -64,6 +65,8 @@ final class Uploader: ObservableObject {
     private var speeds: [UUID: [(time: Date, bytes: Int64)]] = [:]
     private var lastPublish: [UUID: Date] = [:]
     private var lastReport: [UUID: Date] = [:]
+    /// The last speed measured, bytes a second.
+    private var lastRate: Double?
     private var backgroundCompletion: (() -> Void)?
     private var backgroundTask = UIBackgroundTaskIdentifier.invalid
 
@@ -94,8 +97,14 @@ final class Uploader: ObservableObject {
         static let denied = 2
         /// Times a file may start over.
         static let restarts = 4
-        /// Handed to iOS at once: about what a slow 4G uplink sends in the hour a token lives.
-        static let queuedBytes: Int64 = 700 * 1_024 * 1_024
+        /// Handed to iOS when Snapreel leaves the screen: what goes at the same time (two minutes' worth, between these),
+        /// and the most in all (what can begin while the token is still good).
+        static let batchSeconds = 120.0
+        static let leastBatch: Int64 = 30 * 1_024 * 1_024
+        static let mostBatch: Int64 = 150 * 1_024 * 1_024
+        static let queuedSeconds = 2_400.0
+        /// Assumed while nothing has been measured (slow 4G).
+        static let usualRate = 300_000.0
         /// Pieces written ahead while Snapreel is open.
         static let stock = 24
         /// Never filled by piece files.
@@ -165,6 +174,8 @@ final class Uploader: ObservableObject {
         queuesEverything = false
         endBackgroundTask()
         pausedPreparing = []
+        // Pieces waiting for their time go again now, three at a time.
+        transfers.cancelWaiting()
         pumpAll()
     }
 
@@ -490,6 +501,7 @@ final class Uploader: ObservableObject {
         var piece: UploadJob.Part.Piece?
         var tag: TransferTag
         var size: Int64
+        var begins: Date?
     }
 
     /// Starts transfers until there are enough under way.
@@ -514,9 +526,17 @@ final class Uploader: ObservableObject {
         guard started, isOnline, !isRefreshing, environment.isSignedIn() else { return nil }
         let now = environment.now()
         let videoInFlight = inFlight.keys.filter { $0.part == .video }.count
-        var videoAllowed = queuesEverything
-            ? Int64(videoInFlight + 1) * CloudConfig.pieceSize <= Limits.queuedBytes && environment.freeDisk() > Limits.freeDisk
-            : videoInFlight < Limits.openTransfers
+        var videoAllowed = videoInFlight < Limits.openTransfers
+        var begins: Date?
+        if queuesEverything {
+            let rate = max(Limits.usualRate / 3, lastRate ?? Limits.usualRate)
+            let batch = max(Limits.leastBatch, min(Limits.mostBatch, Int64(rate * Limits.batchSeconds)))
+            // Pieces already handed over, in batches; each batch begins when the ones before it should be through.
+            let number = Int64(videoInFlight) * CloudConfig.pieceSize / batch
+            let delay = Double(number) * Double(batch) / rate
+            videoAllowed = delay < Limits.queuedSeconds && environment.freeDisk() > Limits.freeDisk
+            if number > 0 { begins = now.addingTimeInterval(delay) }
+        }
         // With the phone nearly full, still send, one piece at a time.
         if videoInFlight == 0 { videoAllowed = true }
         for job in jobs.values.filter(\.isActive).sorted(by: { $0.createdAt < $1.createdAt }) {
@@ -531,7 +551,7 @@ final class Uploader: ObservableObject {
                     guard let uploadID = part.uploadID else { continue }
                     for piece in part.pieces ?? [] where !piece.done {
                         let tag = TransferTag(videoID: job.videoID, part: part.kind, number: Int64(piece.number), lane: Self.lane(uploadID))
-                        if inFlight[tag] == nil { return Work(id: job.videoID, part: part, piece: piece, tag: tag, size: piece.size) }
+                        if inFlight[tag] == nil { return Work(id: job.videoID, part: part, piece: piece, tag: tag, size: piece.size, begins: begins) }
                     }
                 case .tus?, nil:
                     continue
@@ -565,7 +585,7 @@ final class Uploader: ObservableObject {
                 request = try singleRequest(job, work.part, token: token)
             }
             carried[work.tag] = token
-            transfers.start(request, file: file, tag: work.tag)
+            transfers.start(request, file: file, tag: work.tag, begins: work.begins)
         } catch {
             drop(work.tag)
             handle(error, for: work.id)
@@ -849,7 +869,7 @@ final class Uploader: ObservableObject {
             request.setValue(String(part.offset), forHTTPHeaderField: "Upload-Offset")
             request.setValue("application/offset+octet-stream", forHTTPHeaderField: "Content-Type")
             carried[tag] = token
-            transfers.start(request, file: file, tag: tag)
+            transfers.start(request, file: file, tag: tag, begins: nil)
         } catch {
             drop(tag)
             throw error
@@ -901,6 +921,9 @@ final class Uploader: ObservableObject {
         samples.append((now, job.confirmedBytes + live))
         samples.removeAll { now.timeIntervalSince($0.time) > 20 }
         speeds[id] = samples
+        if let first = samples.first, now.timeIntervalSince(first.time) >= 4, job.confirmedBytes + live > first.bytes {
+            lastRate = Double(job.confirmedBytes + live - first.bytes) / now.timeIntervalSince(first.time)
+        }
         report(id)
     }
 

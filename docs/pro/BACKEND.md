@@ -161,7 +161,7 @@ What decided it is not the speed of one good minute but what happens on a phone:
 
 | | TUS | S3 multipart | signed upload URL |
 |---|---|---|---|
-| With the app suspended | one chunk, then iOS must wake the app for the next, when it finds it convenient | every piece is queued at once | one request for the whole file |
+| With the app suspended | one chunk, then iOS must wake the app for the next, when it finds it convenient | the pieces are queued ahead | one request for the whole file |
 | A dropped connection | iOS repeats the old chunk at the old offset: 409, the app must be woken | iOS repeats that piece (5 MB) by itself | the whole file again |
 | A lost answer | ask for the offset | send the piece again, or nothing: its ETag is its MD5 | send everything again |
 | Order | strictly one after another, from the start | any, so what is encoded goes up while the rest is being made, and the index goes last | one file, when it is finished |
@@ -189,12 +189,15 @@ app then starts that file again. If the `anon` key is ever switched off, S3 answ
 | no connection | | waits for it; a connection that keeps failing: 30 tries, then Try again |
 
 **Background.** Three pieces are under way while Snapreel is open (one already fills a 4G uplink; more only lose more when
-it drops). When it leaves the screen the rest is handed to the background URLSession at once: iOS's own process sends them
-with the app suspended, closed by iOS, or the phone locked. Pieces started later, by an app in the background, are sent at
-iOS's discretion, which is why they are written ahead and handed over first. Swiping Snapreel away in the app switcher stops
-them (iOS does that); they carry on at the next launch. Preparing needs Snapreel running: about half a minute after it
-leaves the screen, then it stops, keeps what is encoded, and goes on when Snapreel is open (or when iOS grants a
-processing task, `co.arclayer.snapreel.uploads.finish`).
+it drops). When it leaves the screen the rest is handed to the background URLSession: iOS's own process sends them with the
+app suspended, closed by iOS, or the phone locked. Over HTTP/2 that process sends everything it was given **at the same time**
+(20 of 20 in a probe on iOS 16.4, whatever `httpMaximumConnectionsPerHost` says), and a dropped connection loses all that was
+under way. So it gets about two minutes' worth at once (30 to 150 MB, by the speed just measured) and the rest with
+`earliestBeginDate`s, for at most 40 minutes ahead (a token lives an hour). Back in Snapreel the waiting ones are taken back and
+go three at a time. Pieces started later, by an app in the background, are sent at iOS's discretion, which is why they are
+written ahead and handed over first. Swiping Snapreel away in the app switcher stops them (iOS does that); they carry on at the
+next launch. Preparing needs Snapreel running: about half a minute after it leaves the screen, then it stops, keeps what is
+encoded, and goes on when Snapreel is open (or when iOS grants a processing task, `co.arclayer.snapreel.uploads.finish`).
 
 **The web copy.** `WebPlan` picks: copied as it is (H.264, fits, at most a quarter over the target) or encoded in hardware in
 stretches of 10 s. Targets: camera 5 Mbit/s at 1080p, 2.6 at 720p; screen recordings 2.6 and 1.35 (mostly still, sharp

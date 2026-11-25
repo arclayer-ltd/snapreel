@@ -25,6 +25,7 @@ final class UploaderTests: XCTestCase {
         root = FileManager.default.temporaryDirectory.appendingPathComponent("uploads-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         server = StubStorage()
+        server.now = { self.now }
         video = Self.noise(Self.piece * 3 + 1_234)
         now = Date(timeIntervalSince1970: 1_795_000_000)
         waited = 0
@@ -182,6 +183,12 @@ final class UploaderTests: XCTestCase {
         XCTAssertEqual(server.activeTags.filter { $0.part == .video }.count, 3)
         uploader.willLeave()
         await until("every piece to be handed over") { self.server.activeTags.filter { $0.part == .video }.count == 12 }
+        // Two minutes at the usual speed at once (7 pieces), the rest when that should be through.
+        XCTAssertEqual(server.begins.filter { $0.key.part == .video }.count, 5)
+        XCTAssertTrue(server.begins.values.allSatisfy { $0 > now.addingTimeInterval(60) })
+        // Back again: the waiting ones are taken back and go three at a time.
+        uploader.didBecomeActive()
+        await until("the waiting pieces to be taken back") { self.server.activeTags.filter { $0.part == .video }.count <= 7 }
         server.holdsTransfers = false
         server.release()
         await untilEnded(uploader)

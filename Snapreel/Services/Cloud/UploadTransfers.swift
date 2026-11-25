@@ -49,12 +49,14 @@ struct TransferResult {
 protocol UploadTransfers: AnyObject {
     var onProgress: ((TransferTag, Int64) -> Void)? { get set }
     var onFinish: ((TransferTag, TransferResult) -> Void)? { get set }
-    func start(_ request: URLRequest, file: URL, tag: TransferTag)
+    /// `begins`: not before this time (nil: at once).
+    func start(_ request: URLRequest, file: URL, tag: TransferTag, begins: Date?)
     /// Transfers still under way (kept by iOS while Snapreel was closed). Cancels any it can't recognise.
     func running() async -> [TransferTag]
     func cancel(_ videoID: UUID)
-    /// Cancels the ones `keep` refuses.
     func cancel(where matches: @escaping (TransferTag) -> Bool)
+    /// Cancels the ones whose time to begin hasn't come.
+    func cancelWaiting()
 }
 
 /// The background URLSession: iOS's own process sends the files, so they keep going while Snapreel is in the
@@ -81,7 +83,8 @@ final class BackgroundTransfers: UploadTransfers {
         configuration.shouldUseExtendedBackgroundIdleMode = true
         configuration.timeoutIntervalForRequest = 120
         configuration.timeoutIntervalForResource = 6 * 3_600
-        // One connection already fills a 4G uplink; more only lose more when it drops.
+        // HTTP/1.1 only. Over HTTP/2, which Storage speaks, iOS sends everything it was given at the same time
+        // (SnapreelTests/BackgroundSessionProbe: 20 of 20 on iOS 16.4), so the uploader decides how much that is.
         configuration.httpMaximumConnectionsPerHost = 3
         configuration.httpCookieStorage = nil
         configuration.urlCache = nil
@@ -89,9 +92,10 @@ final class BackgroundTransfers: UploadTransfers {
         delegate.owner = self
     }
 
-    func start(_ request: URLRequest, file: URL, tag: TransferTag) {
+    func start(_ request: URLRequest, file: URL, tag: TransferTag, begins: Date?) {
         let task = session.uploadTask(with: request, fromFile: file)
         task.taskDescription = tag.text
+        task.earliestBeginDate = begins
         task.countOfBytesClientExpectsToSend = FileFacts.size(file)
         task.countOfBytesClientExpectsToReceive = 2_048
         // Earlier pieces first; the small files before the video.
@@ -116,6 +120,15 @@ final class BackgroundTransfers: UploadTransfers {
         session.getAllTasks { tasks in
             for task in tasks {
                 if let tag = TransferTag(task.taskDescription), matches(tag) { task.cancel() }
+            }
+        }
+    }
+
+    func cancelWaiting() {
+        session.getAllTasks { tasks in
+            let now = Date()
+            for task in tasks {
+                if let begins = task.earliestBeginDate, begins > now, task.countOfBytesSent == 0 { task.cancel() }
             }
         }
     }

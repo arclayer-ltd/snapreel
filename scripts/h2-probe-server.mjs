@@ -8,14 +8,18 @@ let open = 0;
 let most = 0;
 let done = 0;
 const versions = {};
+const starts = []; // [piece, seconds after the first]
+let first = 0;
 const server = http2.createSecureServer({ key: fs.readFileSync(key), cert: fs.readFileSync(cert), allowHTTP1: true });
 server.on("request", (req, res) => {
   if (req.url.endsWith("/report")) {
     res.writeHead(200, { "content-type": "application/json" });
-    res.end(JSON.stringify({ most, done, versions }));
+    res.end(JSON.stringify({ most, done, versions, starts }));
     return;
   }
   versions[req.httpVersion] = (versions[req.httpVersion] || 0) + 1;
+  first ||= Date.now();
+  starts.push(`${req.url.split("/").pop()}@${((Date.now() - first) / 1000).toFixed(1)}`);
   open += 1;
   most = Math.max(most, open);
   let closed = false;
