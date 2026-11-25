@@ -13,6 +13,7 @@ import json
 import math
 import os
 import re
+import select
 import shutil
 import signal
 import socket
@@ -106,6 +107,7 @@ class IOSDriver:
         self.hang_after = float(options.get("hang_after", 8))
         self.conn = None
         self.wda_stuck = False  # the touch driver is still waiting for a hung app
+        self.ocr, self.ocr_used = None, False
         self.photos_ready = False
         self.preloaded, self.restored = set(), False
         self.slow_mac = 0       # how often the Mac, not the app, was the slow one
@@ -442,8 +444,8 @@ class IOSDriver:
                 return shot
             last = shot
 
-    # Visibility comes along: the app keeps its other tabs' contents in the tree, where a person cannot see them.
-    SOURCE = "?format=json&excluded_attributes=accessible"
+    # No visibility or accessibility attributes: working those out runs inside the app and can stall it for a minute.
+    SOURCE = "?format=json&excluded_attributes=visible,accessible"
 
     def read_tree(self, timeout=None):
         """Fills self.elements with what is on screen, in reading order, numbered from 1."""
@@ -473,54 +475,12 @@ class IOSDriver:
         self.answer_time = time.time() - started
         if isinstance(node, str):
             node = json.loads(node)
-        found, self.offscreen, self.app_label = [], 0, node.get("label") or node.get("name") or ""
-        width, height = self.size
+        self.offscreen, self.app_label = 0, node.get("label") or node.get("name") or ""
         self.keyboard = False
-
-        def walk(n, depth, parent_text):
-            kind = (n.get("type") or "").replace("XCUIElementType", "")
-            rect = n.get("rect") or n.get("frame") or {}
-            if isinstance(rect, str):
-                nums = [float(v) for v in re.findall(r"-?[\d.]+", rect)]
-                rect = dict(zip(("x", "y", "width", "height"), nums))
-            label, value = (n.get("label") or ""), n.get("value")
-            name = n.get("rawIdentifier") or ""
-            if kind == "Application" and depth == 0 and rect.get("width"):
-                self.size = (int(rect["width"]), int(rect["height"]))
-            if kind == "Keyboard":
-                self.keyboard = True
-            text = str(label or "").strip()
-            shown = str(value).strip() if value not in (None, "") else ""
-            if kind == "Switch":
-                shown = {"1": "on", "0": "off"}.get(shown, shown)
-            elif kind in ("Button", "Tab", "Cell") and shown == "1":
-                shown = "selected"
-            unseen = str(n.get("isVisible", "1")) in ("0", "false", "False")
-            if unseen and kind not in ("Application", "Window") and not (n.get("children") or []):
-                if (text or shown) and float(rect.get("y", 0)) >= height:
-                    self.offscreen += 1
-                return
-            if kind in ("Image", "Other", "StaticText") and parent_text and (kind == "Image" or text in parent_text):
-                text = shown = ""  # the picture or words on a button, already named by it
-            if text.startswith(("Vertical scroll bar", "Horizontal scroll bar")):
-                return
-            wanted = kind in INTERACTIVE or text or (shown and kind != "Other")
-            if wanted and not unseen and kind not in ("Application", "Window", "Keyboard", "Key"):
-                x, y = float(rect.get("x", 0)), float(rect.get("y", 0))
-                w, h = float(rect.get("width", 0)), float(rect.get("height", 0))
-                item = {"kind": kind, "label": text, "value": shown, "id": name, "x": x, "y": y, "w": w, "h": h,
-                        "enabled": str(n.get("isEnabled", n.get("enabled", "1"))) not in ("0", "false", "False"),
-                        "selected": str(n.get("isSelected", n.get("selected", "0"))) in ("1", "true", "True")}
-                cx, cy = x + w / 2, y + h / 2
-                if w > 0 and h > 0 and x < width and y < height and x + w > 0 and y + h > 0:
-                    item["onscreen"] = 0 <= cx <= width and 0 <= cy <= height
-                    found.append(item)
-                else:
-                    self.offscreen += 1
-            for child in n.get("children") or []:
-                walk(child, depth + 1, text if kind in INTERACTIVE else parent_text)
-
-        walk(node, 0, "")
+        found, layers = self._flatten(node)
+        if layers:
+            hidden = self._hidden_layers(found, layers)
+            found = [e for e in found if not hidden.intersection(e["layers"])]
         unique, seen = [], set()
         named = {(e["label"], round(e["x"] + e["w"] / 2), round(e["y"] + e["h"] / 2)) for e in found if e["kind"] in INTERACTIVE}
         for e in found:
@@ -531,9 +491,125 @@ class IOSDriver:
             seen.add(key)
             unique.append(e)
         self.elements = unique
+        self.ocr_used = bool(layers)
         for number, e in enumerate(unique, 1):
             e["n"] = number
         return unique
+
+    def _flatten(self, node):
+        """The tree as a list of what could matter to a person, each with the overlapping layers it is in.
+
+        A layer is one of several big siblings lying over each other: the app's tabs, or the screen under a sheet.
+        """
+        found, layers = [], set()
+        width, height = self.size
+
+        def box(n):
+            rect = n.get("rect") or n.get("frame") or {}
+            if isinstance(rect, str):
+                rect = dict(zip(("x", "y", "width", "height"), [float(v) for v in re.findall(r"-?[\d.]+", rect)]))
+            return [float(rect.get(k, 0) or 0) for k in ("x", "y", "width", "height")]
+
+        def labelled(n, want=2):
+            count = 1 if (n.get("label") or "").strip() else 0
+            for child in n.get("children") or []:
+                if count >= want:
+                    break
+                count += labelled(child, want - count)
+            return count
+
+        def walk(n, depth, parent_text, path):
+            kind = (n.get("type") or "").replace("XCUIElementType", "")
+            x, y, w, h = box(n)
+            name, value = n.get("rawIdentifier") or "", n.get("value")
+            if kind == "Application" and depth == 0 and w:
+                self.size = (int(w), int(h))
+            if kind == "Keyboard":
+                self.keyboard = True
+            text = str(n.get("label") or "").strip()
+            shown = str(value).strip() if value not in (None, "") else ""
+            if kind == "Switch":
+                shown = {"1": "on", "0": "off"}.get(shown, shown)
+            elif kind in ("Button", "Tab", "Cell") and shown == "1":
+                shown = "selected"
+            if kind in ("Image", "Other", "StaticText") and parent_text and (kind == "Image" or text in parent_text):
+                text = shown = ""  # the picture or words on a button, already named by it
+            if text.startswith(("Vertical scroll bar", "Horizontal scroll bar")):
+                return
+            wanted = kind in INTERACTIVE or text or (shown and kind != "Other")
+            if wanted and kind not in ("Application", "Window", "Keyboard", "Key"):
+                item = {"kind": kind, "label": text, "value": shown, "id": name, "x": x, "y": y, "w": w, "h": h, "layers": path,
+                        "enabled": str(n.get("isEnabled", n.get("enabled", "1"))) not in ("0", "false", "False"),
+                        "selected": str(n.get("isSelected", n.get("selected", "0"))) in ("1", "true", "True")}
+                cx, cy = x + w / 2, y + h / 2
+                if w > 0 and h > 0 and x < width and y < height and x + w > 0 and y + h > 0:
+                    item["onscreen"] = 0 <= cx <= width and 0 <= cy <= height
+                    found.append(item)
+                else:
+                    self.offscreen += 1
+            children = n.get("children") or []
+            big = []
+            if len(children) > 1 and kind not in ("Cell", "Button"):
+                for c in children:
+                    cx, cy, cw, ch = box(c)
+                    if cw >= width * 0.7 and ch >= height * 0.45 and labelled(c) >= 2:
+                        big.append(id(c))
+            for child in children:
+                inner = path
+                if len(big) > 1 and id(child) in big:
+                    layers.add(len(layers) + 1)
+                    inner = path + (len(layers),)
+                walk(child, depth + 1, text if kind in INTERACTIVE else parent_text, inner)
+
+        walk(node, 0, "", ())
+        return found, layers
+
+    def _hidden_layers(self, found, layers):
+        """Which of the overlapping layers a person cannot see: their words are not in the picture."""
+        words = self._read_words()
+        if words is None:
+            return set()
+        hidden = set()
+        for layer in sorted(layers, reverse=True):  # inner ones first
+            seen = missing = 0
+            for e in found:
+                if layer not in e["layers"] or hidden.intersection(e["layers"]) or not e["onscreen"]:
+                    continue
+                wanted = [w for w in re.findall(r"[a-z0-9]{3,}", e["label"].lower())][:8]
+                if not wanted or e["kind"] not in ("StaticText", "Button", "Link", "Cell") or e["h"] > self.size[1] * 0.5:
+                    continue
+                near = " ".join(text for text, x, y, w, h in words if x < e["x"] + e["w"] + 12 and x + w > e["x"] - 12
+                                and y < e["y"] + e["h"] + 8 and y + h > e["y"] - 8)
+                if any(w in near for w in wanted):
+                    seen += 1
+                elif e["kind"] != "Button" or " " in e["label"]:
+                    missing += 1  # (an icon button's name is never in the picture)
+            if missing >= 2 and seen <= missing * 0.4:
+                hidden.add(layer)
+        return hidden
+
+    def _read_words(self):
+        """The words in the current picture, as (lower-case text, x, y, width, height) in points; None without them."""
+        try:
+            if self.ocr is None:
+                tool = self.opt.get("ocr") or os.path.join(os.environ.get("W", "/nonexistent"), "ocr")
+                if not os.path.exists(tool):
+                    return None
+                self.ocr = subprocess.Popen([tool], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, bufsize=1)
+            path = os.path.join(self.work, "raw-words.jpg")
+            self._raw_shot(path)
+            self.ocr.stdin.write(path + "\n")
+            self.ocr.stdin.flush()
+            if not select.select([self.ocr.stdout], [], [], 20)[0]:
+                raise OSError("no answer")
+            width, height = self.size
+            return [(t.lower(), x * width, y * height, w * width, h * height) for t, x, y, w, h in json.loads(self.ocr.stdout.readline())]
+        except (OSError, ValueError, StepError, Hang) as error:
+            print("words could not be read: %s" % error, flush=True)
+            if self.ocr is not None:
+                self.ocr.kill()
+            self.ocr = None
+            return None
 
     def tree_lines(self, everything=False):
         lines = []
@@ -1051,7 +1127,10 @@ class IOSDriver:
         busy, stack, text = found if found else (share or 0.0, "(no stack)", "main thread busy %s" % share)
         if share is not None:
             busy = share
-        self.hung = busy > 0.6
+        ours = sum(stack.count(w) for w in ("AXRuntime", "AccessibilityUtilities", "UIAccessibility", "_AXXMIG"))
+        self.hung = busy > 0.6 and ours < 3
+        if ours >= 3:
+            return None  # it is busy describing its screen to the rig
         hang = {"at": time.strftime("%H:%M:%S"), "reason": reason, "busy": round(busy * 100), "stack": stack, "text": text}
         if busy < 0.5:
             hang["note"] = "its main thread is mostly idle, so this may be the rig being slow; look again"

@@ -104,7 +104,7 @@ def bundle(extra=None):
         files[".github/workflows/ui-live.yml"] = f.read().replace(b"\r\n", b"\n")
     for name in os.listdir(HERE):
         path = os.path.join(HERE, name)
-        if os.path.isfile(path) and name.endswith((".py", ".sh", ".json", ".storekit")):
+        if os.path.isfile(path) and name.endswith((".py", ".sh", ".json", ".storekit", ".swift")):
             with open(path, "rb") as f:
                 files["scripts/ui-rig/" + name] = f.read().replace(b"\r\n", b"\n")
     files.update(extra or {})

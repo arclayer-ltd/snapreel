@@ -415,7 +415,8 @@ class Steps:
 
     def do_mac(self, a):
         """For whoever works on the rig: what keeps the Mac busy."""
-        out = subprocess.run("uptime; memory_pressure | tail -1; sysctl vm.swapusage; ps -Aceo pcpu,rss,comm -r | head -16",
+        out = subprocess.run("uptime; memory_pressure | tail -1; ps -Ao pcpu,rss,command -r | cut -c1-210 | head -22; "
+                             "echo; echo in the phone: $(ps -Ao command | grep -c RuntimeRoot), on the Mac: $(ps -Ao command | grep -vc RuntimeRoot)",
                              shell=True, capture_output=True, text=True, timeout=60).stdout
         return out
 
@@ -508,7 +509,7 @@ class Agent:
             return  # reported when it began
         hang = self.d.check_hang(reason)
         if hang is None:
-            entry["text"] += "; Snapreel is not running"
+            entry["text"] += "; the app is slow to describe its screen, not hung" if self.d.alive() else "; Snapreel is not running"
         else:
             entry["hang"] = {k: hang[k] for k in ("at", "reason", "busy", "stack")}
             entry["hang"]["note"] = hang.get("note", "")

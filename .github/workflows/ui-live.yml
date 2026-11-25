@@ -128,7 +128,9 @@ jobs:
                 --wait-for "$W/wda.ready" --script "$SCRIPT" > "$W/agent-$SID.log" 2>&1 < /dev/null ) &
             i=$((i + 1))
           done
-          bash rig/scripts/ui-rig/get_wda.sh "$W/wda" && touch "$W/wda.ready"
+          bash rig/scripts/ui-rig/get_wda.sh "$W/wda"
+          swiftc -O rig/scripts/ui-rig/ocr.swift -o "$W/ocr" 2> "$W/ocr.log" || tail -5 "$W/ocr.log"
+          touch "$W/wda.ready"
 
       - name: Store the new build
         if: ${{ steps.app.outputs.built == '1' }}
