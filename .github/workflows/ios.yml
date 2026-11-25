@@ -259,19 +259,21 @@ jobs:
 
   ios16:
     if: ${{ inputs.ios16 }}
-    runs-on: macos-15
-    timeout-minutes: 90
+    # Not the xcode-27 image: an Xcode that has the SDKs the app needs (iOS 26) and is old enough to
+    # run iOS 16 simulators.
+    runs-on: macos-26
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
 
-      - name: Select newest Xcode that runs iOS 16 simulators
+      - name: Select newest Xcode
         run: |
-          XCODE=$(for app in /Applications/Xcode_16*.app /Applications/Xcode*.app; do
+          XCODE=$(for app in /Applications/Xcode*.app; do
               if echo "$app" | grep -qiE 'beta|_rc'; then continue; fi
               v=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app/Contents/Info.plist" 2>/dev/null) || continue
-              if echo "$v" | grep -q '^16\.'; then echo "$v $app"; fi
+              echo "$v $app"
             done | sort -t. -k1,1n -k2,2n -k3,3n | tail -1 | cut -d' ' -f2-)
-          [ -n "$XCODE" ] && sudo xcode-select -s "$XCODE"
+          sudo xcode-select -s "$XCODE"
           xcodebuild -version
           xcrun simctl list runtimes | grep iOS || true
 
