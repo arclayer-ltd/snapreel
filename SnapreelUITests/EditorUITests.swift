@@ -224,14 +224,24 @@ final class EditorUITests: XCTestCase {
         XCTAssertEqual(app.buttons["Save"].firstMatch.frame.maxX, app.frame.maxX - 16, accuracy: 4, "the page is as wide as the screen")
         shot("arrow")
         // Dragging it by its middle moves it as far as the finger (build 47 hung here on iOS 16).
-        let arrow = app.otherElements["Arrow"].firstMatch
-        XCTAssertTrue(arrow.exists)
+        // The arrow on the picture (the timeline and the panel have things called Arrow too).
+        let top = app.otherElements["Timeline"].firstMatch.frame.minY
+        func arrowOnPicture() -> XCUIElement? {
+            app.descendants(matching: .any).matching(identifier: "Arrow").allElementsBoundByIndex
+                .first { $0.frame.midY < top && $0.frame.width > 10 && $0.frame.minY > 60 }
+        }
+        guard let arrow = arrowOnPicture() else {
+            XCTFail("no arrow on the picture")
+            return
+        }
         let was = arrow.frame
         let middle = app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: was.midX, dy: was.midY))
         middle.press(forDuration: 0.1, thenDragTo: middle.withOffset(CGVector(dx: 25, dy: 60)), withVelocity: .slow, thenHoldForDuration: 0.2)
-        XCTAssertTrue(arrow.waitForExistence(timeout: 5), "still there")
-        XCTAssertEqual(arrow.frame.midY - was.midY, 60, accuracy: 14)
-        XCTAssertEqual(arrow.frame.midX - was.midX, 25, accuracy: 14)
+        RunLoop.current.run(until: Date().addingTimeInterval(1))
+        let moved = arrowOnPicture()?.frame ?? .zero
+        XCTAssertFalse(moved.isEmpty, "still there")
+        XCTAssertEqual(moved.midY - was.midY, 60, accuracy: 14)
+        XCTAssertEqual(moved.midX - was.midX, 25, accuracy: 14)
         shot("arrow-moved")
         tapButton("Done")
         openTool("Sound")
