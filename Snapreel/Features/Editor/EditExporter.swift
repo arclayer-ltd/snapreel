@@ -351,33 +351,16 @@ final class EditExporter: @unchecked Sendable {
     }
 
     private func encode(_ pieces: [Piece], from first: Int) throws {
-        guard let trackID = plan.build.videoTrackID,
-              let track = plan.build.composition.track(withTrackID: trackID) else { throw EditExportFailure.failed(nil) }
         let total = plan.build.duration
-        let reader = try AVAssetReader(asset: plan.build.composition)
-        // A little before the piece, to have the frame that is on screen when it starts.
-        let readStart = first == 0 ? CMTime.zero
-            : CMTimeMaximum(.zero, pieces[first].start - CMTime(seconds: 3, preferredTimescale: Self.scale))
-        reader.timeRange = CMTimeRange(start: readStart, end: total)
-        let format = plan.source.isHDR ? kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange
-            : kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange
-        let output = AVAssetReaderTrackOutput(track: track, outputSettings: [
-            kCVPixelBufferPixelFormatTypeKey as String: format,
-            kCVPixelBufferIOSurfacePropertiesKey as String: [String: Any](),
-            kCVPixelBufferMetalCompatibilityKey as String: true,
-        ])
-        output.alwaysCopiesSampleData = false
-        guard reader.canAdd(output) else { throw EditExportFailure.failed(nil) }
-        reader.add(output)
-        guard reader.startReading() else { throw EditExportFailure.failed(reader.error) }
+        let start = pieces[first].start
+        let frames = try FrameFeed(plan: plan, from: start)
         var writer: PieceWriter?
         defer {
-            reader.cancelReading()
+            frames.stop()
             writer?.abandon()
         }
 
         var pieceIndex = first
-        let start = pieces[first].start
         var held: (buffer: CVPixelBuffer, time: CMTime)?
         var drew = false
         var events = plan.overlayTimes.filter { $0 > start.seconds + 0.001 }[...]
@@ -433,26 +416,26 @@ final class EditExporter: @unchecked Sendable {
             }
         }
 
-        while let sample = output.copyNextSampleBuffer() {
+        var more = true
+        while more {
             try autoreleasepool {
-                guard let buffer = CMSampleBufferGetImageBuffer(sample) else { return }
-                let time = CMSampleBufferGetPresentationTimeStamp(sample)
-                guard time.isNumeric else { return }
+                try checkStop()
+                guard let next = try frames.next() else {
+                    more = false
+                    return
+                }
                 if let current = held {
-                    // A frame from before the piece, or one that starts where the last one did (a cut).
-                    if time <= start || time <= current.time + CMTime(value: 1, timescale: 2_000) {
-                        held = (buffer, CMTimeMaximum(time, current.time))
+                    // Two frames at one moment (a cut): the later one stands.
+                    if next.time <= current.time {
+                        held = (next.buffer, current.time)
                         return
                     }
-                    try fill(until: time)
+                    try fill(until: next.time)
                 }
-                // The very first frame stands from the start even when it is stamped a little later.
-                held = (buffer, held == nil ? CMTimeMinimum(time, start) : time)
+                held = next
                 drew = false
-                try checkStop()
             }
         }
-        if reader.status == .failed { throw EditExportFailure.failed(reader.error) }
         try checkStop()
         guard held != nil else { throw EditExportFailure.failed(nil) }
         try fill(until: total)
@@ -692,6 +675,138 @@ extension CGImagePropertyOrientation {
 }
 
 // MARK: - Feeds
+
+/// The recording's frames that the edit keeps, decoded, on the edit's clock and in its order.
+///
+/// Read from the recording itself, section by section: every frame's own time is then known, and
+/// the frame that is already on screen when a section starts (a screen that stands still keeps one
+/// frame up for seconds) starts exactly at the cut.
+private final class FrameFeed {
+    private let plan: EditExportPlan
+    private let track: AVAssetTrack
+    private let sections: [EditCompositionBuilder.Placement]
+    /// Sections read by one reader: closer together than this, skipping is quicker than starting.
+    private static let joins = 2.0
+    private var nextSection = 0
+    private var groupEnd = 0
+    private var index = 0
+    private var hasStarted = false
+    private var latest: CVPixelBuffer?
+    private var reader: AVAssetReader?
+    private var output: AVAssetReaderTrackOutput?
+    private var ready: [(buffer: CVPixelBuffer, time: CMTime)] = []
+
+    init(plan: EditExportPlan, from start: CMTime) throws {
+        guard let track = plan.source.videoTrack else { throw EditExportFailure.failed(nil) }
+        self.plan = plan
+        self.track = track
+        sections = EditCompositionBuilder.placements(recipe: plan.recipe, source: plan.source).compactMap { section in
+            let end = section.at + section.length
+            guard end > start else { return nil }
+            guard section.at < start else { return section }
+            // Carrying on in the middle of a section.
+            let from = section.source(start)
+            return EditCompositionBuilder.Placement(range: CMTimeRange(start: from, end: section.range.end), at: start,
+                                                    length: end - start, stretches: section.stretches)
+        }
+    }
+
+    func stop() {
+        reader?.cancelReading()
+        reader = nil
+        output = nil
+    }
+
+    func next() throws -> (buffer: CVPixelBuffer, time: CMTime)? {
+        while true {
+            if !ready.isEmpty { return ready.removeFirst() }
+            if output == nil {
+                guard nextSection < sections.count else { return nil }
+                try startGroup()
+            }
+            guard let output else { continue }
+            if let sample = output.copyNextSampleBuffer() {
+                guard let buffer = CMSampleBufferGetImageBuffer(sample) else { continue }
+                let time = CMSampleBufferGetPresentationTimeStamp(sample)
+                guard time.isNumeric else { continue }
+                take(buffer, at: time)
+            } else {
+                if reader?.status == .failed { throw EditExportFailure.failed(reader?.error) }
+                // What is left of the group is under the last frame.
+                while index <= groupEnd {
+                    if !hasStarted, let latest { ready.append((latest, sections[index].at)) }
+                    index += 1
+                    hasStarted = false
+                }
+                reader = nil
+                self.output = nil
+            }
+        }
+    }
+
+    private func take(_ buffer: CVPixelBuffer, at time: CMTime) {
+        while index <= groupEnd, time >= sections[index].range.end {
+            if !hasStarted { ready.append((latest ?? buffer, sections[index].at)) }
+            index += 1
+            hasStarted = false
+        }
+        defer { latest = buffer }
+        guard index <= groupEnd else { return }
+        let section = sections[index]
+        // On screen before the section starts: it may be the one up at its start.
+        if time <= section.range.start { return }
+        if !hasStarted {
+            hasStarted = true
+            guard let before = latest else {
+                // The picture starts late: its first frame stands from the section's start.
+                ready.append((buffer, section.at))
+                return
+            }
+            ready.append((before, section.at))
+        }
+        ready.append((buffer, section.output(time)))
+    }
+
+    private func startGroup() throws {
+        index = nextSection
+        groupEnd = nextSection
+        while groupEnd + 1 < sections.count,
+              (sections[groupEnd + 1].range.start - sections[groupEnd].range.end).seconds < Self.joins {
+            groupEnd += 1
+        }
+        nextSection = groupEnd + 1
+        hasStarted = false
+        latest = nil
+        let reader = try AVAssetReader(asset: plan.source.asset)
+        let from = frameStart(sections[index].range.start)
+        reader.timeRange = CMTimeRange(start: from, end: CMTimeMaximum(sections[groupEnd].range.end, from + CMTime(value: 1, timescale: 30)))
+        let format = plan.source.isHDR ? kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange
+            : kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange
+        let output = AVAssetReaderTrackOutput(track: track, outputSettings: [
+            kCVPixelBufferPixelFormatTypeKey as String: format,
+            kCVPixelBufferIOSurfacePropertiesKey as String: [String: Any](),
+            kCVPixelBufferMetalCompatibilityKey as String: true,
+        ])
+        output.alwaysCopiesSampleData = false
+        guard reader.canAdd(output) else { throw EditExportFailure.failed(nil) }
+        reader.add(output)
+        guard reader.startReading() else { throw EditExportFailure.failed(reader.error) }
+        self.reader = reader
+        self.output = output
+    }
+
+    /// Where the frame that is on screen at `time` starts.
+    private func frameStart(_ time: CMTime) -> CMTime {
+        guard time > .zero else { return .zero }
+        // Past the end of the picture its last frame stands.
+        let time = CMTimeMinimum(time, CMTimeMaximum(.zero, plan.source.videoRange.end - CMTime(value: 1, timescale: 120)))
+        if track.canProvideSampleCursors, let cursor = track.makeSampleCursor(presentationTimeStamp: time) {
+            if cursor.presentationTimeStamp > time { _ = cursor.stepInPresentationOrder(byCount: -1) }
+            if cursor.presentationTimeStamp <= time { return CMTimeMaximum(.zero, cursor.presentationTimeStamp) }
+        }
+        return CMTimeMaximum(.zero, time - CMTime(value: 3, timescale: 1))
+    }
+}
 
 /// The encoded frames of the pieces, in order, on the edit's clock.
 private final class PieceFeed {

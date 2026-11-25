@@ -148,18 +148,8 @@ enum EditCompositionBuilder {
             composition.addMutableTrack(withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid)
         }
 
-        var outputSeconds = 0.0
-        for segment in recipe.playedSegments {
-            let speed = max(0.25, min(4, segment.speed))
-            let start = CMTime(seconds: max(0, segment.start), preferredTimescale: timescale)
-            let end = CMTime(seconds: min(segment.end, max(source.duration, 0)), preferredTimescale: timescale)
-            guard end > start else { continue }
-            let range = CMTimeRange(start: start, end: end)
-            // Positions come from the recipe's own clock, so rounding never adds up over many cuts.
-            let at = CMTime(seconds: outputSeconds, preferredTimescale: timescale)
-            outputSeconds += (end - start).seconds / speed
-            let length = CMTime(seconds: outputSeconds, preferredTimescale: timescale) - at
-            let placement = Placement(range: range, at: at, length: length, stretches: abs(speed - 1) > 0.001)
+        let placements = placements(recipe: recipe, source: source)
+        for placement in placements {
             if let videoOut, let videoIn = source.videoTrack {
                 try insertPicture(placement, of: videoIn, available: source.videoRange, into: videoOut)
             }
@@ -168,7 +158,7 @@ enum EditCompositionBuilder {
             }
         }
         videoOut?.preferredTransform = source.transform
-        let total = CMTime(seconds: outputSeconds, preferredTimescale: timescale)
+        let total = placements.last.map { $0.at + $0.length } ?? .zero
 
         // Narration, mixed over the recording.
         var voiceOut: [AVMutableCompositionTrack] = []
@@ -205,8 +195,27 @@ enum EditCompositionBuilder {
                          duration: total)
     }
 
+    /// Where each kept section of the recording lands in the edit. Positions come from the
+    /// recipe's own clock, so rounding never adds up over many cuts.
+    static func placements(recipe: EditRecipe, source: EditSource) -> [Placement] {
+        var result: [Placement] = []
+        var outputSeconds = 0.0
+        for segment in recipe.playedSegments {
+            let speed = max(0.25, min(4, segment.speed))
+            let start = CMTime(seconds: max(0, segment.start), preferredTimescale: timescale)
+            let end = CMTime(seconds: min(segment.end, max(source.duration, 0)), preferredTimescale: timescale)
+            guard end > start else { continue }
+            let at = CMTime(seconds: outputSeconds, preferredTimescale: timescale)
+            outputSeconds += (end - start).seconds / speed
+            result.append(Placement(range: CMTimeRange(start: start, end: end), at: at,
+                                    length: CMTime(seconds: outputSeconds, preferredTimescale: timescale) - at,
+                                    stretches: abs(speed - 1) > 0.001))
+        }
+        return result
+    }
+
     /// Where a kept section lands in the edit.
-    private struct Placement {
+    struct Placement {
         /// In the recording.
         let range: CMTimeRange
         /// In the edit.
@@ -221,6 +230,13 @@ enum EditCompositionBuilder {
             if time >= range.end { return at + length }
             if range.duration == length { return at + (time - range.start) }
             return at + CMTimeMultiplyByFloat64(length, multiplier: (time - range.start).seconds / range.duration.seconds)
+        }
+
+        /// The moment of the recording shown at `time` of the edit.
+        func source(_ time: CMTime) -> CMTime {
+            if time <= at { return range.start }
+            if time >= at + length { return range.end }
+            return range.start + CMTimeMultiplyByFloat64(range.duration, multiplier: (time - at).seconds / max(length.seconds, 0.000_01))
         }
     }
 

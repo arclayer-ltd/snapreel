@@ -128,6 +128,41 @@ final class EditorFaultTests: XCTestCase {
         XCTAssertEqual(sound.length, video.duration, accuracy: 0.1, "the saved sound is shorter than the picture")
     }
 
+    /// A cut out of a picture that stands still: the frame that was up stays up, and the next one
+    /// comes exactly when it should.
+    func testCutsInsideAStillPicture() async throws {
+        var spec = TestMedia.Spec()
+        spec.name = "still10"
+        spec.stillAt = 3
+        spec.stillLength = 4
+        let (url, times) = try await TestMedia.make(spec)
+        let (library, id) = try await TestMedia.library(with: url)
+        var recipe = EditRecipe.original(sourceID: id, duration: 10)
+        recipe.remove(source: 1...1.5)
+        recipe.remove(source: 4...5)
+        recipe.remove(source: 5.2...6)
+        recipe.remove(source: 8...8.4)
+        let (video, file) = try await TestMedia.export(recipe, library: library)
+        XCTAssertEqual(video.duration, recipe.outputDuration, accuracy: 0.05)
+        var worst = 0.0
+        for frame in try await TestMedia.readFrames(file) {
+            guard let index = frame.index, index < times.count else {
+                XCTFail("a broken frame at \(frame.time)")
+                continue
+            }
+            let wanted = [-0.001, 0.001].map { offset -> Int in
+                let source = recipe.sourceTime(forOutput: max(0, frame.time + offset))
+                return times.lastIndex { $0.seconds <= source + 0.0005 } ?? 0
+            }
+            if !wanted.contains(index) {
+                print("NOTE|frame \(index) at \(frame.time), wanted \(wanted)")
+                worst = max(worst, abs(times[index].seconds - times[wanted[0]].seconds))
+            }
+        }
+        perf("still", "worst picture error", worst * 1_000, "ms")
+        XCTAssertEqual(worst, 0)
+    }
+
     /// Fifty small cuts must not push the sound away from the picture.
     func testManyCutsStayInSync() async throws {
         var spec = TestMedia.Spec()
@@ -156,8 +191,12 @@ final class EditorFaultTests: XCTestCase {
         var worstPicture = 0.0
         for frame in frames {
             guard let index = frame.index, index < times.count else { continue }
-            // Within two thousandths of a cut either side's frame is right.
-            let error = [-0.002, 0.002].map { abs(times[index].seconds - recipe.sourceTime(forOutput: max(0, frame.time + $0))) }.min() ?? 0
+            // The frame that is on screen at that moment of the recording.
+            let error = [-0.001, 0.001].map { offset -> Double in
+                let source = recipe.sourceTime(forOutput: max(0, frame.time + offset))
+                let wanted = times.lastIndex { $0.seconds <= source + 0.0005 } ?? 0
+                return abs(times[index].seconds - times[wanted].seconds)
+            }.min() ?? 0
             if error > 0.08 { print("NOTE|frame \(index) at \(frame.time) off by \(error)") }
             worstPicture = max(worstPicture, error)
         }

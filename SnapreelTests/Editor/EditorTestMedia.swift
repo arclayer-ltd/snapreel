@@ -177,7 +177,7 @@ enum TestMedia {
                 idle = 0
             } else {
                 idle += 1
-                if idle > 20_000 { throw CocoaError(.fileWriteUnknown) }
+                if idle > 60_000 { throw job.writer.error ?? CocoaError(.fileWriteUnknown) }
                 usleep(1_000)
             }
         }
