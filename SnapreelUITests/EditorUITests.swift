@@ -62,15 +62,27 @@ final class EditorUITests: XCTestCase {
         from.press(forDuration: hold, thenDragTo: from.withOffset(CGVector(dx: x, dy: dy)), withVelocity: velocity, thenHoldForDuration: 0.1)
     }
 
+    /// Whether it is on screen (a button scrolled out of a row has no place to tap).
+    private func onScreen(_ element: XCUIElement) -> Bool {
+        guard element.exists else { return false }
+        let frame = element.frame
+        return !frame.isEmpty && app.frame.contains(CGPoint(x: frame.midX, y: frame.midY))
+    }
+
     private func openTool(_ name: String) {
-        let button = app.buttons[name]
-        var tries = 0
-        while !button.isHittable, tries < 6 {
-            app.buttons["Trim"].firstMatch.exists ? app.scrollViews.containing(.button, identifier: name).firstMatch.swipeLeft(velocity: .slow)
-                : app.swipeLeft(velocity: .slow)
-            tries += 1
+        let button = app.buttons[name].firstMatch
+        XCTAssertTrue(button.waitForExistence(timeout: 4), "\(name) is in the tool bar")
+        let row = app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: app.frame.midX, dy: button.frame.midY))
+        for _ in 0..<6 where !onScreen(button) {
+            row.press(forDuration: 0.05, thenDragTo: row.withOffset(CGVector(dx: -220, dy: 0)), withVelocity: .default, thenHoldForDuration: 0.2)
         }
         button.tap()
+    }
+
+    /// The one that can be tapped, of several with the same name.
+    private func tapButton(_ name: String) {
+        let all = app.buttons.matching(identifier: name).allElementsBoundByIndex
+        (all.last { $0.isHittable } ?? app.buttons[name].firstMatch).tap()
     }
 
     // MARK: - Tests
@@ -161,8 +173,8 @@ final class EditorUITests: XCTestCase {
         XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 6), "the keyboard comes by itself")
         app.typeText("Look here")
         shot("typing")
-        XCTAssertTrue(app.buttons["Done"].isHittable, "Done isn't under the keyboard")
-        app.buttons["Done"].firstMatch.tap()
+        XCTAssertTrue(app.buttons["Done"].firstMatch.isHittable, "Done isn't under the keyboard")
+        tapButton("Done")
         XCTAssertTrue(app.buttons["Edit text"].waitForExistence(timeout: 4), "the new text is selected")
         let before = app.buttons["Edit text"].frame
         let start = app.coordinate(withNormalizedOffset: .zero)
@@ -177,7 +189,7 @@ final class EditorUITests: XCTestCase {
         shot("pinched")
         app.buttons["Edit text"].tap()
         XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 6))
-        app.buttons["Done"].firstMatch.tap()
+        tapButton("Done")
         XCTAssertTrue(app.buttons["Delete"].firstMatch.waitForExistence(timeout: 4))
         app.buttons["Delete"].firstMatch.tap()
         XCTAssertFalse(app.buttons["Edit text"].waitForExistence(timeout: 1))
@@ -191,21 +203,21 @@ final class EditorUITests: XCTestCase {
         XCTAssertTrue(box.waitForExistence(timeout: 3))
         drag(box.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)), by: 0, dy: 50)
         shot("crop-moved")
-        app.buttons["Done"].tap()
+        tapButton("Done")
         openTool("Blur")
         app.buttons["Add blur"].tap()
         XCTAssertTrue(app.buttons["Delete blur"].waitForExistence(timeout: 3))
         shot("blur")
-        app.buttons["Done"].tap()
+        tapButton("Done")
         openTool("Shapes")
         app.buttons["Add arrow"].tap()
         shot("arrow")
-        app.buttons["Done"].tap()
+        tapButton("Done")
         openTool("Sound")
         app.buttons["Fade in"].tap()
         app.sliders.firstMatch.adjust(toNormalizedSliderPosition: 0.4)
         shot("sound")
-        app.buttons["Done"].tap()
+        tapButton("Done")
         app.buttons["Play"].tap()
         XCTAssertTrue(wait(6) { self.time.now >= 2 }, "still plays with everything on")
         shot("playing")
@@ -217,12 +229,12 @@ final class EditorUITests: XCTestCase {
         XCTAssertTrue(line.waitForExistence(timeout: 5))
         line.tap()
         shot("transcript")
-        app.buttons["Done"].tap()
+        tapButton("Done")
         XCTAssertTrue(wait(4) { self.time.length <= 116 }, "the sentence is cut (\(time.length))")
         let cut = time.length
         openTool("Speed")
         app.buttons["2× speed"].tap()
-        app.buttons["Done"].tap()
+        tapButton("Done")
         XCTAssertTrue(wait(4) { abs(self.time.length * 2 - cut) <= 2 }, "twice the speed, half the length")
     }
 
@@ -239,7 +251,7 @@ final class EditorUITests: XCTestCase {
         openTool("Trim")
         app.buttons["Start here"].tap()
         let length = time.length
-        app.buttons["Done"].tap()
+        tapButton("Done")
         // Swipe the page down from its top bar.
         let top = app.coordinate(withNormalizedOffset: CGVector(dx: 0.45, dy: 0.1))
         top.press(forDuration: 0.05, thenDragTo: top.withOffset(CGVector(dx: 0, dy: 400)), withVelocity: .default, thenHoldForDuration: 0)
@@ -258,13 +270,13 @@ final class EditorUITests: XCTestCase {
         drag(strip(60), by: -120)
         openTool("Trim")
         app.buttons["Start here"].tap()
-        app.buttons["Done"].tap()
+        tapButton("Done")
         let length = time.length
         app.buttons["Save"].tap()
         XCTAssertTrue(app.staticTexts["Save a copy"].waitForExistence(timeout: 4))
         shot("save-sheet")
         app.buttons["720p"].tap()
-        app.buttons["Save"].firstMatch.tap()
+        tapButton("Save")
         if app.staticTexts["Saving your edit"].waitForExistence(timeout: 4) {
             shot("saving")
             app.buttons["Cancel"].tap()
@@ -274,7 +286,7 @@ final class EditorUITests: XCTestCase {
         XCTAssertTrue(wait(4) { self.time.length == length }, "the edits are still there")
         app.buttons["Save"].tap()
         XCTAssertTrue(app.staticTexts["Save a copy"].waitForExistence(timeout: 4))
-        app.buttons["Save"].firstMatch.tap()
+        tapButton("Save")
         // Leave the app while it saves, and come back.
         RunLoop.current.run(until: Date().addingTimeInterval(2))
         XCUIDevice.shared.press(.home)
@@ -282,7 +294,7 @@ final class EditorUITests: XCTestCase {
         app.activate()
         XCTAssertTrue(app.staticTexts["Saved as a new recording"].waitForExistence(timeout: 180), "the save carries on and finishes")
         shot("saved")
-        app.buttons["Done"].tap()
+        tapButton("Done")
         XCTAssertTrue(app.staticTexts["live.saved"].waitForExistence(timeout: 6))
         XCTAssertEqual(app.staticTexts["live.saved"].label, "1 saved")
         XCTAssertTrue(wait(6) { self.app.staticTexts["live.draft"].label == "No draft" }, "a saved edit leaves no draft")

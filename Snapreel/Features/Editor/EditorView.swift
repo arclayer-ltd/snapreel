@@ -49,6 +49,8 @@ struct EditorView: View {
             }
             // The keyboard (text entry) covers the page instead of squeezing it.
             .ignoresSafeArea(.keyboard)
+            // What is covered can't be reached with VoiceOver either.
+            .accessibilityHidden(model.textEntry != nil || model.phase != .editing)
             if model.textEntry != nil {
                 EditorTextEntry(model: model)
                     .transition(.opacity)

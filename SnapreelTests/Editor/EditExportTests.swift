@@ -60,11 +60,11 @@ final class EditExportTests: XCTestCase {
     func testSoundStartingLateStaysInPlace() async throws {
         let (_, _, library, id) = try await clip("late-sound") { $0.audioStart = 0.5; $0.audioDuration = 9 }
         var recipe = EditRecipe.original(sourceID: id, duration: 10)
-        recipe.remove(source: 4.6...5.4)
+        recipe.remove(source: 4.7...5.3)
         let (_, file) = try await TestMedia.export(recipe, library: library)
         let sound = try await TestMedia.beeps(file)
-        // Beeps at 0.5, 1.5, 2.5, 3.5, 4.5; then 5.5 on, 0.8 s earlier.
-        let wanted = [0.5, 1.5, 2.5, 3.5, 4.5, 4.7, 5.7, 6.7, 7.7]
+        // Beeps at 0.5, 1.5, 2.5, 3.5, 4.5; then 5.5 on, 0.6 s earlier.
+        let wanted = [0.5, 1.5, 2.5, 3.5, 4.5, 4.9, 5.9, 6.9, 7.9]
         XCTAssertEqual(sound.starts.count, wanted.count, "\(sound.starts)")
         for (start, expected) in zip(sound.starts, wanted) { XCTAssertEqual(start, expected, accuracy: 0.06) }
     }

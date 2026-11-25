@@ -149,14 +149,17 @@ final class EditorFaultTests: XCTestCase {
             guard let expected = recipe.outputTime(forSource: Double(second) + 0.0005),
                   recipe.keptFraction(ofSource: beep) > 0.99 else { continue }
             let nearest = sound.starts.min { abs($0 - expected) < abs($1 - expected) } ?? 0
+            if abs(nearest - expected) > 0.06 { print("NOTE|beep \(second) expected \(expected) found \(sound.starts.filter { abs($0 - expected) < 1.2 })") }
             worstSound = max(worstSound, abs(nearest - expected))
         }
         let frames = try await TestMedia.readFrames(file)
         var worstPicture = 0.0
         for frame in frames {
             guard let index = frame.index, index < times.count else { continue }
-            let expected = recipe.sourceTime(forOutput: frame.time + 0.002)
-            worstPicture = max(worstPicture, abs(times[index].seconds - expected))
+            // Within two thousandths of a cut either side's frame is right.
+            let error = [-0.002, 0.002].map { abs(times[index].seconds - recipe.sourceTime(forOutput: max(0, frame.time + $0))) }.min() ?? 0
+            if error > 0.08 { print("NOTE|frame \(index) at \(frame.time) off by \(error)") }
+            worstPicture = max(worstPicture, error)
         }
         perf("50 cuts", "worst sound error", worstSound * 1_000, "ms")
         perf("50 cuts", "worst picture error", worstPicture * 1_000, "ms")

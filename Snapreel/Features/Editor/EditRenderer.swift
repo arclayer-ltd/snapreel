@@ -134,8 +134,13 @@ final class EditRenderer: ObservableObject {
         }
         setProgress(id, 0.03, library: library)
 
-        let build = try await EditCompositionBuilder.build(recipe: recipe, source: info, editFolder: folder,
+        let build: EditBuild
+        do {
+            build = try await EditCompositionBuilder.build(recipe: recipe, source: info, editFolder: folder,
                                                            cleanedAudio: cleaned, originalSound: false)
+        } catch {
+            throw EditRenderError.failed
+        }
         try check(job)
         guard build.duration > .zero else { throw EditRenderError.failed }
         let transcript = library.transcript(for: source.id)

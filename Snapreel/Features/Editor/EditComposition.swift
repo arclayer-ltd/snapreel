@@ -129,6 +129,10 @@ enum EditCompositionBuilder {
             ? composition.addMutableTrack(withMediaType: .video, preferredTrackID: kCMPersistentTrackID_Invalid)
             : nil
 
+        // A track knows its file only as long as someone holds the file.
+        var held: [AVAsset] = [source.asset]
+        defer { withExtendedLifetime(held) {} }
+
         // The recording's sound, or its cleaned-up copy (same clock as the recording).
         var audioSources = Array(zip(source.audioTracks, source.audioRanges))
         if recipe.audio.reducesNoise, !originalSound, let cleanedAudio,
@@ -136,6 +140,7 @@ enum EditCompositionBuilder {
             let cleaned = AVURLAsset(url: cleanedAudio)
             if let track = try? await cleaned.loadTracks(withMediaType: .audio).first,
                let range = try? await track.load(.timeRange) {
+                held.append(cleaned)
                 audioSources = [(track, range)]
             }
         }
@@ -171,6 +176,7 @@ enum EditCompositionBuilder {
             let url = editFolder.appendingPathComponent(clip.fileName)
             guard FileManager.default.fileExists(atPath: url.path) else { continue }
             let asset = AVURLAsset(url: url)
+            held.append(asset)
             guard let track = try? await asset.loadTracks(withMediaType: .audio).first,
                   let available = try? await track.load(.timeRange) else { continue }
             let at = CMTime(seconds: clip.start, preferredTimescale: timescale)

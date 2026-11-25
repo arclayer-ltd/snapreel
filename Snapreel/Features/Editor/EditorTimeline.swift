@@ -230,11 +230,16 @@ private final class EditorTimelineScroll: UIScrollView {
     override func touchesShouldCancel(in view: UIView) -> Bool { true }
 }
 
+/// The handles at the two ends of the clip stick out of it.
+private final class EditorTimelineContent: UIView {
+    override func point(inside point: CGPoint, with event: UIEvent?) -> Bool { true }
+}
+
 final class EditorTimelineView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate {
     private let model: EditorModel
     private var state: EditorTimelineState
     private let scroll = EditorTimelineScroll()
-    private let content = UIView()
+    private let content = EditorTimelineContent()
     private let ruler = EditorRulerView()
     private let playheadLine = UIView()
     private let playheadKnob = UIView()

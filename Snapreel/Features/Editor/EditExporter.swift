@@ -71,6 +71,8 @@ struct EditExportPlan {
         guard played.count == 1, let only = played.first, only.speed == 1, only.start < 0.001 else { return nil }
         let upright = source.uprightSize
         guard abs(settings.size.width - upright.width) < 2.5, abs(settings.size.height - upright.height) < 2.5 else { return nil }
+        // A picture that starts late or ends before the sound is held still, which needs encoding.
+        guard source.videoRange.start.seconds < 0.02, source.videoRange.end.seconds > min(only.end, source.duration) - 0.1 else { return nil }
         // Edits are always H.264, which everything plays.
         guard source.codec == kCMVideoCodecType_H264 else { return nil }
         return CMTimeRange(start: .zero, end: CMTime(seconds: min(only.end, source.duration), preferredTimescale: 600))
@@ -699,14 +701,17 @@ private final class PieceFeed {
     private var output: AVAssetReaderTrackOutput?
     private var pending: CMSampleBuffer?
     private var queued: [CMSampleBuffer] = []
+    private var asset: AVAsset?
 
     init(pieces: [(url: URL, start: CMTime, end: CMTime)]) {
         self.pieces = pieces
     }
 
     func firstFormat() throws -> CMFormatDescription? {
-        guard let first = pieces.first, let track = AVURLAsset(url: first.url).tracks(withMediaType: .video).first else { return nil }
-        return track.formatDescriptions.first.map { $0 as! CMFormatDescription }
+        guard let first = pieces.first else { return nil }
+        let asset = AVURLAsset(url: first.url)
+        let format = asset.tracks(withMediaType: .video).first?.formatDescriptions.first.map { $0 as! CMFormatDescription }
+        return withExtendedLifetime(asset) { format }
     }
 
     /// The next frame, with its time moved to where its piece starts and its length reaching to
@@ -759,6 +764,7 @@ private final class PieceFeed {
             guard reader.canAdd(output) else { throw EditExportFailure.failed(nil) }
             reader.add(output)
             guard reader.startReading() else { throw EditExportFailure.failed(reader.error) }
+            self.asset = asset
             self.reader = reader
             self.output = output
         }

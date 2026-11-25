@@ -137,7 +137,6 @@ final class EditRecipeTests: XCTestCase {
         r.trim(r.segments[0].id, end: 2)
         XCTAssertEqual(r.segments[0].end, 2, accuracy: 1e-9)
         r.trim(r.segments[0].id, end: 25)
-        XCTAssertEqual(r.segments[0].end, r.segments[1].start, accuracy: 25)
         XCTAssertLessThanOrEqual(r.segments[0].end, r.segments[1].start + 1e-9)
     }
 

@@ -181,16 +181,35 @@ struct EditorTrimPanel: View {
             .padding(.horizontal, Space.gutter)
             // The quick way on a long recording: no handle to drag across minutes of it.
             HStack(spacing: Space.xs) {
-                EditorPanelButton(title: "Start here", systemImage: "arrow.right.to.line") { model.cutToPlayhead(.start) }
-                    .accessibilityHint("Cuts everything before the playhead")
-                EditorPanelButton(title: "Split", systemImage: "scissors") { model.splitAtPlayhead() }
-                    .accessibilityHint("Splits the clip at the playhead")
-                EditorPanelButton(title: "End here", systemImage: "arrow.left.to.line") { model.cutToPlayhead(.end) }
-                    .accessibilityHint("Cuts everything after the playhead")
+                action("Start here", "arrow.right.to.line", hint: "Cuts everything before the playhead") { model.cutToPlayhead(.start) }
+                action("Split", "scissors", hint: "Splits the clip at the playhead") { model.splitAtPlayhead() }
+                action("End here", "arrow.left.to.line", hint: "Cuts everything after the playhead") { model.cutToPlayhead(.end) }
             }
             .padding(.horizontal, Space.gutter)
             EditorHint(text: "Drag the handles, or move the playhead and cut there. Split, then tap a part to delete it or change its speed.")
         }
+    }
+
+    private func action(_ title: String, _ systemImage: String, hint: String, _ body: @escaping () -> Void) -> some View {
+        Button {
+            Haptics.tap()
+            body()
+        } label: {
+            VStack(spacing: 4) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 16, weight: .semibold))
+                Text(title)
+                    .font(.srSubheadlineStrong)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+            }
+            .foregroundStyle(Color.srStageText)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, Space.xs)
+            .background(RoundedRectangle(cornerRadius: Radius.m, style: .continuous).fill(Color.srStageControl))
+        }
+        .buttonStyle(PressScaleStyle())
+        .accessibilityHint(hint)
     }
 
     private func fact(_ title: String, _ value: String) -> some View {
