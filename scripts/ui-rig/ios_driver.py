@@ -289,16 +289,18 @@ class IOSDriver:
     def _start_wda(self):
         env = dict(os.environ, SIMCTL_CHILD_USE_PORT=str(self.port), SIMCTL_CHILD_MJPEG_SERVER_PORT=str(self.port + 1000))
         problem = ""
-        for attempt in range(4):
+        again = self.session is not None  # it ran before: do not spend minutes on it now
+        for attempt in range(2 if again else 4):
             try:
                 out = subprocess.run(["xcrun", "simctl", "launch", "--terminate-running-process",
                                       "--stdout=" + os.path.join(self.work, "wda.log"), "--stderr=" + os.path.join(self.work, "wda.log"),
-                                      self.udid, WDA_BUNDLE], env=env, capture_output=True, text=True, timeout=180)
+                                      self.udid, WDA_BUNDLE], env=env, capture_output=True, text=True,
+                                     timeout=60 if again else 180)
                 if out.returncode:
                     problem = "launch: " + out.stderr.strip()[-160:]
             except subprocess.TimeoutExpired:
-                problem = "launch took over 3 minutes"
-            end = time.time() + (90 if attempt == 0 else 60)
+                problem = "launching it took too long"
+            end = time.time() + (40 if again else 90 if attempt == 0 else 60)
             while time.time() < end:
                 try:
                     self._http("GET", "/status", timeout=5)
@@ -310,7 +312,7 @@ class IOSDriver:
                     self._drop()
                     time.sleep(1)
             print("touch driver, try %d: %s" % (attempt + 1, problem), flush=True)
-            if not self.wda_stuck:
+            if not again:
                 self.status("starting the touch driver, try %d (%s)" % (attempt + 2, problem[:160]))
         raise StepError("the touch driver did not start (%s)" % problem)
 

@@ -219,6 +219,16 @@ def wait_ready(w, sids, minutes):
 
 # ---- using ------------------------------------------------------------------------------------
 
+def step_limit(line):
+    words = line.split()
+    numbers = [float(w) for w in words[1:] if re.fullmatch(r"[\d.]+", w)]
+    if not words:
+        return 0
+    if words[0] in ("wait", "waitfor", "gone", "background", "perf", "settle"):
+        return 30 + (numbers[-1] if numbers else 20)
+    return {"photo": 900, "launch": 240, "scrollto": 240, "video": 240, "log": 180, "store": 120}.get(words[0], 45)
+
+
 def send(sid, steps, opts=None, limit=None):
     """Sends steps, waits for the answer: (answer, {file: path}, seconds)."""
     w = wire()
@@ -232,7 +242,7 @@ def send(sid, steps, opts=None, limit=None):
         remember(sid, over=True)
         die("there is no session called %s (it may have ended); open sessions: %s" % (sid, ", ".join(known_sessions()) or "none"))
     w.push_fast(in_ref, {"req.json": json.dumps(request).encode()})
-    limit = limit or 120 + 60 * len(steps)
+    limit = limit or 200 + sum(step_limit(s) for s in steps)
     while True:
         answer = None
         for ref, sha in w.refs(out_ref + "/").items():

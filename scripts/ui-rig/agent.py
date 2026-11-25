@@ -15,6 +15,7 @@ import re
 import shlex
 import subprocess
 import sys
+import threading
 import time
 import traceback
 
@@ -526,6 +527,17 @@ class Agent:
             entry["gone"] = "Snapreel is no longer running, and left no crash report (closed by iOS, or by a swipe in the app switcher)"
 
 
+def step_limit(line):
+    """The longest a step may honestly take, in seconds."""
+    words = line.split()
+    numbers = [float(w) for w in words[1:] if re.fullmatch(r"[\d.]+", w)]
+    if not words:
+        return 0
+    if words[0] in ("wait", "waitfor", "gone", "background", "perf", "settle"):
+        return 30 + (numbers[-1] if numbers else 20)
+    return {"photo": 900, "launch": 240, "scrollto": 240, "video": 240, "log": 180, "store": 120}.get(words[0], 45)
+
+
 # ---- live mode -------------------------------------------------------------------------------
 
 class Live:
@@ -550,12 +562,40 @@ class Live:
             if re.fullmatch(r"[a-z_]+\.(py|sh|json|storekit)", name) and name != "req.json":
                 with open(os.path.join(here, name), "wb") as f:
                     f.write(data)
+        self.start_over(agent, deadline, idle_minutes)
+
+    def start_over(self, agent, deadline, idle_minutes):
+        """Replaces this program with a fresh copy of itself; the phone and the app stay as they are."""
         state = dict(agent.d.state(), minutes=(deadline - time.time()) / 60, idle=idle_minutes)
         with open(os.path.join(self.work, "resume.json"), "w") as f:
             json.dump(state, f)
-        agent.d.pause()
         args = [a for a in sys.argv if a != "--resume"]
         os.execv(sys.executable, [sys.executable] + args + ["--resume"])
+
+    def watchdog(self, agent, request, deadline, idle_minutes):
+        """If the steps take far too long, says where they got stuck and starts over."""
+        limit = 100 + sum(step_limit(s) for s in request["steps"])
+        me = threading.main_thread().ident
+
+        def bite():
+            frame = sys._current_frames().get(me)
+            where = [l.strip().replace("\n", " | ") for l in traceback.format_stack(frame)[-6:]]
+            print("stuck:\n" + "\n".join(where), flush=True)
+            answer = {"id": request["id"], "ends": deadline, "size": list(agent.d.size), "results": [
+                {"step": "; ".join(request["steps"]), "ok": False,
+                 "text": "stuck for %d s, so the rig started its own side again; the app was left as it is. Look again, and "
+                         "`launch` if it does not answer. (%s)" % (limit, where[-1][:200])}]}
+            try:
+                fresh = Wire(os.environ["GITHUB_REPOSITORY"], os.environ["GITHUB_TOKEN"])
+                fresh.push_fast(self.out_ref, {"res.json": json.dumps(answer).encode()})
+            except WireError as error:
+                print("not sent: %s" % error, flush=True)
+            self.start_over(agent, deadline, idle_minutes)
+
+        timer = threading.Timer(limit, bite)
+        timer.daemon = True
+        timer.start()
+        return timer
 
     def serve(self, agent, minutes, idle_minutes):
         deadline, last_seen = time.time() + minutes * 60, time.time()
@@ -593,12 +633,15 @@ class Live:
                     self.reload(agent, self.wire.fetch(sha), deadline, idle_minutes)
                 print("[%s] %s" % (self.sid, "; ".join(request["steps"])[:300]), flush=True)
                 got = time.time()
+                guard = self.watchdog(agent, request, deadline, idle_minutes) if hasattr(agent.d, "state") else None
                 try:
                     answer, files = agent.perform(request["steps"], request.get("opts", {}))
                 except Exception as error:  # whatever goes wrong, the phone stays and the tester hears about it
                     traceback.print_exc()
                     answer, files = {"results": [{"step": "; ".join(request["steps"]), "ok": False, "text": "rig error: %s: %s" % (
                         type(error).__name__, str(error)[:300])}], "size": list(agent.d.size)}, {}
+                if guard:
+                    guard.cancel()
                 answer.update(id=request["id"], ends=deadline, waited=round(got - request.get("sent", got), 1), wire=self.wire.notes)
                 self.wire.notes = []
                 files = dict(files)
