@@ -8,6 +8,7 @@ const nextConfig: NextConfig = {
   // but is sent with every page (about 16 KB each), so the global one is used instead.
   experimental: {
     globalNotFound: true,
+    inlineCss: true,
   },
   turbopack: {
     rules: {

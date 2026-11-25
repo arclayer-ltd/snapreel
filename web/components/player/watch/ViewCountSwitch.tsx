@@ -43,7 +43,7 @@ export function ViewCountSwitch() {
         aria-describedby={hintId}
         disabled={busy}
         onClick={toggle}
-        className="inline-flex items-center gap-2 rounded hover:text-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sr-red disabled:opacity-60"
+        className="inline-flex min-h-11 items-center gap-2 rounded hover:text-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sr-red disabled:opacity-60"
       >
         <span
           aria-hidden="true"

@@ -151,7 +151,7 @@ function CommentItem({
           <button
             type="button"
             onClick={onReply}
-            className="-ml-2 mt-1 inline-flex h-8 items-center gap-1.5 rounded-full px-2 text-[13px] font-semibold text-text-2 hover:bg-fill hover:text-text focus-visible:outline-2 focus-visible:outline-sr-red"
+            className="-ml-2 mt-1 inline-flex h-8 items-center pointer-coarse:h-10 gap-1.5 rounded-full px-2 text-[13px] font-semibold text-text-2 hover:bg-fill hover:text-text focus-visible:outline-2 focus-visible:outline-sr-red"
           >
             <ReplyIcon size={15} /> Reply
           </button>
@@ -178,6 +178,7 @@ function Composer({
   const second = usePlaybackSecond();
   const ids = useId();
   const textRef = useRef<HTMLTextAreaElement>(null);
+  const nameRef = useRef<HTMLInputElement>(null);
   const [name, setName] = useState("");
   const [knownName, setKnownName] = useState(false);
   const [askName, setAskName] = useState(false);
@@ -210,6 +211,7 @@ function Composer({
     if (!who) {
       setAskName(true);
       setError("Add your name so people know who commented.");
+      requestAnimationFrame(() => nameRef.current?.focus());
       return;
     }
     setBusy(true);
@@ -233,22 +235,6 @@ function Composer({
 
   return (
     <form onSubmit={submit} className="space-y-2" noValidate>
-      {showName && (
-        <div>
-          <label htmlFor={`${ids}-name`} className="mb-1 block text-[13px] font-medium text-text-2">
-            Your name <span className="font-normal text-text-3">(remembered on this device)</span>
-          </label>
-          <input
-            id={`${ids}-name`}
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            maxLength={60}
-            autoComplete="name"
-            className="h-10 w-full rounded-xl border border-line bg-canvas px-3 text-[15px] placeholder:text-text-3 focus:border-sr-red focus:outline-none focus:ring-2 focus:ring-sr-red/25"
-            placeholder="Your name"
-          />
-        </div>
-      )}
       <div className="rounded-2xl border border-line bg-canvas focus-within:border-sr-red focus-within:ring-2 focus-within:ring-sr-red/25">
         <label htmlFor={`${ids}-body`} className="sr-only">
           {parent ? `Reply to ${parent.authorName}` : "Add a comment"}
@@ -264,15 +250,41 @@ function Composer({
           rows={parent ? 2 : 2}
           maxLength={1000}
           placeholder={parent ? `Reply to ${parent.authorName}…` : "Add a comment…"}
-          className="block w-full resize-none bg-transparent px-3 pb-1 pt-2.5 text-[15px] leading-relaxed placeholder:text-text-3 focus:outline-none"
+          className="block w-full resize-none bg-transparent px-3 pb-1 pt-2.5 text-base leading-relaxed placeholder:text-text-3 focus:outline-none"
         />
+        {/* Under the text, so the line being typed never moves when the name is asked for. */}
+        {showName && (
+          <div className="mx-3 mb-2 border-t border-line pt-2">
+            <label htmlFor={`${ids}-name`} className="block text-[13px] font-medium text-text-2">
+              Your name <span className="font-normal text-text-3">(remembered on this device)</span>
+            </label>
+            <input
+              ref={nameRef}
+              id={`${ids}-name`}
+              value={name}
+              onChange={(e) => {
+                setName(e.target.value);
+                setError(null);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") void submit(e);
+              }}
+              maxLength={60}
+              autoComplete="name"
+              enterKeyHint="send"
+              aria-invalid={!!error && !name.trim()}
+              className="h-11 w-full bg-transparent text-base placeholder:text-text-3 focus:outline-none"
+              placeholder="Add your name"
+            />
+          </div>
+        )}
         <div className="flex items-center gap-2 px-2 pb-2">
           {!parent && (
             <button
               type="button"
               onClick={() => setPinTime((p) => !p)}
               aria-pressed={pinTime}
-              className={`inline-flex h-8 items-center gap-1.5 rounded-full px-2.5 text-[13px] font-semibold tabular-nums transition-colors focus-visible:outline-2 focus-visible:outline-sr-red motion-reduce:transition-none ${
+              className={`inline-flex h-8 items-center gap-1.5 rounded-full px-2.5 text-[13px] font-semibold tabular-nums pointer-coarse:h-11 transition-colors focus-visible:outline-2 focus-visible:outline-sr-red motion-reduce:transition-none ${
                 pinTime ? "bg-red-soft text-red-text" : "text-text-2 hover:bg-fill"
               }`}
               title={pinTime ? "Pinned to this moment. Tap to post without a time." : "Tap to pin it to this moment"}

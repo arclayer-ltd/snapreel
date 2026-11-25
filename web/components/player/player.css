@@ -1,0 +1,225 @@
+/* Motion and small shared styles for the player, watch page and dashboard.
+   Plain global classes with an sr- prefix, not a CSS module: next.config.ts runs every .css file through the Tailwind
+   loader as plain CSS, so a .module.css file gets no class map (every styles.x was undefined on the live site). */
+
+.sr-wave-bar {
+  transform-origin: center;
+  transition: background-color 120ms linear;
+}
+
+.sr-wave-live {
+  animation: sr-wave 900ms ease-in-out infinite alternate;
+}
+
+@keyframes sr-wave {
+  0% {
+    transform: scaleY(0.55);
+  }
+  100% {
+    transform: scaleY(1.08);
+  }
+}
+
+/* A tapped reaction's button. */
+.sr-pop {
+  animation: sr-pop 420ms cubic-bezier(0.2, 0.9, 0.3, 1.4);
+}
+
+@keyframes sr-pop {
+  0% {
+    transform: scale(0.8);
+  }
+  45% {
+    transform: scale(1.35) translateY(-3px);
+  }
+  100% {
+    transform: none;
+  }
+}
+
+/* Reactions as they happen: they sit in a row beside the reaction buttons, never over the picture. */
+.sr-live {
+  animation: sr-live 2400ms ease-out forwards;
+}
+
+@keyframes sr-live {
+  0% {
+    opacity: 0;
+    transform: translateY(10px) scale(0.7);
+  }
+  12% {
+    opacity: 1;
+    transform: none;
+  }
+  75% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+
+.sr-spinner {
+  animation: sr-spin 900ms linear infinite;
+}
+
+@keyframes sr-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.sr-ripple {
+  animation: sr-ripple 520ms ease-out forwards;
+}
+
+@keyframes sr-ripple {
+  0% {
+    opacity: 0.9;
+    transform: translateY(-50%) scale(0.9);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-50%) scale(1.15);
+  }
+}
+
+.sr-hud {
+  animation: sr-hud 900ms ease-out forwards;
+}
+
+@keyframes sr-hud {
+  0%,
+  60% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+.sr-pulse {
+  animation: sr-pulse 1400ms ease-in-out infinite;
+}
+
+@keyframes sr-pulse {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+/* Avatars: light-dark() needs Safari 17.5, so iOS 16 drew no circle at all. Plain variables instead. */
+.sr-avatar {
+  background: var(--av-bg);
+  color: var(--av-ink);
+}
+
+@media (prefers-color-scheme: dark) {
+  .sr-avatar {
+    background: var(--av-bg-dark, var(--av-bg));
+    color: var(--av-ink-dark, var(--av-ink));
+  }
+}
+
+/* Dialogs: centred on big screens. On phones a sheet that sits on the bottom edge of what the keyboard leaves
+   visible (--vv-top and --vv-height come from visualViewport, see ui.tsx) and scrolls inside. */
+.sr-dialog {
+  margin: auto;
+  width: calc(100% - 2rem);
+  max-height: calc(var(--vv-height, 100svh) - 3rem);
+  overflow: hidden;
+  border-radius: 1.5rem;
+}
+
+.sr-dialog[open] {
+  display: flex;
+  flex-direction: column;
+}
+
+.sr-dialog::backdrop {
+  background: rgb(0 0 0 / 0.55);
+}
+
+.sr-dialog-body {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+@media (max-width: 639px) {
+  .sr-dialog {
+    position: fixed;
+    inset: auto;
+    top: calc(var(--vv-top, 0px) + var(--vv-height, 100dvh));
+    left: 0;
+    right: 0;
+    margin: 0 auto;
+    width: 100%;
+    max-width: 100%;
+    max-height: calc(var(--vv-height, 100dvh) - 12px);
+    transform: translateY(-100%);
+    border-radius: 1.5rem 1.5rem 0 0;
+    border-bottom: 0;
+  }
+  .sr-dialog[open] {
+    animation: sr-sheet 220ms ease-out;
+  }
+  .sr-dialog-body {
+    padding-bottom: calc(1rem + env(safe-area-inset-bottom));
+  }
+  /* With the keyboard up there is no home indicator to clear. */
+  .sr-dialog[data-keyboard] .sr-dialog-body {
+    padding-bottom: 1rem;
+  }
+}
+
+@keyframes sr-sheet {
+  from {
+    transform: translateY(-92%);
+    opacity: 0.4;
+  }
+}
+
+/* Landscape on a phone with a notch: keep content out of it (the pages use viewport-fit=cover). */
+.sr-safe-x {
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sr-wave-live,
+  .sr-pulse,
+  .sr-pop {
+    animation: none;
+  }
+  .sr-dialog[open] {
+    animation: none;
+  }
+  .sr-live {
+    animation-name: sr-live-still;
+  }
+  .sr-ripple,
+  .sr-hud {
+    animation-duration: 600ms;
+  }
+  .sr-spinner {
+    animation-duration: 2400ms;
+  }
+}
+
+@keyframes sr-live-still {
+  0%,
+  100% {
+    opacity: 0;
+  }
+  10%,
+  80% {
+    opacity: 1;
+  }
+}

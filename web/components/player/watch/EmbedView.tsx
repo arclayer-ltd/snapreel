@@ -3,6 +3,7 @@
 // /v/{slug}/embed: the player alone, filling an iframe (oEmbed and Twitter player cards).
 import { useCallback, useState } from "react";
 import type { PublicVideo } from "@/lib/contract";
+import { publicApi } from "@/lib/client/api";
 import { ExternalIcon } from "../icons";
 import { PlaybackContext, PlaybackStore } from "../playback";
 import { Player } from "../Player";
@@ -23,6 +24,12 @@ export function EmbedView({ slug, initial }: { slug: string; initial: PublicVide
     setAutoStart(true);
   }, []);
   const onFailed = useCallback(() => setFailed(true), []);
+  const onGone = useCallback(() => location.reload(), []);
+  const onRefresh = useCallback(async () => {
+    const next = await publicApi.video(slug);
+    setVideo((v) => ({ ...v, status: next.status, videoUrl: next.videoUrl }));
+    return true;
+  }, [slug]);
 
   if (failed) return <EmbedMessage slug={slug} text="This upload didn’t finish." />;
 
@@ -43,6 +50,7 @@ export function EmbedView({ slug, initial }: { slug: string; initial: PublicVide
             height={video.height}
             durationS={video.durationS}
             autoStart={autoStart}
+            onRefresh={onRefresh}
             topOverlay={
               <a
                 href={`/v/${slug}`}
@@ -56,7 +64,7 @@ export function EmbedView({ slug, initial }: { slug: string; initial: PublicVide
             }
           />
         ) : (
-          <UploadingStage slug={slug} video={video} onReady={onReady} onFailed={onFailed} variant="embed" />
+          <UploadingStage slug={slug} video={video} onReady={onReady} onFailed={onFailed} onGone={onGone} variant="embed" />
         )}
       </div>
     </PlaybackContext>

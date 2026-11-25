@@ -36,9 +36,9 @@ export function WatchHeader({
           <SnapreelWordmark />
         </a>
       ) : ownerName ? (
-        <span className="text-[15px] font-semibold">{ownerName}</span>
+        <span className="min-w-0 truncate text-[15px] font-semibold">{ownerName}</span>
       ) : null}
-      {actions && <div className="ml-auto flex items-center gap-1">{actions}</div>}
+      {actions && <div className="ml-auto flex shrink-0 items-center gap-1">{actions}</div>}
     </header>
   );
 }
@@ -47,7 +47,7 @@ export function MadeWithSnapreel() {
   return (
     <a
       href={SITE_URL}
-      className="inline-flex items-center gap-2 rounded-full border border-line bg-surface py-1.5 pl-1.5 pr-3.5 text-[13px] font-medium text-text-2 shadow-sm transition-colors hover:text-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sr-red motion-reduce:transition-none"
+      className="inline-flex min-h-11 items-center gap-2 rounded-full border border-line bg-surface py-1.5 pl-1.5 pr-3.5 text-[13px] font-medium text-text-2 shadow-sm transition-colors hover:text-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sr-red motion-reduce:transition-none"
     >
       <SnapreelMark size={22} />
       Made with <span className="font-semibold text-text">Snapreel</span>
@@ -57,14 +57,14 @@ export function MadeWithSnapreel() {
 
 export function WatchFooter({ showBadge, children }: { showBadge: boolean; children?: ReactNode }) {
   return (
-    <footer className="mx-auto mt-auto flex w-full max-w-[1400px] flex-wrap items-center justify-center gap-x-5 gap-y-3 px-4 pb-8 pt-10 text-[13px] text-text-2 sm:justify-between lg:px-6">
+    <footer className="mx-auto mt-auto flex w-full max-w-[1400px] flex-wrap items-center justify-center gap-x-5 gap-y-2 px-4 pb-[calc(2rem+env(safe-area-inset-bottom))] pt-10 text-[13px] text-text-2 sm:justify-between lg:px-6">
       {showBadge ? <MadeWithSnapreel /> : <span />}
-      <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2">
+      <div className="flex flex-wrap items-center justify-center gap-x-4">
         {children}
-        <a href={`${SITE_URL}/privacy`} className="rounded hover:text-text focus-visible:outline-2 focus-visible:outline-sr-red">
+        <a href={`${SITE_URL}/privacy`} className="inline-flex min-h-11 items-center rounded px-1 hover:text-text focus-visible:outline-2 focus-visible:outline-sr-red">
           Privacy
         </a>
-        <a href={`${SITE_URL}/terms`} className="rounded hover:text-text focus-visible:outline-2 focus-visible:outline-sr-red">
+        <a href={`${SITE_URL}/terms`} className="inline-flex min-h-11 items-center rounded px-1 hover:text-text focus-visible:outline-2 focus-visible:outline-sr-red">
           Terms
         </a>
       </div>

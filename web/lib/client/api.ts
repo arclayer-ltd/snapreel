@@ -22,7 +22,6 @@ import type {
   ViewOptOut,
 } from "@/lib/contract";
 import { PREVIEW } from "@/lib/client/preview-data";
-import { accessToken } from "@/lib/client/supabase";
 
 export class ApiError extends Error {
   constructor(
@@ -54,6 +53,8 @@ async function request<T>(method: Method, path: string, opts: { body?: unknown; 
   const headers: Record<string, string> = { accept: "application/json" };
   if (opts.body !== undefined) headers["content-type"] = "application/json";
   if (opts.auth) {
+    // Loaded only for owner calls: viewers on a watch page never need the Supabase client (about 74 KB gzipped).
+    const { accessToken } = await import("@/lib/client/supabase");
     const token = await accessToken();
     if (!token) throw new ApiError(401, "signed_out", "You're signed out. Sign in again to carry on.");
     headers.authorization = `Bearer ${token}`;
