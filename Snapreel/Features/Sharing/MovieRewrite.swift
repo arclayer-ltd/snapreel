@@ -1,5 +1,6 @@
 import AVFoundation
 import Foundation
+import OSLog
 
 // Writing a recording again without touching its picture: one sound track instead of two, one index
 // instead of fragments, a proper MP4. Used after a screen recording is saved (`RecordingSaver`) and
@@ -85,10 +86,10 @@ struct MoviePlan: Equatable, Sendable {
     /// Reads `url`. `isScreenRecording`: its sound tracks belong together and are mixed. Movies from
     /// elsewhere can carry alternative sound tracks that must not be.
     ///
-    /// Takes a moment whatever the length; given up on after 20 seconds, so nothing ever waits on a file
+    /// Takes a moment whatever the length; given up on after 30 seconds, so nothing ever waits on a file
     /// AVFoundation can't get through.
     static func make(for url: URL, isScreenRecording: Bool) async throws -> MoviePlan {
-        try await Deadline.run(seconds: 20) { try await read(url, isScreenRecording: isScreenRecording) }
+        try await Deadline.run(seconds: 30) { try await read(url, isScreenRecording: isScreenRecording) }
     }
 
     private static func read(_ url: URL, isScreenRecording: Bool) async throws -> MoviePlan {
@@ -317,10 +318,21 @@ enum MoviePump {
         }
     }
 
+    /// What went wrong in AVFoundation's own words, for a phone's console and the tests' log.
+    static func log(_ line: String) {
+        logger.error("movie: \(line, privacy: .public)")
+        #if DEBUG
+        print("NOTE|movie|\(line)")
+        #endif
+    }
+
+    private static let logger = Logger(subsystem: "co.arclayer.snapreel", category: "sharing")
+
     /// AVFoundation's error as one the app acts on.
     static func explain(_ error: Error, control: MovieRewriteControl) -> MovieRewriteError {
         if let stop = control.stopped { return stop }
         if let known = error as? MovieRewriteError { return known }
+        log("\(error)")
         if DiskSpace.isOutOfSpace(error) { return .noSpace }
         let ns = error as NSError
         if ns.domain == AVFoundationErrorDomain {
@@ -355,7 +367,8 @@ private final class MoviePumpJob: @unchecked Sendable {
     private var watchdog: DispatchSourceTimer?
 
     /// Seconds of running time (time asleep in the background doesn't count) without a single sample.
-    private static let mostIdle = 30
+    /// Generous: a cut-off recording's hundreds of small indexes are read before its first sample.
+    private static let mostIdle = 120
     /// Closing the file can mean writing all of it once more.
     private static let mostIdleFinishing = 600
 
@@ -478,6 +491,7 @@ private final class MoviePumpJob: @unchecked Sendable {
         guard isStuck else { return }
         // A track's thread can be stuck inside AVFoundation; the work ends for everyone else anyway.
         note(MovieRewriteError.failed)
+        MoviePump.log("nothing moved for \(limit) s, reader \(reader.status.rawValue), writer \(writer.status.rawValue)")
         reader.cancelReading()
         end(.failure(MovieRewriteError.failed))
     }
