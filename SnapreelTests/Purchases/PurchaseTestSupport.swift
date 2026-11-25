@@ -96,8 +96,6 @@ class PurchaseTestCase: XCTestCase {
         session.resetToDefaultState()
         session.clearTransactions()
         session.disableDialogs = true
-        // The iOS 26 simulators on GitHub's runners take no settings and refuse every purchase ("notEntitled").
-        try XCTSkipUnless(session.disableDialogs, "This simulator's StoreKit test store doesn't work")
         suite = "purchase-tests-\(UUID().uuidString)"
         defaults = UserDefaults(suiteName: suite)
         backend = FakeBackend(user: alice)
@@ -136,67 +134,43 @@ class PurchaseTestCase: XCTestCase {
         service.syncAppStore = {}
         service.purchaseProduct = { [weak self] product, options in
             guard let self else { throw StoreKitError.unknown }
-            return .success(try await self.buyInStore(product, options))
+            return try await self.buyInStore(product, options)
         }
         return service
     }
 
+    /// For tests that buy something. The test store of the simulators on GitHub's runners only works up
+    /// to iOS 18: on iOS 26 it refuses every purchase ("notEntitled"), and on iOS 27 `purchase()` leaves
+    /// it and waits for a real Apple Account to be typed in.
+    func needsTestStore() throws {
+        if #available(iOS 26.0, *) {
+            throw XCTSkip("This simulator's StoreKit test store can't buy; run on iOS 16 to 18")
+        }
+    }
+
     /// Apple's sheet, with the person tapping Subscribe.
-    ///
-    /// On the iOS 26 and 27 simulators `product.purchase()` leaves the test store and waits for a real
-    /// Apple Account to be typed in, so from iOS 17 on the test store makes the purchase. The
-    /// transaction is the same: signed, with the token, in `unfinished` and `currentEntitlements`, and
-    /// in `Transaction.updates` as well, as happens on iPhones.
-    func buyInStore(_ product: Product, _ options: Set<Product.PurchaseOption>) async throws -> VerificationResult<Transaction> {
+    func buyInStore(_ product: Product, _ options: Set<Product.PurchaseOption>) async throws -> Product.PurchaseResult {
         sheets += 1
-        if #available(iOS 17.0, *) {
-            let bought = try await session.buyProduct(identifier: product.id, options: options)
-            for await result in Transaction.all where result.unsafePayloadValue.id == bought.id { return result }
-        } else if case .success(let result) = try await product.purchase(options: options) {
-            return result
-        }
-        throw StoreKitError.unknown
+        return try await product.purchase(options: options)
     }
 
-    enum HoldUp {
-        case interrupted
-        case askToBuy
-    }
-
-    /// The next purchase is held up. The real thing on iOS 16; after that the answer Apple would give.
-    func holdUp(_ reason: HoldUp) {
+    /// Bought without Snapreel: on the App Store's page, or with an offer code.
+    func buyOutside(_ productID: String) async throws {
         if #available(iOS 17.0, *) {
-            service.purchaseProduct = { _, _ in reason == .askToBuy ? .pending : .userCancelled }
+            _ = try await session.buyProduct(identifier: productID)
         } else {
-            session.interruptedPurchasesEnabled = reason == .interrupted
-            session.askToBuyEnabled = reason == .askToBuy
-            service.purchaseProduct = { product, options in try await product.purchase(options: options) }
+            try session.buyProduct(productIdentifier: productID)
         }
     }
 
-    /// It goes through after all: the issue is resolved, or the request approved.
-    func letThrough(_ productID: String) async throws {
-        if #available(iOS 17.0, *) {
-            try await arrivesLater(productID, token: backend.userID)
-        } else if session.askToBuyEnabled {
+    /// A held-up purchase goes through after all: the issue is resolved, or the request approved.
+    func letThrough() throws {
+        if session.askToBuyEnabled {
             session.askToBuyEnabled = false
             try session.approveAskToBuyTransaction(identifier: try latest().identifier)
         } else {
             session.interruptedPurchasesEnabled = false
             try session.resolveIssueForTransaction(identifier: try latest().identifier)
-        }
-    }
-
-    /// Bought without Snapreel: on the App Store's page, with an offer code, or a purchase that was
-    /// held up and went through later (`token` is whoever started it).
-    func arrivesLater(_ productID: String, token: UUID?) async throws {
-        if #available(iOS 17.0, *) {
-            _ = try await session.buyProduct(identifier: productID, options: token.map { [.appAccountToken($0)] } ?? [])
-        } else if let token {
-            let found = try await Product.products(for: [productID])
-            _ = try await XCTUnwrap(found.first).purchase(options: [.appAccountToken(token)])
-        } else {
-            try session.buyProduct(productIdentifier: productID)
         }
     }
 

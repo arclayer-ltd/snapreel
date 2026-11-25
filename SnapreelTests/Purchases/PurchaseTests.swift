@@ -10,6 +10,7 @@ final class PurchaseTests: PurchaseTestCase {
     // MARK: - Buying
 
     func testBuyingWorksTheFirstTime() async throws {
+        try needsTestStore()
         let ending = await service.purchase(yearly)
         XCTAssertEqual(ending, .purchased)
         XCTAssertEqual(service.ending, .purchased)
@@ -26,6 +27,7 @@ final class PurchaseTests: PurchaseTestCase {
     }
 
     func testBuyingWorksWithPlansNotLoadedYet() async throws {
+        try needsTestStore()
         XCTAssertTrue(service.products.isEmpty)
         let ending = await service.purchase(monthly)
         XCTAssertEqual(ending, .purchased)
@@ -34,6 +36,7 @@ final class PurchaseTests: PurchaseTestCase {
 
     /// (f) Two quick taps used to start two purchases, and Apple's sheet came up twice.
     func testADoubleTapBuysOnce() async throws {
+        try needsTestStore()
         await service.loadProducts()
         service.buy(yearly)
         XCTAssertNotNil(service.activity, "taken before anything slow happens")
@@ -49,6 +52,7 @@ final class PurchaseTests: PurchaseTestCase {
     /// The purchase and Transaction.updates both hand the same transaction over (the owner's purchase
     /// was sent to the server twice, five seconds apart).
     func testPurchaseAndUpdatesSendItOnce() async throws {
+        try needsTestStore()
         service.startListening()
         backend.delay = 0.5
         let ending = await service.purchase(yearly)
@@ -58,6 +62,7 @@ final class PurchaseTests: PurchaseTestCase {
     }
 
     func testBuyingAgainChangesNothing() async throws {
+        try needsTestStore()
         await service.purchase(yearly)
         let ending = await service.purchase(yearly)
         XCTAssertEqual(ending, .alreadyYours)
@@ -74,6 +79,7 @@ final class PurchaseTests: PurchaseTestCase {
     }
 
     func testAStaleProPlanDoesntStopBuying() async throws {
+        try needsTestStore()
         backend.serverIsPro = true
         backend.planOnServer = false
         let ending = await service.purchase(yearly)
@@ -96,6 +102,7 @@ final class PurchaseTests: PurchaseTestCase {
     }
 
     func testMonthlyToYearly() async throws {
+        try needsTestStore()
         await service.purchase(monthly)
         XCTAssertEqual(service.activeProductID, monthly)
         let ending = await service.purchase(yearly)
@@ -107,6 +114,7 @@ final class PurchaseTests: PurchaseTestCase {
     // MARK: - Not bought
 
     func testCancelledIsSaidAndCanBeTriedAgain() async throws {
+        try needsTestStore()
         let real = service.purchaseProduct
         service.purchaseProduct = { _, _ in .userCancelled }
         let ending = await service.purchase(yearly)
@@ -146,13 +154,14 @@ final class PurchaseTests: PurchaseTestCase {
     /// Apple needed something first (a password, new terms): purchase() gives up, and the transaction
     /// arrives on its own later.
     func testAnInterruptedPurchaseFinishesByItself() async throws {
+        try needsTestStore()
         service.startListening()
-        holdUp(.interrupted)
+        session.interruptedPurchasesEnabled = true
         let ending = await service.purchase(yearly)
         XCTAssertTrue(ending == .cancelled || ending == .pending, "\(ending)")
         XCTAssertNil(service.activity)
         XCTAssertFalse(service.hasLocalEntitlement)
-        try await letThrough(yearly)
+        try letThrough()
         await assertEventually("Pro by itself") { self.service.standing == .subscribed }
         await assertEventually("and it's said") { self.service.ending == .purchased }
         XCTAssertEqual(announcements, ["Snapreel Pro is on"])
@@ -162,6 +171,7 @@ final class PurchaseTests: PurchaseTestCase {
 
     /// The same, when Apple's answer is "cancelled" but the subscription is there.
     func testBoughtAlthoughAppleSaysCancelled() async throws {
+        try needsTestStore()
         service.purchaseProduct = { [unowned self] product, options in
             _ = try await self.buyInStore(product, options)
             return .userCancelled
@@ -173,6 +183,7 @@ final class PurchaseTests: PurchaseTestCase {
     }
 
     func testBoughtAlthoughAppleThrows() async throws {
+        try needsTestStore()
         service.purchaseProduct = { [unowned self] product, options in
             _ = try await self.buyInStore(product, options)
             throw StoreKitError.unknown
@@ -182,8 +193,9 @@ final class PurchaseTests: PurchaseTestCase {
     }
 
     func testAskToBuyApproved() async throws {
+        try needsTestStore()
         service.startListening()
-        holdUp(.askToBuy)
+        session.askToBuyEnabled = true
         let ending = await service.purchase(yearly)
         XCTAssertEqual(ending, .pending)
         XCTAssertNil(service.activity)
@@ -199,7 +211,7 @@ final class PurchaseTests: PurchaseTestCase {
         XCTAssertEqual(service.ending, .pending)
         service.paywallClosed()
 
-        try await letThrough(yearly)
+        try letThrough()
         await assertEventually("Pro once approved") { self.service.standing == .subscribed }
         await assertEventually("and it's said") { self.service.ending == .purchased }
         service.paywallOpened()
@@ -207,17 +219,14 @@ final class PurchaseTests: PurchaseTestCase {
     }
 
     func testAskToBuyDeclined() async throws {
+        try needsTestStore()
         service.startListening()
-        let real = service.purchaseProduct
-        holdUp(.askToBuy)
+        session.askToBuyEnabled = true
         let ending = await service.purchase(yearly)
         XCTAssertEqual(ending, .pending)
         XCTAssertFalse(service.hasLocalEntitlement)
-        if #unavailable(iOS 17.0) {
-            try session.declineAskToBuyTransaction(identifier: try latest().identifier)
-            session.askToBuyEnabled = false
-        }
-        service.purchaseProduct = real
+        try session.declineAskToBuyTransaction(identifier: try latest().identifier)
+        session.askToBuyEnabled = false
         let again = await service.purchase(yearly)
         XCTAssertEqual(again, .purchased, "a declined request doesn't stop the next try")
         service.paywallOpened()
@@ -226,11 +235,12 @@ final class PurchaseTests: PurchaseTestCase {
 
     /// An App Store that never answers used to leave "Waiting for the App Store…" for good.
     func testASilentAppStoreCanBeLeft() async throws {
+        try needsTestStore()
         service.slowAfter = 1
         let gate = Gate()
         service.purchaseProduct = { [unowned self] product, options in
             await gate.wait()
-            return .success(try await self.buyInStore(product, options))
+            return try await self.buyInStore(product, options)
         }
         service.buy(yearly)
         await assertEventually("offers a way out") { self.service.activity?.isSlow == true }
@@ -244,6 +254,7 @@ final class PurchaseTests: PurchaseTestCase {
     }
 
     func testTryingAgainAfterASilentAppStore() async throws {
+        try needsTestStore()
         service.slowAfter = 1
         let real = service.purchaseProduct
         service.purchaseProduct = { _, _ in
@@ -263,6 +274,7 @@ final class PurchaseTests: PurchaseTestCase {
 
     /// (c) The transaction used to be finished whatever the server said.
     func testServerDownKeepsTheTransactionAndTriesAgain() async throws {
+        try needsTestStore()
         backend.failure = .unavailable
         let ending = await service.purchase(yearly)
         XCTAssertEqual(ending, .purchased)
@@ -279,6 +291,7 @@ final class PurchaseTests: PurchaseTestCase {
     }
 
     func testOfflineAtTheWorstMoment() async throws {
+        try needsTestStore()
         backend.failure = .offline
         await service.purchase(yearly)
         XCTAssertEqual(service.standing, .confirming)
@@ -288,6 +301,7 @@ final class PurchaseTests: PurchaseTestCase {
     }
 
     func testSnapreelClosedBeforeTheServerHadIt() async throws {
+        try needsTestStore()
         service.retryDelays = [600]
         backend.failure = .offline
         await service.purchase(yearly)
@@ -301,6 +315,7 @@ final class PurchaseTests: PurchaseTestCase {
     }
 
     func testARefusedTransactionIsKept() async throws {
+        try needsTestStore()
         backend.failure = .refused("signature")
         await service.purchase(yearly)
         XCTAssertEqual(service.standing, .refused("signature"))
@@ -315,6 +330,7 @@ final class PurchaseTests: PurchaseTestCase {
     }
 
     func testTheServerSayingFreeAfterAPurchaseIsTriedAgain() async throws {
+        try needsTestStore()
         var free = true
         backend.decide = { _ in free ? CloudPlan(tier: .free, productId: nil, expiresAt: nil) : FakeBackend.pro }
         await service.purchase(yearly)
@@ -324,6 +340,7 @@ final class PurchaseTests: PurchaseTestCase {
     }
 
     func testTheSessionEndingMidway() async throws {
+        try needsTestStore()
         backend.failure = .signedOut
         await service.purchase(yearly)
         XCTAssertEqual(service.standing, .signInNeeded)
@@ -335,6 +352,7 @@ final class PurchaseTests: PurchaseTestCase {
     }
 
     func testSigningOutWhileItIsBeingSent() async throws {
+        try needsTestStore()
         service.startListening()
         backend.delay = 1
         async let ending = service.purchase(yearly)
@@ -351,6 +369,7 @@ final class PurchaseTests: PurchaseTestCase {
     // MARK: - Accounts
 
     func testSignedOutThenIn() async throws {
+        try needsTestStore()
         service.startListening()
         await service.purchase(yearly)
         backend.userID = nil
@@ -364,6 +383,7 @@ final class PurchaseTests: PurchaseTestCase {
 
     /// (d) Another Snapreel account on the same Apple Account.
     func testAnotherAccountsSubscription() async throws {
+        try needsTestStore()
         service.startListening()
         await service.purchase(yearly)
         backend.decide = { item in
@@ -394,6 +414,7 @@ final class PurchaseTests: PurchaseTestCase {
     }
 
     func testMovingThatCantBeDone() async throws {
+        try needsTestStore()
         service.startListening()
         await service.purchase(yearly)
         backend.decide = { item in
@@ -411,6 +432,7 @@ final class PurchaseTests: PurchaseTestCase {
     }
 
     func testAnotherAccountsSubscriptionWhileOffline() async throws {
+        try needsTestStore()
         service.startListening()
         await service.purchase(yearly)
         backend.failure = .offline
@@ -425,6 +447,7 @@ final class PurchaseTests: PurchaseTestCase {
     // MARK: - Restore
 
     func testRestoreWithoutApplesPassword() async throws {
+        try needsTestStore()
         service.retryDelays = [600]
         backend.failure = .offline
         await service.purchase(yearly)
@@ -456,6 +479,7 @@ final class PurchaseTests: PurchaseTestCase {
     }
 
     func testRestoreSaysWhoseItIs() async throws {
+        try needsTestStore()
         service.startListening()
         await service.purchase(yearly)
         backend.failure = .otherAccount(hint: "a•••e@example.com", canMove: true)
@@ -469,6 +493,7 @@ final class PurchaseTests: PurchaseTestCase {
     // MARK: - Later
 
     func testARenewalReachesTheServer() async throws {
+        try needsTestStore()
         service.startListening()
         await service.purchase(monthly)
         let before = backend.sent.count
@@ -479,6 +504,7 @@ final class PurchaseTests: PurchaseTestCase {
     }
 
     func testARefundTurnsProOff() async throws {
+        try needsTestStore()
         service.startListening()
         await service.purchase(yearly)
         backend.planOnServer = false
@@ -488,6 +514,7 @@ final class PurchaseTests: PurchaseTestCase {
     }
 
     func testRunningOut() async throws {
+        try needsTestStore()
         service.settleTime = 0
         service.startListening()
         await service.purchase(yearly)
@@ -505,6 +532,7 @@ final class PurchaseTests: PurchaseTestCase {
     /// Apple can't charge the renewal. With a grace period Pro stays; without one it stops, and the
     /// paywall says why.
     func testARenewalThatCantBeCharged() async throws {
+        try needsTestStore()
         service.startListening()
         service.settleTime = 0
         session.billingGracePeriodIsEnabled = false
@@ -520,8 +548,9 @@ final class PurchaseTests: PurchaseTestCase {
 
     /// Bought on the App Store's own page, or with an offer code: no account token.
     func testBoughtOutsideTheApp() async throws {
+        try needsTestStore()
         service.startListening()
-        try await arrivesLater(yearly, token: nil)
+        try await buyOutside(yearly)
         await assertEventually("Pro") {
             await self.service.refreshEntitlements()
             return self.service.standing == .subscribed
@@ -531,9 +560,10 @@ final class PurchaseTests: PurchaseTestCase {
     }
 
     func testBoughtOutsideTheAppWhileSignedOut() async throws {
+        try needsTestStore()
         backend.userID = nil
         service.startListening()
-        try await arrivesLater(yearly, token: nil)
+        try await buyOutside(yearly)
         await assertEventually("asks to sign in") {
             await self.service.refreshEntitlements()
             return self.service.standing == .signInNeeded
@@ -546,6 +576,7 @@ final class PurchaseTests: PurchaseTestCase {
     // MARK: - Plans
 
     func testTheTrialIsShownOnlyWhileItCanBeHad() async throws {
+        try needsTestStore()
         await service.loadProducts()
         XCTAssertEqual(service.plans.first { $0.period == .year }?.trialDays, 7)
         XCTAssertEqual(service.plans.first { $0.period == .year }?.displayPrice, "$39.99")
@@ -576,6 +607,7 @@ final class PurchaseTests: PurchaseTestCase {
     }
 
     func testPlansThatFailToLoadAreTriedAgain() async throws {
+        try needsTestStore()
         var fetches = 0
         service.fetchProducts = { ids in
             fetches += 1
