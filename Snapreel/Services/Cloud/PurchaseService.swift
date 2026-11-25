@@ -1,6 +1,5 @@
 import Combine
 import StoreKit
-import SwiftUI
 import UIKit
 
 /// A Pro plan as the paywall shows it: the App Store's own localised price when it has

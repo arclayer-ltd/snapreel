@@ -68,7 +68,6 @@ extension DebugCatalog {
         ]
     }
 
-    @MainActor
     private static func purchase(_ id: String, _ title: String, _ scenario: CloudFixtures.Scenario = .free,
                                  hasPrices: Bool = true, reason: PaywallReason = .settings, continues: Bool = false,
                                  outcome: PurchaseEnding = .none,
