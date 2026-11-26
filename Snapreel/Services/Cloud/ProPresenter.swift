@@ -136,8 +136,8 @@ enum ProPresenter {
         present(controller, orElse: { SettingsSheet.shared.didClose() })
     }
 
-    static func closeSettings() {
-        dismiss(appSettingsController)
+    static func closeSettings(then completion: (@MainActor () -> Void)? = nil) {
+        dismiss(appSettingsController, then: completion)
     }
 
     // MARK: Hosting

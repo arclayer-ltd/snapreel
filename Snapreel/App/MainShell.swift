@@ -85,13 +85,15 @@ struct MainShell: View {
     private func tabStack<Content: View>(_ tab: AppTab, path: Binding<NavigationPath>,
                                          @ViewBuilder content: () -> Content) -> some View {
         let selected = router.tab == tab
+        // `isNudgingTabs`: off and on again, as a tab switch does (see `SettingsSheet`).
+        let live = selected && !router.isNudgingTabs
         return NavigationStack(path: path) {
             content()
                 .navigationDestination(for: Route.self) { RouteDestination(route: $0) }
         }
-        .opacity(selected ? 1 : 0)
-        .allowsHitTesting(selected)
-        .accessibilityHidden(!selected)
+        .opacity(selected ? (live ? 1 : 0.99) : 0)
+        .allowsHitTesting(live)
+        .accessibilityHidden(!live)
     }
 }
 

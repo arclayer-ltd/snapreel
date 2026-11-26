@@ -1,9 +1,12 @@
 import SwiftUI
 
-/// The Settings sheet, presented through UIKit (`ProPresenter.openSettings`), not SwiftUI's `.sheet` on the tab
-/// shell. Tester t26 and the rig (iOS 16.4): after that sheet had closed twice, the gear on every tab root was
-/// still drawn but no longer a button, until the app went to the background or the tab was switched. Neither a
-/// redraw nor keeping the state off the router helped; the Pro sheets, presented through UIKit, never did it.
+/// The Settings sheet, presented through UIKit (`ProPresenter.openSettings`).
+///
+/// Tester t26 and the rig (iOS 16.4): once Settings had closed twice, the gear on every tab root was still drawn
+/// but no longer a button (the accessibility tree turned it into "Other"), until the app went to the background or
+/// the tab was switched. Redrawing the toolbar, keeping this state off the router, and presenting through UIKit
+/// instead of SwiftUI's `.sheet` each left it the same. What a tab switch does brings it back, so after Settings
+/// has gone the shown tab gets the same nudge (`AppRouter.nudgeTabs`).
 @MainActor
 final class SettingsSheet: ObservableObject {
     static let shared = SettingsSheet()
@@ -15,7 +18,7 @@ final class SettingsSheet: ObservableObject {
             if isPresented {
                 ProPresenter.openSettings(path: path)
             } else {
-                ProPresenter.closeSettings()
+                ProPresenter.closeSettings { AppEnvironment.shared.router.nudgeTabs() }
             }
         }
     }
@@ -28,6 +31,7 @@ final class SettingsSheet: ObservableObject {
         isSettling = true
         isPresented = false
         isSettling = false
+        AppEnvironment.shared.router.nudgeTabs()
     }
 }
 
@@ -130,6 +134,19 @@ final class AppRouter: ObservableObject {
         get { SettingsSheet.shared.isPresented }
         set { SettingsSheet.shared.isPresented = newValue }
     }
+    /// For a moment after a sheet closed: the shown tab is drawn as if it had just been switched to, which gives its
+    /// navigation bar's buttons their taps back (see `SettingsSheet`).
+    @Published private(set) var isNudgingTabs = false
+
+    func nudgeTabs() {
+        guard !isNudgingTabs else { return }
+        isNudgingTabs = true
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 60_000_000)
+            isNudgingTabs = false
+        }
+    }
+
     /// Pages pushed when Settings opens (empty = the root). Set through `openSettings(_:)`.
     var settingsPath: [SettingsPage] {
         get { SettingsSheet.shared.path }
