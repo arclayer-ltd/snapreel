@@ -83,7 +83,7 @@ final class EditRenderer: ObservableObject {
         observe()
         keepAwake()
         await takeTurn()
-        let background = BackgroundTime(name: "Saving an edit")
+        let background = BackgroundTime("Saving an edit") {}
         defer {
             jobs[id] = nil
             keepAwake()
@@ -265,24 +265,6 @@ final class EditRenderer: ObservableObject {
         guard let video = library.video(id), case .saving(let current) = video.state,
               value >= current + 0.01 || value >= 0.98 && value > current else { return }
         library.update(id) { $0.state = .saving(progress: min(0.99, value)) }
-    }
-}
-
-/// Asks iOS for a little more time when the app leaves the screen.
-@MainActor
-private final class BackgroundTime {
-    private var id = UIBackgroundTaskIdentifier.invalid
-
-    init(name: String) {
-        id = UIApplication.shared.beginBackgroundTask(withName: name) { [weak self] in
-            MainActor.assumeIsolated { self?.end() }
-        }
-    }
-
-    func end() {
-        guard id != .invalid else { return }
-        UIApplication.shared.endBackgroundTask(id)
-        id = .invalid
     }
 }
 
