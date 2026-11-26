@@ -9,9 +9,13 @@ Control (127.0.0.1:8899): POST /net/online|offline|slow|error, POST /plan/free|p
 """
 import argparse
 import base64
+import hashlib
 import http.client
 import json
 import os
+import shutil
+import tempfile
+import urllib.parse
 import random
 import re
 import ssl
@@ -24,6 +28,8 @@ from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 CODE = "123456"
+# What was uploaded, kept so the practice watch page can play it.
+FILES = os.environ.get("RIG_FILES") or tempfile.mkdtemp(prefix="practice-files-")
 LOCK = threading.RLock()
 S = {"net": "online", "plan": "free", "users": {}, "tokens": {}, "videos": {}, "uploads": {}, "objects": {},
      "requests": []}
@@ -99,8 +105,9 @@ class Handler(BaseHTTPRequestHandler):
         host = (self.headers.get("Host") or "").split(":")[0]
         path = self.path.split("?")[0]
         try:
-            with_lock = not ("/upload/resumable" in path)
-            if with_lock:
+            streams = "/upload/resumable" in path or ("/storage/v1/" in path and self.command in ("PUT", "POST")
+                                                      and int(self.headers.get("Content-Length") or 0) > 1_000_000)
+            if not streams:
                 self.body()
             if "supabase" in host:
                 return self.supabase(path)
@@ -108,6 +115,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self.api(path[4:])
             if path.startswith("/v/"):
                 return self.watch(path[3:].strip("/"))
+            if path.startswith("/practice-files/"):
+                return self.serve_file(urllib.parse.unquote(path[len("/practice-files/"):]))
             return self.proxy()
         except (BrokenPipeError, ConnectionResetError):
             pass
@@ -157,9 +166,193 @@ class Handler(BaseHTTPRequestHandler):
             return self.reply(404, {})
         if "/upload/resumable" in path:
             return self.tus(path)
-        if "/storage/v1/object" in path:
-            return self.reply(404, {})
+        if path.startswith("/storage/v1/s3/"):
+            return self.s3(urllib.parse.unquote(path[len("/storage/v1/s3/"):]))
+        if path.startswith("/storage/v1/object/info/"):
+            return self.object_info(urllib.parse.unquote(path[len("/storage/v1/object/info/"):]))
+        if path.startswith("/storage/v1/object/"):
+            return self.object_upload(urllib.parse.unquote(path[len("/storage/v1/object/"):]))
+        self.body()
         return self.reply(404, {})
+
+    # ---- stored files
+
+    @staticmethod
+    def disk(name):
+        return os.path.join(FILES, hashlib.sha1(name.encode()).hexdigest())
+
+    def receive(self, target):
+        """Writes the request's body to `target`; returns (size, md5) or None when the sender went away."""
+        left, digest = int(self.headers.get("Content-Length") or 0), hashlib.md5()
+        if getattr(self, "_body", None) is not None:
+            data = self._body
+            with open(target, "wb") as f:
+                f.write(data)
+            return len(data), hashlib.md5(data).hexdigest()
+        size = left
+        with open(target, "wb") as f:
+            while left > 0:
+                got = self.rfile.read(min(left, 262144))
+                if not got:
+                    return None
+                f.write(got)
+                digest.update(got)
+                left -= len(got)
+                if S["net"] == "slow":
+                    time.sleep(0.15)
+        self._body = b""
+        return size, digest.hexdigest()
+
+    def store(self, name, source, size, kind=None):
+        os.replace(source, self.disk(name))
+        with LOCK:
+            S["objects"][name] = size
+            S.setdefault("types", {})[name] = kind or self.headers.get("Content-Type") or "application/octet-stream"
+
+    def object_upload(self, rest):
+        """`POST|PUT /storage/v1/object/<bucket>/<name>`: a whole small file in one request."""
+        if self.command not in ("POST", "PUT"):
+            self.body()
+            return self.reply(404, {"statusCode": "404", "error": "not_found", "message": "Object not found"})
+        if not self.user():
+            self.body()
+            return self.reply(400, {"statusCode": "403", "error": "Unauthorized", "message": "jwt expired"})
+        bucket, _, name = rest.partition("/")
+        if name in S["objects"] and self.headers.get("x-upsert") != "true":
+            self.body()
+            return self.reply(400, {"statusCode": "409", "error": "Duplicate", "message": "The resource already exists"})
+        temp = self.disk(name) + ".part"
+        got = self.receive(temp)
+        if got is None:
+            return
+        self.store(name, temp, got[0])
+        return self.reply(200, {"Key": "%s/%s" % (bucket, name), "Id": str(uuid.uuid4())})
+
+    def object_info(self, rest):
+        """`GET /storage/v1/object/info/authenticated/<bucket>/<name>`."""
+        if rest.startswith("authenticated/"):
+            rest = rest[len("authenticated/"):]
+        elif rest.startswith("public/"):
+            rest = rest[len("public/"):]
+        if not self.user():
+            return self.reply(400, {"statusCode": "403", "error": "Unauthorized", "message": "jwt expired"})
+        bucket, _, name = rest.partition("/")
+        if name not in S["objects"]:
+            return self.reply(400, {"statusCode": "404", "error": "not_found", "message": "Object not found"})
+        return self.reply(200, {"id": hashlib.sha1(name.encode()).hexdigest(), "name": name, "bucket_id": bucket,
+                                "size": S["objects"][name], "content_type": S.get("types", {}).get(name),
+                                "created_at": now(), "updated_at": now()})
+
+    def s3_error(self, status, code, message):
+        self.body()
+        xml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Error><Code>%s</Code><Message>%s</Message></Error>" % (code, message)
+        return self.reply(status, xml.encode(), {"Content-Type": "application/xml"})
+
+    def s3(self, rest):
+        """Storage's S3 endpoint, multipart only: create (`POST ?uploads`), pieces (`PUT ?partNumber&uploadId`),
+        join (`POST ?uploadId`) and abort (`DELETE ?uploadId`). Signatures are not checked; the session token is."""
+        query = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query, keep_blank_values=True)
+        token = (query.get("X-Amz-Security-Token") or [""])[0]
+        if S["users"].get(S["tokens"].get(token)) is None:
+            return self.s3_error(403, "AccessDenied", "Invalid JWT: signature verification failed")
+        bucket, _, name = rest.partition("/")
+        upload_id = (query.get("uploadId") or [""])[0]
+        if self.command == "POST" and "uploads" in query:
+            upload_id = uuid.uuid4().hex
+            os.makedirs(os.path.join(FILES, "multipart", upload_id), exist_ok=True)
+            with LOCK:
+                S["uploads"][upload_id] = {"name": name, "parts": {}, "type": self.headers.get("Content-Type")}
+            xml = ("<?xml version=\"1.0\" encoding=\"UTF-8\"?><InitiateMultipartUploadResult><Bucket>%s</Bucket><Key>%s</Key>"
+                   "<UploadId>%s</UploadId></InitiateMultipartUploadResult>" % (bucket, name, upload_id))
+            return self.reply(200, xml.encode(), {"Content-Type": "application/xml"})
+        upload = S["uploads"].get(upload_id)
+        if upload is None or upload.get("name") != name:
+            return self.s3_error(404, "NoSuchUpload", "The specified upload does not exist")
+        if self.command == "PUT":
+            try:
+                number = int((query.get("partNumber") or ["0"])[0])
+            except ValueError:
+                number = 0
+            if not 1 <= number <= 10000:
+                return self.s3_error(400, "InvalidPartNumber", "Part number must be between 1 and 10000")
+            target = os.path.join(FILES, "multipart", upload_id, "%05d" % number)
+            got = self.receive(target + ".part")
+            if got is None:
+                return
+            os.replace(target + ".part", target)
+            with LOCK:
+                upload["parts"][number] = got
+            return self.reply(200, b"", {"ETag": '"%s"' % got[1]})
+        if self.command == "DELETE":
+            with LOCK:
+                S["uploads"].pop(upload_id, None)
+            shutil.rmtree(os.path.join(FILES, "multipart", upload_id), ignore_errors=True)
+            return self.reply(204)
+        if self.command != "POST":
+            return self.s3_error(405, "MethodNotAllowed", "Not supported here")
+        listed = [(int(n), e.strip('"').lower()) for n, e in re.findall(
+            r"<PartNumber>\s*(\d+)\s*</PartNumber>\s*<ETag>\s*(?:&quot;|\")?([0-9a-fA-F]*)(?:&quot;|\")?\s*</ETag>",
+            self.body().decode(errors="replace"))]
+        if not listed:
+            return self.s3_error(400, "MalformedXML", "The XML you provided was not well-formed")
+        if [n for n, _ in listed] != sorted(n for n, _ in listed):
+            return self.s3_error(400, "InvalidPartOrder", "The list of parts was not in ascending order")
+        for number, etag in listed:
+            have = upload["parts"].get(number)
+            if have is None or have[1] != etag:
+                return self.s3_error(400, "InvalidPart", "One or more of the specified parts could not be found")
+        for number, _ in listed[:-1]:
+            if upload["parts"][number][0] < 5 * 1024 * 1024:
+                return self.s3_error(400, "EntityTooSmall", "Your proposed upload is smaller than the minimum allowed")
+        temp = self.disk(name) + ".join"
+        with open(temp, "wb") as out:
+            for number, _ in listed:
+                with open(os.path.join(FILES, "multipart", upload_id, "%05d" % number), "rb") as piece:
+                    shutil.copyfileobj(piece, out, 1 << 20)
+        size = sum(upload["parts"][n][0] for n, _ in listed)
+        self.store(name, temp, size, upload.get("type"))
+        with LOCK:
+            S["uploads"].pop(upload_id, None)
+        shutil.rmtree(os.path.join(FILES, "multipart", upload_id), ignore_errors=True)
+        etag = hashlib.md5(b"".join(bytes.fromhex(e) for _, e in listed)).hexdigest() + "-%d" % len(listed)
+        xml = ("<?xml version=\"1.0\" encoding=\"UTF-8\"?><CompleteMultipartUploadResult><Location>%s</Location><Bucket>%s</Bucket>"
+               "<Key>%s</Key><ETag>\"%s\"</ETag></CompleteMultipartUploadResult>" % (name, bucket, name, etag))
+        return self.reply(200, xml.encode(), {"Content-Type": "application/xml"})
+
+    def serve_file(self, name):
+        """A stored file for the practice watch page, with byte ranges (Safari asks for them before it plays)."""
+        path = self.disk(name)
+        if name not in S["objects"] or not os.path.exists(path):
+            return self.reply(404, b"", {"Content-Type": "text/plain"})
+        size = os.path.getsize(path)
+        start, end, status = 0, size - 1, 200
+        match = re.match(r"bytes=(\d*)-(\d*)", self.headers.get("Range") or "")
+        if match and size:
+            if match.group(1):
+                start = int(match.group(1))
+                end = min(int(match.group(2)), size - 1) if match.group(2) else size - 1
+            else:
+                start = max(0, size - int(match.group(2) or 0))
+            status = 206
+        length = max(0, end - start + 1)
+        self.send_response(status)
+        self.send_header("X-Practice-Server", "yes")
+        self.send_header("Content-Type", S.get("types", {}).get(name) or "video/mp4")
+        self.send_header("Accept-Ranges", "bytes")
+        self.send_header("Content-Length", str(length))
+        if status == 206:
+            self.send_header("Content-Range", "bytes %d-%d/%d" % (start, end, size))
+        self.end_headers()
+        if self.command == "HEAD":
+            return
+        with open(path, "rb") as f:
+            f.seek(start)
+            while length > 0:
+                chunk = f.read(min(length, 1 << 20))
+                if not chunk:
+                    break
+                self.wfile.write(chunk)
+                length -= len(chunk)
 
     def tus(self, path):
         base = "/storage/v1/upload/resumable"
@@ -182,21 +375,19 @@ class Handler(BaseHTTPRequestHandler):
         if self.command == "HEAD":
             return self.reply(200, None, {"Upload-Offset": str(upload["at"]), "Upload-Length": str(upload["size"]),
                                           "Tus-Resumable": "1.0.0"})
-        size, left = int(self.headers.get("Content-Length") or 0), 0
-        left = size
         if int(self.headers.get("Upload-Offset") or 0) != upload["at"]:
             self.body()
             return self.reply(409, {})
-        while left > 0:  # thrown away: only the count matters
-            got = self.rfile.read(min(left, 262144))
-            if not got:
-                return
-            left -= len(got)
-            if S["net"] == "slow":
-                time.sleep(0.15)
-        upload["at"] += size
+        temp = self.disk(upload["name"]) + ".tus"
+        got = self.receive(temp + ".chunk")
+        if got is None:
+            return
+        with open(temp, "ab") as out, open(temp + ".chunk", "rb") as chunk:
+            shutil.copyfileobj(chunk, out, 1 << 20)
+        os.remove(temp + ".chunk")
+        upload["at"] += got[0]
         if upload["at"] >= upload["size"]:
-            S["objects"][upload["name"]] = upload["size"]
+            self.store(upload["name"], temp, upload["size"])
         return self.reply(204, None, {"Upload-Offset": str(upload["at"]), "Tus-Resumable": "1.0.0"})
 
     # ---- the API
@@ -343,6 +534,13 @@ class Handler(BaseHTTPRequestHandler):
         self.visit(v)
         text = "<meta name=viewport content='width=device-width'><h1>Practice watch page</h1><p>%s (%s)</p>" % (
             v["title"].replace("<", "&lt;"), v["status"])
+        video = "%s/%s/video.mp4" % (v["owner"], v["id"])
+        if video in S["objects"]:
+            poster = "%s/%s/poster.jpg" % (v["owner"], v["id"])
+            text += "<video controls playsinline style='width:100%%' src='/practice-files/%s'%s></video>" % (
+                urllib.parse.quote(video), " poster='/practice-files/%s'" % urllib.parse.quote(poster) if poster in S["objects"] else "")
+        else:
+            text += "<p>The video is not there yet.</p>"
         return self.reply(200, text.encode(), {"Content-Type": "text/html; charset=utf-8"})
 
     def proxy(self):

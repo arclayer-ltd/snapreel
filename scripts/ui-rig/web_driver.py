@@ -223,10 +223,36 @@ class WebDriver:
             elif part:
                 self.page.keyboard.type(part, delay=15)
 
+    KEYS = {"return": "Enter", "enter": "Enter", "delete": "Backspace", "backspace": "Backspace", "space": "Space",
+            "tab": "Tab", "escape": "Escape", "esc": "Escape", "left": "ArrowLeft", "right": "ArrowRight", "up": "ArrowUp",
+            "down": "ArrowDown", "home": "Home", "end": "End", "pageup": "PageUp", "pagedown": "PageDown",
+            "shift": "Shift", "ctrl": "Control", "control": "Control", "alt": "Alt", "option": "Alt", "cmd": "Meta", "meta": "Meta"}
+
     def key(self, name):
-        names = {"return": "Enter", "enter": "Enter", "delete": "Backspace", "backspace": "Backspace", "space": "Space",
-                 "tab": "Tab", "escape": "Escape", "left": "ArrowLeft", "right": "ArrowRight", "up": "ArrowUp", "down": "ArrowDown"}
-        self.page.keyboard.press(names.get(name, name))
+        """One key or a combination: tab, shift+tab, escape, ctrl+a, arrows."""
+        parts = [p for p in name.split("+") if p]
+        named = []
+        for part in parts:
+            if part in self.KEYS:
+                named.append(self.KEYS[part])
+            elif len(part) == 1 or re.fullmatch(r"f\d{1,2}", part):
+                named.append(part.upper() if part.startswith("f") and len(part) > 1 else part)
+            else:
+                raise StepError("no key called %s; keys: %s, letters, f1..f12, joined with + (shift+tab)" % (
+                    part, ", ".join(sorted(self.KEYS))))
+        self.page.keyboard.press("+".join(named))
+
+    def clipboard(self, text=None):
+        """The browser's clipboard: what a page copied (Copy link), or put something there to paste."""
+        self.context.grant_permissions(["clipboard-read", "clipboard-write"], origin=HOME)
+        try:
+            if text is not None:
+                self.page.evaluate("t => navigator.clipboard.writeText(t)", text)
+                return "put that on the clipboard"
+            got = self.page.evaluate("() => navigator.clipboard.readText()")
+        except Exception as error:
+            raise StepError("the clipboard could not be read on this page (%s)" % str(error).split("\n")[0][:120])
+        return "clipboard: " + (got.strip() or "(empty)")
 
     def press_alert(self, name):
         return None
