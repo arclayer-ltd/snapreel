@@ -583,6 +583,8 @@ final class PurchaseService: ObservableObject {
         answers = [:]
         acceptedTransactions = []
         if activity == nil { ending = .none }
+        // Pro goes with the account at once; reading StoreKit again can take long on a cold device.
+        publish(held)
         await refreshEntitlements()
     }
 

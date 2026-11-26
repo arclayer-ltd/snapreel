@@ -312,6 +312,14 @@ final class PurchaseTests: PurchaseTestCase {
         await service.refreshEntitlements()
         await assertEventually("delivered at the next launch") { self.service.standing == .subscribed }
         await assertEventually("and finished") { await self.unfinished() == 0 }
+        if await unfinished() > 0 {
+            var listed: [String] = []
+            for await result in Transaction.unfinished {
+                let t = result.unsafePayloadValue
+                listed.append("\(t.id)/\(t.originalID)/\(t.productID)/\(t.expirationDate.map { "\($0.timeIntervalSinceNow)" } ?? "-")")
+            }
+            print("MEASURE relaunch unfinished \(listed) store \(session.allTransactions().map { "\($0.identifier)/\($0.state.rawValue)" }) sent \(backend.sent.map(\.transactionID))")
+        }
     }
 
     func testARefusedTransactionIsKept() async throws {
