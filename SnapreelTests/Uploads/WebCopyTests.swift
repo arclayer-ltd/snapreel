@@ -228,10 +228,10 @@ final class WebCopyTests: XCTestCase {
             }
             let range = try await track.load(.timeRange)
             let segments = try await track.load(.segments)
-            print("MEASURE sound \(name): offset \(offset ?? -1) range \(range.start.seconds)+\(range.duration.seconds) segments \(segments.map { "\($0.timeMapping.source.start.seconds)->\($0.timeMapping.target.start.seconds) empty \($0.isEmpty)" })\(text)")
+            print("PERF|sound \(name): offset \(offset ?? -1) range \(range.start.seconds)+\(range.duration.seconds) segments \(segments.map { "\($0.timeMapping.source.start.seconds)->\($0.timeMapping.target.start.seconds) empty \($0.isEmpty)" })\(text)")
         }
         let (flash, beep) = try await flashAndBeep(movie)
-        print("MEASURE sound in the recording: flash \(flash) beep \(beep ?? -1)")
+        print("PERF|sound in the recording: flash \(flash) beep \(beep ?? -1)")
     }
 
     // MARK: - Copying
