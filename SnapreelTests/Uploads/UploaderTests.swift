@@ -774,7 +774,7 @@ final class UploaderTests: XCTestCase {
         let uploader = makeUploader()
         start(uploader)
         await untilEnded(uploader)
-        XCTAssertEqual(failures, ["This link was deleted, so the upload stopped."])
+        XCTAssertEqual(failures, ["This link was deleted, so the upload stopped. Copy link makes a new one."])
     }
 
     func testCancelStopsEverything() async {
