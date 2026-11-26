@@ -6,6 +6,7 @@ struct MainShell: View {
     @EnvironmentObject private var router: AppRouter
     @EnvironmentObject private var library: Library
     @EnvironmentObject private var settings: AppSettings
+    @ObservedObject private var settingsSheet = SettingsSheet.shared
 
     var body: some View {
         VStack(spacing: 0) {
@@ -72,8 +73,8 @@ struct MainShell: View {
                 .environmentObject(router)
                 .clearCoverBackground()
         }
-        .sheet(isPresented: $router.isSettingsPresented) {
-            SettingsView(initialPath: router.settingsPath)
+        .sheet(isPresented: $settingsSheet.isPresented) {
+            SettingsView(initialPath: settingsSheet.path)
                 .environmentObject(library)
                 .environmentObject(settings)
                 .environmentObject(router)
@@ -95,11 +96,8 @@ struct MainShell: View {
                 .navigationDestination(for: Route.self) { RouteDestination(route: $0) }
         }
         .opacity(selected ? 1 : 0)
+        .allowsHitTesting(selected)
         .accessibilityHidden(!selected)
-        // The shown tab on top, where it takes every touch. Not `allowsHitTesting(false)` on the hidden ones: after a
-        // sheet closed (Settings), iOS 16 applied it to the shown tab's toolbar too, and the Home gear stopped
-        // working until the tab was switched (tester t26, 4 of 4; seen on the rig as the gear losing its button trait).
-        .zIndex(selected ? 1 : 0)
     }
 }
 

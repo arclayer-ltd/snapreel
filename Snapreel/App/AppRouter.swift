@@ -1,5 +1,18 @@
 import SwiftUI
 
+/// The Settings sheet's state, apart from `AppRouter`. Tester t26: after Settings closed, the gear on Home (and
+/// every tab root) drew but no longer took taps, until something else redrew it. Opening and closing published on
+/// the router, which every tab root and its toolbar watch, so all four toolbars were redrawn in the middle of the
+/// sheet's animation. Only `MainShell`, which presents the sheet, and the views that need it watch this.
+@MainActor
+final class SettingsSheet: ObservableObject {
+    static let shared = SettingsSheet()
+
+    @Published var isPresented = false
+    /// Read once when the sheet opens.
+    var path: [SettingsPage] = []
+}
+
 enum AppTab: String, CaseIterable, Identifiable, Hashable {
     case home
     case library
@@ -93,9 +106,17 @@ final class AppRouter: ObservableObject {
     @Published var minimizedRecorder: RecorderModel?
     @Published var player: PlayerPresentation?
     @Published var editor: EditorLaunch?
-    @Published var isSettingsPresented = false
+    /// Whether the Settings sheet is up. Kept in `SettingsSheet`, not published here: every tab root watches the
+    /// router, and redrawing their toolbars while the sheet came and went left the gear dead on iOS 16.
+    var isSettingsPresented: Bool {
+        get { SettingsSheet.shared.isPresented }
+        set { SettingsSheet.shared.isPresented = newValue }
+    }
     /// Pages pushed when Settings opens (empty = the root). Set through `openSettings(_:)`.
-    @Published var settingsPath: [SettingsPage] = []
+    var settingsPath: [SettingsPage] {
+        get { SettingsSheet.shared.path }
+        set { SettingsSheet.shared.path = newValue }
+    }
     @Published var toast: ToastMessage?
 
     /// Selecting the Record tab opens the recorder instead of switching tabs.

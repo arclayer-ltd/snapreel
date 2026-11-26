@@ -91,7 +91,7 @@ struct SignInSheet: View {
                                 .transition(.opacity.combined(with: .move(edge: .trailing)))
                         }
                     }
-                    // On the email step it sits under the field (`startContent`).
+                    // On the email step it sits over the field (`startContent`).
                     if !showsEmailStep { errorLabel }
                     footer
                 }
@@ -103,12 +103,12 @@ struct SignInSheet: View {
                 .animation(Motion.standard, value: age)
             }
             .scrollDismissesKeyboard(.interactively)
-            // Above the keyboard, where it can be read.
+            // Into view where the sheet is taller than the screen (large text).
             .onChange(of: error) { error in
                 guard error != nil else { return }
                 Task { @MainActor in
                     try? await Task.sleep(nanoseconds: 150_000_000)
-                    withAnimation(Motion.standard) { scroller.scrollTo(Self.errorID, anchor: .bottom) }
+                    withAnimation(Motion.standard) { scroller.scrollTo(Self.errorID, anchor: .top) }
                 }
             }
             }
@@ -214,6 +214,8 @@ struct SignInSheet: View {
             }
 
             VStack(spacing: Space.s) {
+                // Above the field: the keyboard covers what is under it, and the sheet is too short to scroll.
+                errorLabel
                 HStack(spacing: Space.s) {
                     Image(systemName: "envelope.fill")
                         .foregroundStyle(Color.srTextTertiary)
@@ -241,8 +243,6 @@ struct SignInSheet: View {
                 .background(RoundedRectangle(cornerRadius: Radius.m, style: .continuous).fill(Color.srSurface))
                 .overlay(RoundedRectangle(cornerRadius: Radius.m, style: .continuous)
                     .strokeBorder(focus == .email ? Color.srRed : Color.srLine, lineWidth: focus == .email ? 1.5 : 1))
-
-                errorLabel
 
                 Button {
                     sendCode()
