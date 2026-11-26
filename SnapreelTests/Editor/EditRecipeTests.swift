@@ -133,7 +133,7 @@ final class EditRecipeTests: XCTestCase {
         r.trim(second, start: 5)
         XCTAssertEqual(r.segments[1].start, 20, accuracy: 1e-9)
         r.trim(second, start: 100)
-        XCTAssertEqual(r.segments[1].outputLength, 0.2, accuracy: 1e-9)
+        XCTAssertEqual(r.segments[1].outputLength, EditRecipe.minimumTrim, accuracy: 1e-9)
         r.trim(r.segments[0].id, end: 2)
         XCTAssertEqual(r.segments[0].end, 2, accuracy: 1e-9)
         r.trim(r.segments[0].id, end: 25)
@@ -303,6 +303,62 @@ final class EditRecipeTests: XCTestCase {
                 XCTAssertEqual(back.height, rect.height, accuracy: 1e-9)
             }
         }
+    }
+
+    /// Testers, 26 Nov: Flip after Rotate mirrored top to bottom. The model's Flip mirrors as
+    /// shown; for a picture turned a quarter that is a flip and a half turn more of the recording.
+    func testFlipMirrorsAsShownAfterATurn() {
+        for turns in 0..<4 {
+            let before = EditFrameGeometry(quarterTurns: turns, flipped: false)
+            let after = EditFrameGeometry(quarterTurns: turns % 2 != 0 ? (turns + 2) % 4 : turns, flipped: true)
+            for point in [CGPoint(x: 0.2, y: 0.3), CGPoint(x: 0.9, y: 0.6)] {
+                let shown = before.toDisplay(point)
+                let mirrored = after.toDisplay(point)
+                XCTAssertEqual(mirrored.x, 1 - shown.x, accuracy: 1e-9, "turns \(turns)")
+                XCTAssertEqual(mirrored.y, shown.y, accuracy: 1e-9, "turns \(turns)")
+            }
+        }
+    }
+
+    /// Testers, 26 Nov: Trim went down to 0.2 s and the save then failed with "Nothing was recorded".
+    func testTrimKeepsHalfASecond() {
+        var r = recipe()
+        let only = r.segments[0].id
+        r.trim(only, start: 1_000)
+        XCTAssertEqual(r.outputDuration, EditRecipe.minimumTrim, accuracy: 1e-9)
+        XCTAssertGreaterThanOrEqual(r.outputDuration, EditRecipe.minimumSave)
+        r.setSpeed(2)
+        r.trim(r.segments[0].id, start: 0)
+        r.trim(r.segments[0].id, end: 0)
+        XCTAssertEqual(r.outputDuration, EditRecipe.minimumTrim, accuracy: 1e-9)
+    }
+
+    /// Testers, 26 Nov: two edits side by side were both "Edited imported video".
+    func testEditNamesDontRepeat() {
+        let id = UUID()
+        func video(_ title: String, needsTitle: Bool = false, edited: Bool = false) -> Video {
+            Video(id: id, title: title, createdAt: Date(), kind: .imported, fileName: "a.mp4", thumbnailFileName: nil,
+                  duration: 10, fileSize: 0, pixelWidth: 0, pixelHeight: 0, needsTitle: needsTitle,
+                  state: .ready, reviewedAt: Date(), editedFrom: edited ? UUID() : nil)
+        }
+        let imported = video("Imported 26 Nov", needsTitle: true)
+        let first = EditRenderer.title(for: imported, taken: [])
+        let second = EditRenderer.title(for: imported, taken: [first])
+        XCTAssertNotEqual(first, second)
+        XCTAssertEqual(second, first + " 2")
+        XCTAssertEqual(EditRenderer.title(for: video(second, edited: true), taken: [first, second]), first + " 3")
+        XCTAssertEqual(EditRenderer.title(for: video("Release 2"), taken: ["Release 2"]), "Release 2 (edited)")
+    }
+
+    /// Testers, 26 Nov: "Up to 37.7 MB" came out 71.5 MB; a plain 720p picture isn't made much
+    /// smaller than about 1 Mbit/s, whatever the encoder is asked for.
+    func testSizeEstimateIsAnUpperBound() {
+        let r = recipe(480)
+        let settings = EditExportSettings(recipe: r, picture: CGSize(width: 1920, height: 1080), sourceBitRate: 345_000,
+                                          frameRate: 30, quality: .hd720)
+        let megabytes = Double(EditEstimate.bytes(recipe: r, settings: settings)) / 1_000_000
+        XCTAssertGreaterThan(megabytes, 60, "720p of a 10-minute screen recording")
+        XCTAssertLessThan(settings.videoBitRate, settings.mostBitRate + 1)
     }
 
     /// The owner's recording: 8:50, 886x1918, 2.5 Mbit/s.

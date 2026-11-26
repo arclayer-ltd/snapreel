@@ -382,10 +382,14 @@ struct EditorExportSheet: View {
             EditorSheetScroll {
             if model.hasPicture {
                 VStack(spacing: Space.xs) {
-                    PillSwitch(options: ExportQuality.allCases,
-                               selection: Binding(get: { model.recipe.quality }, set: { model.setQuality($0) }),
-                               title: { $0.label })
-                    Text(helper(quality))
+                    let choices = self.choices
+                    if choices.count > 1 {
+                        PillSwitch(options: choices,
+                                   selection: Binding(get: { shown(model.recipe.quality, in: choices) },
+                                                      set: { model.setQuality($0) }),
+                                   title: { $0.label })
+                    }
+                    Text(helper(quality, only: choices.count < 2))
                         .font(.srFootnote)
                         .foregroundStyle(Color.srStageTextSecondary)
                         .multilineTextAlignment(.center)
@@ -394,7 +398,7 @@ struct EditorExportSheet: View {
                 .padding(.horizontal, Space.gutter)
             }
             VStack(spacing: 0) {
-                row("Length", Format.clock(model.duration))
+                row("Length", model.duration < 10 ? EditorText.precise(model.duration) : Format.clock(model.duration))
                 if model.hasPicture {
                     let size = model.recipe.renderSize(source: model.pictureSize, quality: quality)
                     row("Picture", "\(Int(size.width)) × \(Int(size.height))")
@@ -405,7 +409,26 @@ struct EditorExportSheet: View {
             .padding(.horizontal, Space.m)
             .background(RoundedRectangle(cornerRadius: Radius.l, style: .continuous).fill(Color.srStageGroup))
             .padding(.horizontal, Space.gutter)
-            if !room {
+            if model.isTooShortToSave {
+                HStack(alignment: .top, spacing: Space.xs) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(Color.srStageRed)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Too short to save")
+                            .font(.srSubheadlineStrong)
+                            .foregroundStyle(Color.srStageText)
+                        Text("Keep at least half a second. Drag a trim handle back out, or undo the last cut.")
+                            .font(.srFootnote)
+                            .foregroundStyle(Color.srStageTextSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    Spacer(minLength: 0)
+                }
+                .padding(Space.s)
+                .background(RoundedRectangle(cornerRadius: Radius.m, style: .continuous).fill(Color.srRedSoft))
+                .accessibilityElement(children: .combine)
+                .padding(.horizontal, Space.gutter)
+            } else if !room {
                 HStack(alignment: .top, spacing: Space.xs) {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .foregroundStyle(Color.srStageRed)
@@ -436,7 +459,7 @@ struct EditorExportSheet: View {
             }
             Button("Save") { model.startExport() }
                 .buttonStyle(.srPrimary)
-                .disabled(!room)
+                .disabled(!room || model.isTooShortToSave)
                 .padding(.horizontal, Space.gutter)
                 .padding(.bottom, Space.s)
         }
@@ -456,12 +479,33 @@ struct EditorExportSheet: View {
         .frame(minHeight: 42)
     }
 
-    /// What the choice means for this recording: a 720-wide one is the same at 720p and Original.
-    private func helper(_ quality: ExportQuality) -> String {
-        guard quality != .original else { return quality.helper }
+    /// The choices that make different files. Two that come out the same size are one choice,
+    /// named by the larger (a 886-wide recording has 720p and Original; a 720p one only Original).
+    private var choices: [ExportQuality] {
+        var kept: [(quality: ExportQuality, size: CGSize)] = []
+        for quality in ExportQuality.allCases {
+            let size = model.recipe.renderSize(source: model.pictureSize, quality: quality)
+            if let index = kept.firstIndex(where: { $0.size == size }) {
+                kept[index].quality = quality
+            } else {
+                kept.append((quality, size))
+            }
+        }
+        return kept.map(\.quality)
+    }
+
+    /// The choice that stands for `quality` (the one making the same file).
+    private func shown(_ quality: ExportQuality, in choices: [ExportQuality]) -> ExportQuality {
+        let size = model.recipe.renderSize(source: model.pictureSize, quality: quality)
+        return choices.first { model.recipe.renderSize(source: model.pictureSize, quality: $0) == size } ?? quality
+    }
+
+    /// What the choice means for this recording.
+    private func helper(_ quality: ExportQuality, only: Bool) -> String {
+        if only { return "Saved at your recording's own size: it is 720p or smaller already." }
         let size = model.recipe.renderSize(source: model.pictureSize, quality: quality)
         let original = model.recipe.renderSize(source: model.pictureSize, quality: .original)
-        return size == original ? "The same size as your recording." : quality.helper
+        return size == original ? ExportQuality.original.helper : quality.helper
     }
 }
 
@@ -647,7 +691,11 @@ struct EditorRenderingView: View {
     private func preview(_ video: Video?) -> some View {
         ZStack {
             RoundedRectangle(cornerRadius: Radius.l, style: .continuous).fill(Color.black)
-            if let still = model.stillImage(fullFrame: false) {
+            if let still = model.savingStill {
+                Image(uiImage: still)
+                    .resizable()
+                    .scaledToFit()
+            } else if model.recipe.sourceTime(forOutput: 0) < 0.05, let still = model.stillImage(fullFrame: false) {
                 Image(uiImage: still)
                     .resizable()
                     .scaledToFit()

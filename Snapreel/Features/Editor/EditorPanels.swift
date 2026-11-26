@@ -174,9 +174,13 @@ struct EditorTrimPanel: View {
     var body: some View {
         VStack(spacing: Space.s) {
             HStack(spacing: Space.s) {
-                fact("Start", EditorText.precise(model.recipe.segments.first?.start ?? 0))
-                fact("End", EditorText.precise(model.recipe.segments.last?.end ?? 0))
-                fact("Length", EditorText.precise(model.duration))
+                let start = model.recipe.segments.first?.start ?? 0
+                let end = model.recipe.segments.last?.end ?? 0
+                fact("Start", EditorText.precise(start))
+                fact("End", EditorText.precise(end))
+                // One part at normal speed: exactly End minus Start as shown, never a tenth apart.
+                let plain = model.recipe.segments.count == 1 && model.recipe.segments.first?.speed == 1
+                fact("Length", EditorText.precise(plain ? EditorText.tenths(end) - EditorText.tenths(start) : model.duration))
             }
             .padding(.horizontal, Space.gutter)
             // The quick way on a long recording: no handle to drag across minutes of it.

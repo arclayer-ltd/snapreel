@@ -31,6 +31,7 @@ struct EditorView: View {
     @State private var isClosing = false
     @GestureState private var isSwiping = false
     @State private var shareTarget: Video?
+    @State private var confirmsDiscard = false
 
     var body: some View {
         ZStack {
@@ -101,10 +102,11 @@ struct EditorView: View {
                     Label("Revert to original", systemImage: "arrow.uturn.backward")
                 }
                 .disabled(!model.isDirty)
+                // Revert stays in the editor and can be undone; this ends the edit for good.
                 Button(role: .destructive) {
-                    model.discardEdits()
+                    confirmsDiscard = true
                 } label: {
-                    Label("Discard draft", systemImage: "trash")
+                    Label("Discard and close", systemImage: "trash")
                 }
                 .disabled(!model.isDirty)
             } label: {
@@ -115,9 +117,20 @@ struct EditorView: View {
                     .background(Circle().fill(Color.srStageControl))
                     .frame(width: 44, height: 44)
                     .contentShape(Rectangle())
+                    .accessibilityElement()
+                    .accessibilityLabel("More")
             }
             .disabled(model.isRecordingVoice)
             .accessibilityLabel("More")
+            .confirmationDialog("Discard your edits?", isPresented: $confirmsDiscard, titleVisibility: .visible) {
+                Button("Discard and close", role: .destructive) {
+                    model.discardDraft()
+                    close()
+                }
+                Button("Keep editing", role: .cancel) {}
+            } message: {
+                Text("The draft is thrown away and the editor closes. Your recording isn't changed.")
+            }
             Button {
                 Haptics.tap()
                 model.pause()
@@ -385,6 +398,11 @@ struct EditorToolButton: View {
     var enabled = true
     let action: () -> Void
 
+    // Grows with the text size up to what one row of tools holds; holding a tool shows it large.
+    @ScaledMetric(relativeTo: .caption2) private var labelSize: CGFloat = 11
+    @ScaledMetric(relativeTo: .caption2) private var iconSize: CGFloat = 20
+    @ScaledMetric(relativeTo: .caption2) private var width: CGFloat = 66
+
     var body: some View {
         Button {
             Haptics.tap()
@@ -392,19 +410,18 @@ struct EditorToolButton: View {
         } label: {
             VStack(spacing: 6) {
                 Image(systemName: systemImage)
-                    .font(.system(size: 20, weight: .medium))
-                    .frame(height: 24)
+                    .font(.system(size: min(iconSize, 24), weight: .medium))
+                    .frame(height: min(iconSize, 24) + 4)
                 Text(title)
-                    .font(.system(size: 11, weight: .medium))
+                    .font(.system(size: min(labelSize, 15), weight: .medium))
                     .lineLimit(1)
-                    .minimumScaleFactor(0.8)
+                    .minimumScaleFactor(0.7)
             }
-            // Like a tab bar: the label doesn't grow, so holding it shows it large.
             .accessibilityShowsLargeContentViewer {
                 Label(title, systemImage: systemImage)
             }
             .foregroundStyle(isOn ? Color.srStageRed : (isDestructive ? Color.srStageRed : Color.srStageText))
-            .frame(width: 66, height: 64)
+            .frame(width: min(width, 84), height: 64)
             .contentShape(Rectangle())
         }
         .buttonStyle(PressScaleStyle())

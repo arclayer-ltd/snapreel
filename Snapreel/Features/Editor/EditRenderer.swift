@@ -49,7 +49,8 @@ final class EditRenderer: ObservableObject {
     func begin(recipe: EditRecipe, source: Video, library: Library) -> UUID {
         let id = UUID()
         let audioOnly = source.isAudioOnly
-        let video = Video(id: id, title: Self.title(for: source), createdAt: Date(), kind: source.kind,
+        let video = Video(id: id, title: Self.title(for: source, taken: Set(library.videos.map(\.title))),
+                          createdAt: Date(), kind: source.kind,
                           fileName: id.uuidString + (audioOnly ? ".m4a" : ".mp4"),
                           thumbnailFileName: nil, duration: recipe.outputDuration, fileSize: 0,
                           pixelWidth: 0, pixelHeight: 0, needsTitle: false,
@@ -61,8 +62,28 @@ final class EditRenderer: ObservableObject {
         return id
     }
 
-    static func title(for source: Video) -> String {
-        source.needsTitle ? "Edited \(source.kind.titlePrefix.lowercased())" : "\(source.title) (edited)"
+    /// "Edited imported video", or "Checkout bug (edited)"; an edit of an edit keeps its name. A
+    /// name already in the library gets the next number: "Edited imported video 2".
+    static func title(for source: Video, taken: Set<String> = []) -> String {
+        let base: String
+        if source.needsTitle {
+            base = "Edited \(source.kind.titlePrefix.lowercased())"
+        } else if source.editedFrom != nil {
+            base = Self.withoutNumber(source.title)
+        } else {
+            base = "\(source.title) (edited)"
+        }
+        guard taken.contains(base) else { return base }
+        var number = 2
+        while taken.contains("\(base) \(number)") { number += 1 }
+        return "\(base) \(number)"
+    }
+
+    /// "Edited imported video 3" → "Edited imported video" (only numbers this added).
+    private static func withoutNumber(_ title: String) -> String {
+        guard let space = title.lastIndex(of: " "), Int(title[title.index(after: space)...]) != nil else { return title }
+        let stem = String(title[..<space])
+        return stem.hasPrefix("Edited ") || stem.hasSuffix("(edited)") ? stem : title
     }
 
     /// Stops a save in progress (the editor's Cancel), whatever step it is at.
@@ -275,7 +296,7 @@ final class EditRenderer: ObservableObject {
 /// File size of an edit before it is made.
 enum EditEstimate {
     static func bytes(recipe: EditRecipe, settings: EditExportSettings) -> Int64 {
-        Int64((settings.videoBitRate + EditExportSettings.audioBitRate) * max(0, recipe.outputDuration) / 8)
+        Int64((settings.mostBitRate + EditExportSettings.audioBitRate) * max(0, recipe.outputDuration) / 8)
     }
 
     /// Room for the file and the pieces it is put together from, and 200 MB left over.

@@ -10,12 +10,17 @@ struct EditExportSettings: Equatable {
     var size: CGSize
     /// Bits a second of picture.
     var videoBitRate: Double
+    /// Bits a second the saved picture may come to: below about this much the encoder doesn't go,
+    /// whatever it is asked for (seen on 26 Nov: 720p edits of plain screen recordings asked for
+    /// 0.5 Mbit/s came out at 1 to 1.2). The size shown before saving and the space check use it.
+    var mostBitRate: Double
     static let audioBitRate = 128_000.0
 
     init(recipe: EditRecipe, picture: CGSize?, sourceBitRate: Double, frameRate: Double, quality: ExportQuality) {
         guard let picture else {
             size = .zero
             videoBitRate = 0
+            mostBitRate = 0
             return
         }
         size = recipe.renderSize(source: picture, quality: quality)
@@ -24,8 +29,10 @@ struct EditExportSettings: Equatable {
         let rate = min(60, max(24, frameRate))
         let effective = min(rate, 30) + max(0, rate - 30) * 0.5
         let usual = pixels * effective * 0.085
+        let least = pixels * effective * 0.04
         guard sourceBitRate > 50_000 else {
             videoBitRate = usual
+            mostBitRate = usual
             return
         }
         // No point in spending much more than the recording itself did on the same picture.
@@ -36,6 +43,7 @@ struct EditExportSettings: Equatable {
         let speed = max(0.5, min(2, played / max(0.1, recipe.outputDuration)))
         let own = sourceBitRate * 1.3 * pow(share, 0.8) * pow(area, 0.7) * speed
         videoBitRate = max(min(usual, own), max(500_000, pixels * 30 * 0.015))
+        mostBitRate = max(videoBitRate, least)
     }
 }
 
@@ -647,7 +655,8 @@ private final class PieceWriter {
                 AVVideoH264EntropyModeKey: AVVideoH264EntropyModeCABAC,
                 // No frames that depend on later ones: pieces join exactly at their edges.
                 AVVideoAllowFrameReorderingKey: false,
-                AVVideoMaxKeyFrameIntervalDurationKey: 2,
+                // Every 4 s: a key frame of a still screen costs as much as seconds of the rest.
+                AVVideoMaxKeyFrameIntervalDurationKey: 4,
                 AVVideoExpectedSourceFrameRateKey: plan.source.frameRate > 31 ? 60 : 30,
             ] as [String: Any],
         ])

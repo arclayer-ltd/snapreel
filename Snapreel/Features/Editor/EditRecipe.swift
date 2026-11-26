@@ -456,6 +456,10 @@ extension EditRecipe {
 extension EditRecipe {
     /// Shortest section the editor keeps (shorter leftovers are dropped).
     static let minimumSection: Double = 0.1
+    /// Shortest edit that can be saved: the library takes nothing shorter as a recording.
+    static let minimumSave: Double = 0.5
+    /// Shortest the Trim handles make a part.
+    static let minimumTrim: Double = 0.5
 
     /// Splits the section under output time `t` in two. False when `t` is too close to an edge.
     @discardableResult
@@ -546,11 +550,13 @@ extension EditRecipe {
         let previousEnd = index > 0 ? segments[index - 1].end : 0
         let nextStart = index + 1 < segments.count ? segments[index + 1].start : sourceDuration
         var segment = segments[index]
+        // Never shorter than half a second of the edit (or the part as it was, if already shorter).
+        let shortest = min(Self.minimumTrim * segment.speed, segment.sourceLength)
         if let newStart {
-            segment.start = min(max(previousEnd, newStart), segment.end - 0.2)
+            segment.start = min(max(previousEnd, newStart), segment.end - shortest)
         }
         if let newEnd {
-            segment.end = max(min(nextStart, newEnd), segment.start + 0.2)
+            segment.end = max(min(nextStart, newEnd), segment.start + shortest)
         }
         segments[index] = segment
         followContent(from: old)

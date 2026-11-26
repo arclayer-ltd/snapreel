@@ -191,6 +191,9 @@ final class EditorModel: ObservableObject {
     @Published var toast: ToastMessage?
 
     @Published private(set) var poster: UIImage?
+    /// The edit's own first picture (or its chosen frame), cropped and turned, for the saving
+    /// screen: the recording's poster may be a moment that was cut away.
+    @Published private(set) var savingStill: UIImage?
     let filmstrip = EditorFilmstrip()
     /// Sound levels by file name (the recording's under "source"), for drawing it.
     @Published private(set) var levels: [String: [Float]] = [:]
@@ -1296,8 +1299,14 @@ final class EditorModel: ObservableObject {
         Haptics.selection()
     }
 
+    /// Mirrors the picture left to right as it is shown. The recipe mirrors the recording before
+    /// turning it, so on a picture turned a quarter that is a mirror top to bottom of the
+    /// recording: the same as mirroring it left to right and turning it a half more.
     func flip() {
-        apply { $0.flipped.toggle() }
+        apply { recipe in
+            recipe.flipped.toggle()
+            if recipe.quarterTurns % 2 != 0 { recipe.quarterTurns = (recipe.quarterTurns + 2) % 4 }
+        }
         Haptics.selection()
     }
 
@@ -1824,13 +1833,51 @@ final class EditorModel: ObservableObject {
         Haptics.selection()
     }
 
+    /// Too short for the library to take as a recording.
+    var isTooShortToSave: Bool { duration < EditRecipe.minimumSave }
+
     func startExport() {
+        guard !isTooShortToSave else { return }
         pause()
         sheet = nil
         // Kept until the new recording is ready, whatever happens to the save.
         keepDraft()
         let id = EditRenderer.shared.begin(recipe: stamped(recipe), source: source, library: library)
+        makeSavingStill()
         phase = .rendering(id)
+    }
+
+    private func makeSavingStill() {
+        savingStill = nil
+        guard hasPicture else { return }
+        let shown = recipe
+        let output = min(max(0, shown.thumbnailTime ?? 0), max(0, duration - 0.05))
+        let at = shown.sourceTime(forOutput: output + 0.01)
+        let asset = AVURLAsset(url: sourceURL)
+        Task { [weak self] in
+            let generator = AVAssetImageGenerator(asset: asset)
+            generator.appliesPreferredTrackTransform = true
+            generator.maximumSize = CGSize(width: 900, height: 900)
+            generator.requestedTimeToleranceBefore = .zero
+            generator.requestedTimeToleranceAfter = CMTime(value: 1, timescale: 30)
+            guard let (image, _) = try? await generator.image(at: CMTime(seconds: at, preferredTimescale: 600)) else { return }
+            guard let self, !self.isClosed else { return }
+            self.savingStill = Self.styled(image, recipe: shown, at: output)
+        }
+    }
+
+    /// `image` as the edit shows it at output time `time`: cropped, turned, flipped and blurred.
+    private static func styled(_ image: CGImage, recipe: EditRecipe, at time: Double) -> UIImage {
+        let upright = CGSize(width: image.width, height: image.height)
+        let untouched = recipe.crop.isFullFrame && recipe.quarterTurns % 4 == 0 && !recipe.flipped && recipe.blurs.isEmpty
+        guard !untouched else { return UIImage(cgImage: image) }
+        let size = recipe.renderSize(source: upright, quality: .original)
+        let pipeline = EditFramePipeline(recipe: recipe, upright: size, showsBlur: true)
+        let frame = pipeline.draw(CIImage(cgImage: image), at: time)
+        guard let output = EditGraphics.managedContext.createCGImage(frame, from: CGRect(origin: .zero, size: size)) else {
+            return UIImage(cgImage: image)
+        }
+        return UIImage(cgImage: output)
     }
 
     func cancelExport(_ id: UUID) {
@@ -1850,17 +1897,19 @@ final class EditorModel: ObservableObject {
 
 /// Text helpers for the editor.
 enum EditorText {
-    /// "0:04.2"
+    /// "0:04.2", to the nearest tenth (so start, end and length agree with each other).
     static func precise(_ seconds: Double) -> String {
-        let value = max(0, seconds)
-        let whole = Int(value)
-        let tenths = Int(((value - Double(whole)) * 10).rounded(.down))
-        return String(format: "%d:%02d.%d", whole / 60, whole % 60, tenths)
+        let tenths = Int((max(0, seconds) * 10).rounded())
+        let whole = tenths / 10
+        return String(format: "%d:%02d.%d", whole / 60, whole % 60, tenths % 10)
     }
+
+    /// Seconds rounded the way `precise` shows them.
+    static func tenths(_ seconds: Double) -> Double { (max(0, seconds) * 10).rounded() / 10 }
 
     /// "12.4s"
     static func length(_ seconds: Double) -> String {
-        seconds >= 60 ? Format.clock(seconds) : String(format: "%.1fs", max(0, seconds))
+        seconds >= 60 ? Format.clock(seconds) : String(format: "%.1fs", tenths(seconds))
     }
 
     static func speed(_ value: Double) -> String {

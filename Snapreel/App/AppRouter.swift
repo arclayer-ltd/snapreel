@@ -68,6 +68,8 @@ struct PlayerPresentation: Equatable {
     var opensTranscript = false
     /// Opens on the Comments tab (from a comment on the recording's share link).
     var opensComments = false
+    /// Opens without playing (back from the editor, onto the page it was opened from).
+    var startsPaused = false
     /// Changes each time `play` is called so the player can react to a new request for the same video.
     var token = UUID()
 }
@@ -76,6 +78,8 @@ struct PlayerPresentation: Equatable {
 struct EditorLaunch: Identifiable, Equatable {
     let id = UUID()
     var videoID: UUID
+    /// Opened from this video's page: closing the editor goes back to it.
+    var returnsTo: UUID?
 }
 
 /// App-wide navigation state. Views use `@EnvironmentObject var router: AppRouter`.
@@ -136,7 +140,8 @@ final class AppRouter: ObservableObject {
         recorder = RecorderLaunch(mode: nil, resumesMinimized: true)
     }
 
-    func play(_ videoID: UUID, at time: Double? = nil, opensTranscript: Bool = false, opensComments: Bool = false) {
+    func play(_ videoID: UUID, at time: Double? = nil, opensTranscript: Bool = false, opensComments: Bool = false,
+              startsPaused: Bool = false) {
         if minimizedRecorder != nil {
             // Playing would take the microphone's audio session away from the recording.
             showToast("Stop your recording to play this", systemImage: "mic.fill")
@@ -144,7 +149,7 @@ final class AppRouter: ObservableObject {
         }
         withAnimation(Motion.standard) {
             player = PlayerPresentation(videoID: videoID, startAt: time, opensTranscript: opensTranscript,
-                                        opensComments: opensComments)
+                                        opensComments: opensComments, startsPaused: startsPaused)
         }
     }
 
@@ -155,6 +160,7 @@ final class AppRouter: ObservableObject {
             showToast("Stop your recording to edit", systemImage: "mic.fill")
             return
         }
+        let fromPage = player.map { !$0.isMinimized && $0.videoID == videoID } ?? false
         let waits = afterClosing || recorder != nil || (player.map { !$0.isMinimized } ?? false)
         if player != nil {
             PlaybackSession.shared.close()
@@ -162,18 +168,28 @@ final class AppRouter: ObservableObject {
         }
         recorder = nil
         isSettingsPresented = false
+        let launch = EditorLaunch(videoID: videoID, returnsTo: fromPage ? videoID : nil)
         guard waits else {
-            editor = EditorLaunch(videoID: videoID)
+            editor = launch
             return
         }
         Task { @MainActor in
             try? await Task.sleep(nanoseconds: 650_000_000)
-            self.editor = EditorLaunch(videoID: videoID)
+            self.editor = launch
         }
     }
 
+    /// Closes the editor. Opened from a video's page, it goes back to that page (paused), not to
+    /// the list the page was opened from.
     func closeEditor() {
+        let back = editor?.returnsTo
         editor = nil
+        guard let back else { return }
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 650_000_000)
+            guard self.editor == nil, self.player == nil, self.recorder == nil else { return }
+            self.play(back, startsPaused: true)
+        }
     }
 
     /// Closes the editor and plays a recording (a saved edit's "Open").
