@@ -14,6 +14,8 @@ enum CloudError: Error, Equatable {
     case auth(String)
     /// 404 or 410: the link was deleted or expired.
     case notFound
+    /// 409: the server doesn't have all of the upload's files.
+    case incomplete([String])
     /// Any other HTTP error.
     case server(status: Int, message: String?)
     /// A response that doesn't match the contract.
@@ -29,6 +31,7 @@ enum CloudError: Error, Equatable {
         case .limit(.proFeature): return "That's part of Snapreel Pro."
         case .auth(let text): return text
         case .notFound: return "This link no longer exists."
+        case .incomplete: return "The upload isn't complete yet."
         case .server(_, let text): return text ?? "snapreel.video didn't answer properly. Try again in a moment."
         case .unreadable: return "snapreel.video sent something Snapreel couldn't read. Try again in a moment."
         }
@@ -100,6 +103,17 @@ final class APIClient {
     @discardableResult
     func updateVideo(_ id: String, _ change: UpdateVideoRequest) async throws -> VideoDetail {
         try await send("PATCH", "videos/\(id)", body: change)
+    }
+
+    /// All files are up: the link can be watched. The server checks the video is stored, with this size.
+    func finishUpload(_ id: String, size: Int64) async throws -> VideoDetail {
+        try await updateVideo(id, UpdateVideoRequest(status: .ready, sizeBytes: size > 0 ? size : nil))
+    }
+
+    /// How far an upload is, for the watch page. Nothing depends on it, so failures are ignored (a server from before
+    /// this call answers 404).
+    func reportUpload(_ id: String, sent: Int64, total: Int64) async {
+        try? await sendEmpty("POST", "videos/\(id)/progress", body: UploadProgressRequest(uploadedBytes: sent, totalBytes: total))
     }
 
     /// Stops sharing: the server deletes the files and keeps nothing.
@@ -205,7 +219,7 @@ final class APIClient {
                 token = try await auth.refresh().accessToken
                 continue
             case 401:
-                auth.clearLocal()
+                auth.clearLocal(keepsUploads: true)
                 throw CloudError.signedOut
             case 402:
                 let details = try? CloudJSON.decoder.decode(APIErrorBody.self, from: data)
@@ -214,6 +228,9 @@ final class APIClient {
                 throw CloudError.notFound
             default:
                 let details = try? CloudJSON.decoder.decode(APIErrorBody.self, from: data)
+                if status == 409, details?.error == "upload_incomplete" {
+                    throw CloudError.incomplete(details?.missing ?? ["video.mp4"])
+                }
                 throw CloudError.server(status: status, message: details?.message)
             }
         }

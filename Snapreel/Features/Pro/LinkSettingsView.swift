@@ -15,31 +15,48 @@ struct LinkSettingsView: View {
     @ObservedObject private var auth = AuthService.shared
     @State private var draft: LinkDraft?
     @State private var original: LinkDraft?
-    @State private var isLoading = false
+    /// Nothing is said to be missing before loading has been tried and has failed.
+    @State private var loading = Loading.waiting
     @State private var isSaving = false
     @State private var error: String?
     @State private var confirmsStop = false
     @State private var isStopping = false
 
+    private enum Loading: Equatable {
+        case waiting
+        case running
+        case loaded
+        case failed(String)
+        /// The server doesn't know the link any more.
+        case gone
+    }
+
     private var link: CloudLink? { library.link(for: videoID) }
     private var isPro: Bool { auth.isPro }
 
     var body: some View {
-        Group {
+        // A ZStack, not a Group: a Group hands `.task` and `.onAppear` to whichever branch is showing. In this sheet, on
+        // iOS 16, its loading never ran, and the "no link" message showed for a live link (seen in build 37).
+        ZStack {
             if let link, draft != nil {
                 form(link)
-            } else if isLoading {
-                ProgressView("Loading settings…")
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                EmptyStateView(systemImage: "link.badge.plus",
-                               title: link == nil ? "Not shared" : "Settings didn't load",
-                               message: error ?? "This recording doesn't have a share link.",
-                               actionTitle: link == nil ? nil : "Try again",
-                               action: link == nil ? nil : { retryLoad() })
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                switch loading {
+                case .waiting, .running, .loaded:
+                    ProgressView("Loading settings…")
+                        .onAppear {
+                            if loading == .waiting { load() }
+                        }
+                case .failed(let message):
+                    EmptyStateView(systemImage: "wifi.exclamationmark", title: "Settings didn't load", message: message,
+                                   actionTitle: "Try again", action: { load() })
+                case .gone:
+                    EmptyStateView(systemImage: "link.badge.plus", title: "Not shared",
+                                   message: "This recording doesn't have a share link any more. Copy link makes a new one.")
+                }
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.srCanvas.ignoresSafeArea())
         .navigationTitle("Link settings")
         .navigationBarTitleDisplayMode(.inline)
@@ -68,7 +85,9 @@ struct LinkSettingsView: View {
         } message: {
             Text("The link stops working, and its video, views and comments are deleted from snapreel.video. The recording stays on this iPhone.")
         }
-        .task { await load() }
+        .onAppear {
+            if loading == .waiting { load() }
+        }
     }
 
     // MARK: Form
@@ -280,29 +299,36 @@ struct LinkSettingsView: View {
 
     // MARK: Loading and saving
 
-    private func retryLoad() {
-        Task { await load() }
-    }
-
-    private func load() async {
-        guard let link else { return }
+    /// Shows the settings kept on this iPhone at once, then the server's. Its own task, so a change of what is on
+    /// screen never cancels it.
+    private func load() {
+        guard loading != .running else { return }
+        guard let link else {
+            loading = .gone
+            return
+        }
         if let detail = link.detail, draft == nil {
             let initial = LinkDraft(detail)
             draft = initial
             original = initial
         }
-        isLoading = draft == nil
-        let detail = await ShareLinks.shared.refreshDetail(videoID)
-        isLoading = false
-        if let detail {
-            // Keep what was already typed; only fill an untouched form.
-            if draft == original {
-                let fresh = LinkDraft(detail)
-                draft = fresh
-                original = fresh
+        loading = .running
+        Task { @MainActor in
+            do {
+                let detail = try await ShareLinks.shared.loadDetail(videoID)
+                // Keep what was already typed; only fill an untouched form.
+                if draft == original {
+                    let fresh = LinkDraft(detail)
+                    draft = fresh
+                    original = fresh
+                }
+                loading = .loaded
+            } catch CloudError.notFound {
+                draft = nil
+                loading = .gone
+            } catch {
+                loading = .failed((error as? CloudError)?.message ?? CloudError.offline.message)
             }
-        } else if draft == nil {
-            error = "Check your connection and try again."
         }
     }
 

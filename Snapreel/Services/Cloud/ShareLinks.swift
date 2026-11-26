@@ -93,9 +93,7 @@ final class ShareLinks: ObservableObject {
             copyToPasteboard(link, video: video)
             Haptics.success()
             ProPresenter.shareLink(videoID)
-            if case .failed = state(for: videoID), Uploader.shared.jobs[videoID] == nil {
-                reupload(videoID)
-            }
+            recover(videoID)
             return
         }
         guard CloudConfig.isConfigured else {
@@ -122,6 +120,24 @@ final class ShareLinks: ObservableObject {
             }
         }
         create(video)
+    }
+
+    /// A link whose upload stopped goes on as soon as it is copied again: from what is already sent when this iPhone
+    /// has its upload, from the start otherwise. An upload that is merely waiting is nudged.
+    private func recover(_ videoID: UUID) {
+        guard AuthService.shared.isSignedIn else {
+            if Uploader.shared.jobs[videoID]?.isActive == true {
+                ProPresenter.signIn(reason: .link) { signedIn in
+                    if signedIn { Uploader.shared.resumeAll() }
+                }
+            }
+            return
+        }
+        switch state(for: videoID) {
+        case .failed: retry(videoID)
+        case .preparing, .uploading, .waitingForNetwork, .finishing: Uploader.shared.resumeAll()
+        case .notShared, .creating, .ready: break
+        }
     }
 
     private func create(_ video: Video) {
@@ -172,6 +188,12 @@ final class ShareLinks: ObservableObject {
     /// the upload.
     func retry(_ videoID: UUID) {
         createErrors[videoID] = nil
+        guard AuthService.shared.isSignedIn else {
+            ProPresenter.signIn(reason: .link) { signedIn in
+                if signedIn { ShareLinks.shared.retry(videoID) }
+            }
+            return
+        }
         if library.link(for: videoID) == nil {
             copyLink(videoID)
         } else if Uploader.shared.jobs[videoID] != nil {
@@ -194,8 +216,22 @@ final class ShareLinks: ObservableObject {
             defer { self.creating.remove(videoID) }
             do {
                 let created = try await APIClient.shared.createVideo(request)
-                self.library.updateLink(videoID) { $0.status = created.status }
+                self.library.updateLink(videoID) {
+                    $0.serverID = created.id
+                    $0.slug = created.slug
+                    $0.url = created.url
+                    $0.status = created.status
+                }
+                // Already there in full (the upload finished while this iPhone didn't hear of it).
+                guard created.status != .ready else {
+                    Uploader.shared.cancel(videoID)
+                    await self.refreshDetail(videoID)
+                    return
+                }
                 Uploader.shared.start(video: video, source: self.library.fileURL(for: video), link: created)
+            } catch CloudError.limit(let reason) {
+                self.createErrors[videoID] = CloudError.limit(reason).message
+                ProPresenter.paywall(reason == .duration ? .duration(video.duration) : .links)
             } catch {
                 self.createErrors[videoID] = (error as? CloudError)?.message ?? CloudError.offline.message
             }
@@ -287,6 +323,7 @@ final class ShareLinks: ObservableObject {
     static func openInSafari(_ url: URL) {
         let safari = SFSafariViewController(url: url)
         safari.preferredControlTintColor = UIColor.srRed
+        safari.delegate = SafariWatcher.shared
         Task { @MainActor in
             for _ in 0..<20 {
                 if let top = ShareSheetPresenter.topViewController(), !top.isBeingPresented, !top.isBeingDismissed {
@@ -357,16 +394,21 @@ final class ShareLinks: ObservableObject {
     /// Reloads one link with its settings.
     @discardableResult
     func refreshDetail(_ videoID: UUID) async -> VideoDetail? {
-        guard let link = library.link(for: videoID) else { return nil }
+        try? await loadDetail(videoID)
+    }
+
+    /// The same, saying why when it fails. A link the server doesn't know any more is forgotten here too, unless its
+    /// upload is still running.
+    @discardableResult
+    func loadDetail(_ videoID: UUID) async throws -> VideoDetail {
+        guard let link = library.link(for: videoID) else { throw CloudError.notFound }
         do {
             let detail = try await APIClient.shared.video(link.serverID)
             library.updateLink(videoID) { $0.apply(detail) }
             return detail
         } catch CloudError.notFound {
-            library.removeLink(videoID)
-            return nil
-        } catch {
-            return nil
+            if Uploader.shared.jobs[videoID]?.isActive != true { library.removeLink(videoID) }
+            throw CloudError.notFound
         }
     }
 
@@ -390,5 +432,17 @@ final class ShareLinks: ObservableObject {
         let title = library.video(videoID)?.title ?? library.link(for: videoID)?.title ?? "Your recording"
         Notifier.shared.post(.uploadFailed, title: "Upload stopped",
                              body: "\u{201C}\(title)\u{201D}: \(message)", videoID: videoID)
+    }
+}
+
+/// What was changed on the web (your name, a link's settings) shows here as soon as the in-app Safari closes.
+private final class SafariWatcher: NSObject, SFSafariViewControllerDelegate {
+    static let shared = SafariWatcher()
+
+    func safariViewControllerDidFinish(_ controller: SFSafariViewController) {
+        Task { @MainActor in
+            await AuthService.shared.refreshMe()
+            await ShareLinks.shared.refresh(force: true)
+        }
     }
 }

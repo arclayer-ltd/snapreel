@@ -50,7 +50,7 @@ struct SharedLinksView: View {
 
     private var uploadsGroup: some View {
         SettingsGroup(title: "Uploads",
-                      footnote: "Uploads carry on in the background, and pick up where they stopped after a lost connection.") {
+                      footnote: "Uploads carry on when you leave Snapreel or lock your iPhone, and pick up where they stopped after a lost connection. Preparing a video needs Snapreel open.") {
             ForEach(Array(uploads.enumerated()), id: \.element) { index, id in
                 if index > 0 { SettingsDivider(inset: Space.m + 64 + Space.s) }
                 UploadRow(videoID: id)
@@ -112,7 +112,7 @@ private struct UploadRow: View {
                 Text(label(state))
                     .font(.srFootnote.monospacedDigit())
                     .foregroundStyle(isFailed(state) ? Color.srRedText : Color.srTextSecondary)
-                    .lineLimit(2)
+                    .lineLimit(3)
                 if let fraction = fraction(state) {
                     LinkProgressBar(fraction: fraction)
                 }
@@ -163,6 +163,7 @@ private struct UploadRow: View {
     private func fraction(_ state: LinkState) -> Double? {
         switch state {
         case .uploading(let value), .waitingForNetwork(let value): return value
+        case .preparing: return uploader.progress(for: videoID)?.prepared
         default: return nil
         }
     }
@@ -170,9 +171,15 @@ private struct UploadRow: View {
     private func label(_ state: LinkState) -> String {
         switch state {
         case .creating: return "Making the link…"
-        case .preparing: return "Preparing the video…"
-        case .uploading(let value): return "Uploading · \(Int((value * 100).rounded()))%"
-        case .waitingForNetwork(let value): return "Waiting for a connection · \(Int((value * 100).rounded()))%"
+        case .preparing:
+            let progress = uploader.progress(for: videoID)
+            return [UploadText.preparing(progress), UploadText.preparingDetail(progress)].compactMap { $0 }.joined(separator: "\n")
+        case .uploading(let value):
+            return ["Uploading · \(Int((value * 100).rounded()))%", uploader.progress(for: videoID)?.bytesLabel, uploader.progress(for: videoID)?.timeLabel]
+                .compactMap { $0 }.joined(separator: "\n")
+        case .waitingForNetwork(let value):
+            return ["Waiting for a connection · \(Int((value * 100).rounded()))%", UploadText.waitingDetail(uploader.progress(for: videoID))]
+                .compactMap { $0 }.joined(separator: "\n")
         case .finishing: return "Finishing…"
         case .ready: return "Uploaded · ready to watch"
         case .failed(let message): return message
