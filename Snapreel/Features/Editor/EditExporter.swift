@@ -891,7 +891,7 @@ private final class PieceFeed {
         "frames moved \(moved), back in time \(backwards), closest \(closest.isFinite ? String(format: "%.4f", closest) : "-") s, "
             + "pieces with another format \(otherFormats)"
     }
-    private var firstFormat: CMFormatDescription?
+    private var seenFormat: CMFormatDescription?
     private var otherFormats = 0
 
     init(pieces: [(url: URL, start: CMTime, end: CMTime)]) {
@@ -931,10 +931,10 @@ private final class PieceFeed {
                     let count = CMSampleBufferGetNumSamples(sample)
                     guard count > 0, CMSampleBufferGetDataBuffer(sample) != nil else { continue }
                     if self.shift == nil, let format = CMSampleBufferGetFormatDescription(sample) {
-                        if let firstFormat {
-                            if !CMFormatDescriptionEqual(firstFormat, otherFormatDescription: format) { otherFormats += 1 }
+                        if let seenFormat {
+                            if !CMFormatDescriptionEqual(seenFormat, otherFormatDescription: format) { otherFormats += 1 }
                         } else {
-                            firstFormat = format
+                            seenFormat = format
                         }
                     }
                     let shift = self.shift ?? pieces[index].start - CMSampleBufferGetPresentationTimeStamp(sample)
