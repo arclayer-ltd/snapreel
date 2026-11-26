@@ -338,29 +338,37 @@ struct LinkSettingsView: View {
 
     private func toggleRow(_ title: String, systemImage: String, value: WritableKeyPath<LinkDraft, Bool>,
                            pro: ProFeature? = nil) -> some View {
-        HStack(spacing: Space.s) {
+        let isOn = Binding(get: { draft?[keyPath: value] ?? false },
+                           set: { newValue in
+                               if let pro, !isPro, newValue {
+                                   ProPresenter.paywall(.feature(pro))
+                                   return
+                               }
+                               draft?[keyPath: value] = newValue
+                           })
+        return HStack(spacing: Space.s) {
             IconTile(systemName: systemImage)
                 .accessibilityHidden(true)
-            // The switch carries the name; the text beside it isn't read a second time.
+            // The row carries the name (below); the text isn't read a second time.
             Text(title)
                 .font(.srBody)
                 .foregroundStyle(Color.srText)
                 .accessibilityHidden(true)
             if pro != nil && !isPro { ProBadge(compact: true).accessibilityHidden(true) }
             Spacer(minLength: Space.xs)
-            Toggle(pro != nil && !isPro ? "\(title), Snapreel Pro" : title, isOn: Binding(get: { draft?[keyPath: value] ?? false },
-                                        set: { newValue in
-                                            if let pro, !isPro, newValue {
-                                                ProPresenter.paywall(.feature(pro))
-                                                return
-                                            }
-                                            draft?[keyPath: value] = newValue
-                                        }))
+            Toggle(title, isOn: isOn)
                 .labelsHidden()
                 .tint(Color.srRed)
         }
         .padding(.horizontal, Space.m)
         .padding(.vertical, Space.xs)
+        // One element for the row: iOS 16 also showed the switch inside the toggle, unnamed.
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(pro != nil && !isPro ? "\(title), Snapreel Pro" : title)
+        .accessibilityValue(isOn.wrappedValue ? "On" : "Off")
+        .accessibilityAddTraits(.isButton)
+        .accessibilityHint("Double-tap to switch \(isOn.wrappedValue ? "off" : "on")")
+        .accessibilityAction { isOn.wrappedValue.toggle() }
     }
 
     /// A text field with its name above it, so the name stays when typing starts, and its problem under it.

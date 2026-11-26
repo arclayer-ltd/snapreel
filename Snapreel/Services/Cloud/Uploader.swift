@@ -63,6 +63,8 @@ final class Uploader: ObservableObject {
     /// Server time minus this phone's.
     private var clockOffset: TimeInterval = 0
     private var speeds: [UUID: [(time: Date, bytes: Int64)]] = [:]
+    /// How far preparing got, over the last minute.
+    private var preparedSamples: [UUID: [(time: Date, fraction: Double)]] = [:]
     private var lastPublish: [UUID: Date] = [:]
     private var lastReport: [UUID: Date] = [:]
     /// The last speed measured, bytes a second.
@@ -354,6 +356,7 @@ final class Uploader: ObservableObject {
         trouble[videoID] = nil
         liveBytes[videoID] = nil
         speeds[videoID] = nil
+        preparedSamples[videoID] = nil
         tusSynced.remove(videoID)
         pausedPreparing.remove(videoID)
         try? FileManager.default.removeItem(at: folder(for: videoID))
@@ -389,9 +392,16 @@ final class Uploader: ObservableObject {
         progress.prepared = job.stage == .preparing ? job.prepared : nil
         progress.totalBytes = job.totalBytes
         progress.isEstimate = job.stage == .preparing
-        if job.stage == .preparing, job.estimatedBytes == nil {
-            // Only the poster and preview are known: "42 KB of about 42 KB" would be wrong.
+        if job.stage == .preparing, job.estimatedBytes == nil || (job.prepared ?? 0) < 0.1 {
+            // Only the poster and preview are known ("42 KB of about 42 KB"), or the first seconds of the web copy
+            // don't say much about its size yet ("of about 75 MB", then 27).
             progress.totalBytes = 0
+        }
+        if job.stage == .preparing, let prepared = job.prepared, let samples = preparedSamples[videoID],
+           let first = samples.first, let last = samples.last, last.fraction > first.fraction,
+           last.time.timeIntervalSince(first.time) >= 5, environment.now().timeIntervalSince(last.time) < 30 {
+            let perSecond = (last.fraction - first.fraction) / last.time.timeIntervalSince(first.time)
+            progress.preparingSecondsLeft = max(0, 1 - prepared) / perSecond
         }
         if let counts = trouble[videoID], let reason = counts.reason {
             let now = environment.now()
@@ -1202,6 +1212,7 @@ final class Uploader: ObservableObject {
         }
         liveBytes[id] = nil
         speeds[id] = nil
+        preparedSamples[id] = nil
         environment.failed(id, message)
         startPreparing()
     }
@@ -1260,6 +1271,13 @@ final class Uploader: ObservableObject {
             }
         case .video(let video):
             if video.finalBytes > 0 { trouble[id]?.interruptions = 0 }
+            let now = environment.now()
+            var samples = preparedSamples[id] ?? []
+            // Started over: the old pace says nothing.
+            if let last = samples.last, video.fraction < last.fraction { samples = [] }
+            samples.append((now, video.fraction))
+            samples.removeAll { now.timeIntervalSince($0.time) > 60 }
+            preparedSamples[id] = samples
             job.prepared = video.fraction
             job.estimatedBytes = video.estimatedBytes
             set(&job, .video) {
@@ -1388,6 +1406,7 @@ final class Uploader: ObservableObject {
             self.trouble[id] = nil
             self.liveBytes[id] = nil
             self.speeds[id] = nil
+            self.preparedSamples[id] = nil
             self.removeFiles(for: id)
             self.environment.finished(id, detail)
         }

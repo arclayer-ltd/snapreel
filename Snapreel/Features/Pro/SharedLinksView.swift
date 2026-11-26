@@ -221,10 +221,12 @@ private struct LinkRow: View {
                     .foregroundStyle(Color.srText)
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
-                Text(meta)
-                    .font(.srFootnote)
-                    .foregroundStyle(Color.srTextSecondary)
-                    .lineLimit(1)
+                TimelineView(.everyMinute) { _ in
+                    Text(meta)
+                        .font(.srFootnote)
+                        .foregroundStyle(Color.srTextSecondary)
+                        .lineLimit(1)
+                }
                 if library.video(link.videoID) == nil {
                     Text("Not on this iPhone")
                         .font(.srCaption)

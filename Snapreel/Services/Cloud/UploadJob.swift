@@ -265,6 +265,8 @@ struct UploadProgress: Equatable {
     var isPaused = false
     /// Something failed and Snapreel waits before trying again (nil while all goes well).
     var retry: UploadRetry?
+    /// While preparing: how long the rest of the web copy should take, once there is enough to go by.
+    var preparingSecondsLeft: Double?
 
     var fraction: Double {
         guard totalBytes > 0 else { return 0 }
@@ -286,6 +288,10 @@ struct UploadProgress: Equatable {
     /// "About 2 min left".
     var timeLabel: String? {
         guard let seconds = secondsLeft else { return nil }
+        return Self.timeLeft(seconds)
+    }
+
+    static func timeLeft(_ seconds: Double) -> String {
         if seconds < 8 { return "A few seconds left" }
         if seconds < 55 { return "About \(Int((seconds / 10).rounded(.up)) * 10) sec left" }
         let minutes = Int((seconds / 60).rounded())

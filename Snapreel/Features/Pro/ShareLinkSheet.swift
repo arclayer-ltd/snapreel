@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// After Copy link: the link (already on the clipboard) and where its upload is. One sheet for
 /// every state: creating, uploading with progress, ready (copied, open, share), waiting for
@@ -11,6 +12,8 @@ struct ShareLinkSheet: View {
     @ObservedObject private var links = ShareLinks.shared
     @ObservedObject private var uploader = Uploader.shared
     @State private var copiedAgain = false
+    /// Changes each time Snapreel comes back to the screen: the sheet is made again (see `body`).
+    @State private var comeBack = 0
 
     private var video: Video? { library.video(videoID) }
     private var link: CloudLink? { library.link(for: videoID) }
@@ -34,16 +37,28 @@ struct ShareLinkSheet: View {
                                 .foregroundStyle(Color.srTextSecondary)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
-                        actions
                     }
                 }
                 .padding(.horizontal, Space.gutter)
-                .padding(.bottom, Space.xl)
+                .padding(.bottom, Space.l)
                 // Not on every percent: the numbers would cross-fade.
                 .animation(Motion.standard, value: stateKind)
             }
+            // Kept under the scrolling part, so at half height they sit above the home bar (they were under it).
+            if link != nil {
+                actions
+                    .padding(.horizontal, Space.gutter)
+                    .padding(.top, Space.xs)
+                    .padding(.bottom, Space.s)
+            }
         }
+        // Back from the Home Screen, an open sheet kept showing "Preparing 0%" for good while its numbers moved on
+        // underneath (tester t26-link2, iOS 16.4). Making it again draws it again.
+        .id(comeBack)
         .background(Color.srCanvas.ignoresSafeArea())
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
+            comeBack += 1
+        }
     }
 
     // MARK: Parts

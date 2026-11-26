@@ -159,10 +159,13 @@ enum UploadText {
         return "Preparing \(percent(prepared))"
     }
 
-    /// "12 MB of about 73 MB sent": what is ready goes up while the rest is being made.
+    /// "12 MB of about 73 MB sent · About 3 min left": what is ready goes up while the rest is being made.
     static func preparingDetail(_ progress: UploadProgress?) -> String? {
-        guard let progress, progress.sentBytes > 0, progress.totalBytes > 0 else { return nil }
-        return progress.bytesLabel + " sent"
+        guard let progress else { return nil }
+        var parts: [String] = []
+        if progress.sentBytes > 0, progress.totalBytes > 0 { parts.append(progress.bytesLabel + " sent") }
+        if !progress.isPaused, let seconds = progress.preparingSecondsLeft { parts.append(UploadProgress.timeLeft(seconds)) }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
     /// "45 MB of 73 MB · About 2 min left".

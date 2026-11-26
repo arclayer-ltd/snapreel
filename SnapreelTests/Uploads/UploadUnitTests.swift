@@ -61,6 +61,18 @@ final class UploadUnitTests: XCTestCase {
         XCTAssertEqual(S3Signer.encode("a b+c/d=é~"), "a%20b%2Bc%2Fd%3D%C3%A9~")
     }
 
+    /// While preparing: the size only once it means something, and the time left once there is a pace.
+    func testPreparingWords() {
+        var progress = UploadProgress(prepared: 0.05, sentBytes: 224_000, totalBytes: 0, isEstimate: true)
+        XCTAssertNil(UploadText.preparingDetail(progress))
+        progress.preparingSecondsLeft = 200
+        XCTAssertEqual(UploadText.preparingDetail(progress), "About 3 min left")
+        progress.totalBytes = 27_000_000
+        XCTAssertEqual(UploadText.preparingDetail(progress), "224 KB of about 27 MB sent · About 3 min left")
+        progress.isPaused = true
+        XCTAssertEqual(UploadText.preparingDetail(progress), "224 KB of about 27 MB sent")
+    }
+
     // MARK: - Plans
 
     func testPlans() {
@@ -92,6 +104,12 @@ final class UploadUnitTests: XCTestCase {
         }
         let longCopy = WebPlan.make(VideoFacts(width: 886, height: 1_918, bitRate: 2.6 * mb, duration: 7_200), maxLongSide: 1_920, isScreen: true)
         XCTAssertLessThan(longCopy.estimatedBytes, CloudConfig.maxFileBytes)
+        // A small recording isn't made bigger: the tester's 4-minute HEVC sample (7.4 MB) came to 27 MB, estimated 75.
+        let thin = WebPlan.make(VideoFacts(width: 1_280, height: 720, bitRate: 0.234 * mb, duration: 253, isH264: false),
+                                maxLongSide: 1_280, isScreen: false)
+        XCTAssertFalse(thin.copies)
+        XCTAssertLessThan(thin.estimatedBytes, 20_000_000)
+        XCTAssertLessThanOrEqual(thin.bitRate, 500_000)
         // Not H.264, edited inside, or HDR: always encoded.
         XCTAssertFalse(WebPlan.make(VideoFacts(width: 640, height: 360, bitRate: mb, duration: 9, isH264: false), maxLongSide: 1_920, isScreen: false).copies)
         XCTAssertFalse(WebPlan.make(VideoFacts(width: 640, height: 360, bitRate: mb, duration: 9, isSimple: false), maxLongSide: 1_920, isScreen: false).copies)
