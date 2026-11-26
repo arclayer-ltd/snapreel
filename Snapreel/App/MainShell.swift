@@ -6,7 +6,6 @@ struct MainShell: View {
     @EnvironmentObject private var router: AppRouter
     @EnvironmentObject private var library: Library
     @EnvironmentObject private var settings: AppSettings
-    @ObservedObject private var settingsSheet = SettingsSheet.shared
 
     var body: some View {
         VStack(spacing: 0) {
@@ -73,12 +72,7 @@ struct MainShell: View {
                 .environmentObject(router)
                 .clearCoverBackground()
         }
-        .sheet(isPresented: $settingsSheet.isPresented) {
-            SettingsView(initialPath: settingsSheet.path)
-                .environmentObject(library)
-                .environmentObject(settings)
-                .environmentObject(router)
-        }
+        // Settings is presented through UIKit: see `SettingsSheet`.
     }
 
     private var playerExpanded: Binding<Bool> {

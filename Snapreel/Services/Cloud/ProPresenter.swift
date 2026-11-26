@@ -52,6 +52,7 @@ enum ProPresenter {
     private static weak var signInController: UIViewController?
     private static weak var paywallController: UIViewController?
     private static weak var settingsController: UIViewController?
+    private static weak var appSettingsController: UIViewController?
     /// Waiting for the top of the stack to be still, or on their way up.
     private static var arriving: Set<ObjectIdentifier> = []
 
@@ -122,6 +123,21 @@ enum ProPresenter {
         let controller = host(view, detents: [.large()])
         settingsController = controller
         present(controller)
+    }
+
+    // MARK: Settings
+
+    /// The app's Settings, from the gear on every tab (through `SettingsSheet`, which `router.openSettings` sets).
+    static func openSettings(path: [SettingsPage]) {
+        guard !isShowing(appSettingsController) else { return }
+        let view = SettingsView(initialPath: path)
+        let controller = host(view, detents: [.large()], onDismiss: { SettingsSheet.shared.didClose() })
+        appSettingsController = controller
+        present(controller, orElse: { SettingsSheet.shared.didClose() })
+    }
+
+    static func closeSettings() {
+        dismiss(appSettingsController)
     }
 
     // MARK: Hosting

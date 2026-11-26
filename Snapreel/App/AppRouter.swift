@@ -1,16 +1,34 @@
 import SwiftUI
 
-/// The Settings sheet's state, apart from `AppRouter`. Tester t26: after Settings closed, the gear on Home (and
-/// every tab root) drew but no longer took taps, until something else redrew it. Opening and closing published on
-/// the router, which every tab root and its toolbar watch, so all four toolbars were redrawn in the middle of the
-/// sheet's animation. Only `MainShell`, which presents the sheet, and the views that need it watch this.
+/// The Settings sheet, presented through UIKit (`ProPresenter.openSettings`), not SwiftUI's `.sheet` on the tab
+/// shell. Tester t26 and the rig (iOS 16.4): after that sheet had closed twice, the gear on every tab root was
+/// still drawn but no longer a button, until the app went to the background or the tab was switched. Neither a
+/// redraw nor keeping the state off the router helped; the Pro sheets, presented through UIKit, never did it.
 @MainActor
 final class SettingsSheet: ObservableObject {
     static let shared = SettingsSheet()
 
-    @Published var isPresented = false
+    /// Setting it opens or closes the sheet.
+    @Published var isPresented = false {
+        didSet {
+            guard isPresented != oldValue, !isSettling else { return }
+            if isPresented {
+                ProPresenter.openSettings(path: path)
+            } else {
+                ProPresenter.closeSettings()
+            }
+        }
+    }
     /// Read once when the sheet opens.
     var path: [SettingsPage] = []
+    private var isSettling = false
+
+    /// The sheet went (a swipe down, or it couldn't be shown).
+    func didClose() {
+        isSettling = true
+        isPresented = false
+        isSettling = false
+    }
 }
 
 enum AppTab: String, CaseIterable, Identifiable, Hashable {

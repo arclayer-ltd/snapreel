@@ -89,7 +89,7 @@ struct SettingsView: View {
             .task { await auth.refreshMe() }
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Done") { dismiss() }
+                    Button("Done") { close() }
                         .font(.srHeadline)
                 }
             }
@@ -217,9 +217,18 @@ struct SettingsView: View {
         return "\(enabled) of \(total) on"
     }
 
+    /// Presented through UIKit (`SettingsSheet`); elsewhere (screenshots) the usual way.
+    private func close() {
+        if SettingsSheet.shared.isPresented {
+            SettingsSheet.shared.isPresented = false
+        } else {
+            dismiss()
+        }
+    }
+
     /// Closes Settings, then shows the guided tour over the tabs again.
     private func replayTour() {
-        dismiss()
+        close()
         Task { @MainActor in
             try? await Task.sleep(nanoseconds: 450_000_000)
             withAnimation(Motion.standard) { settings.hasCompletedTour = false }
