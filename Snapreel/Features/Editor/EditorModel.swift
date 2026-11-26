@@ -1511,10 +1511,15 @@ final class EditorModel: ObservableObject {
         case .highlight: base = CGSize(width: 38, height: 9)
         case .emoji: base = CGSize(width: 16, height: 16)
         }
-        let angle = item.rotation * .pi / 180
-        let w = base.width * item.scale * unit, h = base.height * item.scale * unit
-        let halfWidth = (abs(w * cos(angle)) + abs(h * sin(angle))) / 2 / picture.width
-        let halfHeight = (abs(w * sin(angle)) + abs(h * cos(angle))) / 2 / picture.height
+        let angle: Double = item.rotation * Double.pi / 180
+        let c: Double = abs(cos(angle))
+        let n: Double = abs(sin(angle))
+        let w: Double = Double(base.width) * item.scale * Double(unit)
+        let h: Double = Double(base.height) * item.scale * Double(unit)
+        let spanX: Double = w * c + h * n
+        let spanY: Double = w * n + h * c
+        let halfWidth = CGFloat(spanX / 2 / Double(picture.width))
+        let halfHeight = CGFloat(spanY / 2 / Double(picture.height))
         func kept(_ value: CGFloat, _ half: CGFloat) -> CGFloat {
             half >= 0.5 ? 0.5 : min(max(half, value), 1 - half)
         }
