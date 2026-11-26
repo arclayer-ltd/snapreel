@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { ScreenIcon, UsersIcon } from "@/components/player/icons";
 
 const LINKS = [
-  { href: "/app", label: "Videos", Icon: ScreenIcon, match: (p: string) => p === "/app" || p.startsWith("/app/v/") },
+  { href: "/app", label: "Links", Icon: ScreenIcon, match: (p: string) => p === "/app" || p.startsWith("/app/v/") },
   { href: "/app/account", label: "Account", Icon: UsersIcon, match: (p: string) => p.startsWith("/app/account") },
 ];
 

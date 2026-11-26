@@ -25,7 +25,16 @@ import { WatchFooter, WatchHeader } from "./WatchChrome";
 
 type Tab = "comments" | "transcript";
 
-export function WatchView({ slug, initial }: { slug: string; initial: PublicVideo }) {
+export function WatchView({
+  slug,
+  initial,
+  viewerIsOwner = false,
+}: {
+  slug: string;
+  initial: PublicVideo;
+  /** The signed-in owner on their own link. */
+  viewerIsOwner?: boolean;
+}) {
   const [video, setVideo] = useState(initial);
   const [autoStart, setAutoStart] = useState(false);
   const [uploadFailed, setUploadFailed] = useState(initial.status === "failed");
@@ -242,6 +251,8 @@ export function WatchView({ slug, initial }: { slug: string; initial: PublicVide
                     loading={loadingActivity}
                     allowComments={video.allowComments && ready}
                     ownerName={video.ownerName}
+                    viewerIsOwner={viewerIsOwner}
+                    onDeleted={(id) => setComments((all) => all.filter((c) => c.id !== id && c.parentId !== id))}
                     closedMessage={
                       video.allowComments && !ready
                         ? "You can comment once the video has finished uploading."
@@ -251,7 +262,8 @@ export function WatchView({ slug, initial }: { slug: string; initial: PublicVide
                     onSeek={seek}
                   />
                 ) : (
-                  <TranscriptList transcript={video.transcript!} onSeek={seek} />
+                  // Before the video is here a line can't be played, so the lines aren't buttons.
+                  <TranscriptList transcript={video.transcript!} onSeek={ready ? seek : undefined} />
                 )}
               </div>
             </aside>

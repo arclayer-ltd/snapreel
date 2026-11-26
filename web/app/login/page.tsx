@@ -44,18 +44,18 @@ export default function LoginPage({ searchParams }: PageProps<"/login">) {
         <a href={SITE_URL} className="flex min-h-11 w-fit items-center rounded-lg focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-sr-red lg:hidden">
           <SnapreelWordmark />
         </a>
-        <div className="mx-auto flex w-full max-w-sm flex-1 flex-col justify-start pb-8 pt-8 sm:justify-center sm:py-10">
+        <div className="mx-auto flex w-full max-w-sm flex-1 flex-col justify-start pb-8 pt-8 sm:pt-[12vh]">
           <Suspense fallback={<FormSkeleton />}>
             <Gate searchParams={searchParams} />
           </Suspense>
         </div>
         <p className="mx-auto max-w-sm text-center text-[13px] leading-relaxed text-text-2">
           Signing in for the first time creates your account. By carrying on you agree to the{" "}
-          <a href={`${SITE_URL}/terms`} className="underline underline-offset-2 hover:text-text">
+          <a href={`${SITE_URL}/terms`} className="-my-3 inline-block py-3 underline underline-offset-2 hover:text-text">
             Terms
           </a>{" "}
           and{" "}
-          <a href={`${SITE_URL}/privacy`} className="underline underline-offset-2 hover:text-text">
+          <a href={`${SITE_URL}/privacy`} className="-my-3 inline-block py-3 underline underline-offset-2 hover:text-text">
             Privacy Policy
           </a>
           .

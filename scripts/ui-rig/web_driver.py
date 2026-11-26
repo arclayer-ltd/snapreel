@@ -100,12 +100,24 @@ class WebDriver:
                        record_video_dir=self.video_dir, record_video_size={"width": self.size[0], "height": self.size[1]})
         if state:
             options["storage_state"] = state
-        if self.touch:
-            options["user_agent"] = ("Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 "
-                                     "(KHTML, like Gecko) Version/18.5 Mobile/15E148 Safari/604.1")
+        # Headless Chrome names itself "HeadlessChrome", which the site rightly treats as a bot (no views counted).
+        # A person's browser says what it is, so these do too.
+        options["user_agent"] = self.user_agent()
         self.context = self.browser.new_context(**options)
         self.context.on("page", self._watch)
         self.page = self.context.new_page()
+
+    def user_agent(self):
+        kind = self.opt.get("device", "phone")
+        if kind == "phone":
+            return ("Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 "
+                    "(KHTML, like Gecko) Version/18.5 Mobile/15E148 Safari/604.1")
+        if kind == "tablet":
+            return ("Mozilla/5.0 (iPad; CPU OS 18_5 like Mac OS X) AppleWebKit/605.1.15 "
+                    "(KHTML, like Gecko) Version/18.5 Mobile/15E148 Safari/604.1")
+        major = (self.browser.version or "140").split(".")[0]
+        return ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/%s.0.0.0 Safari/537.36" % major)
 
     def _watch(self, page):
         self.page = page

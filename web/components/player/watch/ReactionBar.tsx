@@ -126,6 +126,10 @@ export function ReactionBar({
         at {formatTime(second)}
       </span>
       <div className="flex h-11 w-[58px] shrink-0 items-center justify-end gap-0.5 overflow-hidden pr-1.5 max-[359px]:hidden sm:ml-auto sm:w-40" aria-hidden="true">
+        {/* On a phone the moment shows here while nothing is happening. */}
+        {live.length === 0 && (
+          <span className="truncate text-[13px] tabular-nums text-text-3 sm:hidden">at {formatTime(second)}</span>
+        )}
         {live.map((l) => (
           <span
             key={l.id}

@@ -12,7 +12,7 @@ import { MANAGE_SUBSCRIPTIONS_URL } from "@/lib/client/links";
 import { signOut } from "@/lib/client/supabase";
 import { CheckIcon, ExternalIcon, LogOutIcon, SparkIcon, TrashIcon } from "@/components/player/icons";
 import { Avatar, Dialog, Spinner, btn } from "@/components/player/ui";
-import { inkFor, isHexColour } from "@/components/player/ui-classes";
+import { isHexColour } from "@/components/player/ui-classes";
 import { Card, LockedHint, ProBadge, SwitchRow, inputClass } from "./kit";
 
 export function AccountPanel({ initial }: { initial: Me }) {
@@ -34,7 +34,8 @@ export function AccountPanel({ initial }: { initial: Me }) {
 
   const pro = me.plan.tier === "pro";
   const nameChanged = name.trim() !== (me.user.displayName ?? "");
-  const colourChanged = isHexColour(colour) && colour.toLowerCase() !== (me.user.brandColor ?? "").toLowerCase();
+  // Snapreel red is what an unset colour looks like, so picking it again isn't a change.
+  const colourChanged = isHexColour(colour) && colour.toLowerCase() !== (me.user.brandColor ?? "#d32434").toLowerCase();
 
   async function update(which: "name" | "colour" | "alerts", body: Parameters<typeof ownerApi.updateMe>[0]) {
     setSaving(which);
@@ -58,8 +59,9 @@ export function AccountPanel({ initial }: { initial: Me }) {
   async function doSignOut() {
     setSigningOut(true);
     await signOut();
-    router.replace("/login");
-    router.refresh();
+    // A full page load, not a client navigation: the router keeps earlier pages' state (the sign-in page's
+    // last code and spinner among them), and nothing of the signed-in session should survive in memory.
+    window.location.replace("/login");
   }
 
   async function deleteAccount() {
@@ -68,8 +70,7 @@ export function AccountPanel({ initial }: { initial: Me }) {
     try {
       await ownerApi.deleteAccount();
       await signOut().catch(() => {});
-      router.replace("/login?deleted=1");
-      router.refresh();
+      window.location.replace("/login?deleted=1");
     } catch (err) {
       setDeleting(false);
       setDeleteError(errorMessage(err, "Your account wasn't deleted. Try again, or email support@snapreel.video."));
@@ -240,12 +241,15 @@ export function AccountPanel({ initial }: { initial: Me }) {
               spellCheck={false}
               className={`${inputClass.replace("w-full", "w-32")} font-mono uppercase`}
             />
-            <span
-              className="inline-flex h-11 items-center rounded-full px-4 text-[15px] font-semibold"
-              style={isHexColour(colour) ? { background: colour, color: inkFor(colour) } : undefined}
-              aria-hidden="true"
-            >
-              Preview
+            {/* How it looks on a watch page: a progress bar, not a button (it isn't one). */}
+            <span className="flex items-center gap-2 text-[13px] text-text-2" aria-hidden="true">
+              <span className="relative h-1.5 w-16 overflow-hidden rounded-full bg-fill">
+                <span className="absolute inset-y-0 left-0 w-2/3 rounded-full" style={isHexColour(colour) ? { background: colour } : undefined} />
+              </span>
+              <span
+                className="h-3.5 w-3.5 rounded-full shadow-[0_1px_3px_rgb(0_0_0/0.3)]"
+                style={isHexColour(colour) ? { background: colour } : undefined}
+              />
             </span>
             <button
               type="button"
