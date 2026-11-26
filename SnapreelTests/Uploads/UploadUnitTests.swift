@@ -132,4 +132,26 @@ final class UploadUnitTests: XCTestCase {
         progress.totalBytes = 1_800_000_000
         XCTAssertEqual(progress.timeLabel, "About 1 hr 56 min left")
     }
+
+    /// What the share-link sheet says while an upload waits to try again (tester t26-link: "sits at 3%").
+    func testRetryWords() {
+        let now = Date(timeIntervalSince1970: 1_795_000_000)
+        let soon = UploadRetry(reason: .unreachable, at: now.addingTimeInterval(29.2))
+        XCTAssertEqual(UploadText.retryTitle(soon), "Can't reach snapreel.video")
+        XCTAssertEqual(UploadText.retryDetail(soon, now: now), "Trying again in 30 s. Check your connection; what is sent is kept.")
+        let later = UploadRetry(reason: .serverTrouble, at: now.addingTimeInterval(110))
+        XCTAssertEqual(UploadText.retryDetail(later, now: now), "Trying again in 2 min by itself. What is sent is kept.")
+        XCTAssertTrue(UploadText.retryDetail(UploadRetry(reason: .unreachable, at: nil), now: now).hasPrefix("Trying again now"))
+    }
+
+    /// The call-to-action address may be typed without https://; nonsense is refused.
+    func testWebAddress() {
+        XCTAssertEqual(LinkDraft.webAddress("example.com"), "https://example.com")
+        XCTAssertEqual(LinkDraft.webAddress(" https://example.com/book "), "https://example.com/book")
+        XCTAssertEqual(LinkDraft.webAddress("http://cal.example.org/x?y=1"), "http://cal.example.org/x?y=1")
+        XCTAssertNil(LinkDraft.webAddress(""))
+        XCTAssertNil(LinkDraft.webAddress("Book a call"))
+        XCTAssertNil(LinkDraft.webAddress("example"))
+        XCTAssertNil(LinkDraft.webAddress("https://"))
+    }
 }

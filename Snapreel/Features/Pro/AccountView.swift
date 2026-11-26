@@ -39,7 +39,7 @@ struct AccountView: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Your recordings stay on this iPhone and your links keep working. Sign in again to see their views and comments.")
+            Text(signOutMessage)
         }
         .sheet(item: $deleteStep) { step in
             DeleteAccountSheet(initialStep: step, onClose: { deleteStep = nil })
@@ -52,6 +52,15 @@ struct AccountView: View {
             await auth.refreshMe()
             await store.refreshEntitlements()
         }
+    }
+
+    /// Says so when an upload is still going: it waits until this account signs in again.
+    private var signOutMessage: String {
+        let base = "Your recordings stay on this iPhone and your links keep working. Sign in again to see their views and comments."
+        let going = Uploader.shared.jobs.values.filter(\.isActive).count
+        guard going > 0 else { return base }
+        let uploads = going == 1 ? "1 upload is still going. It stops" : "\(going) uploads are still going. They stop"
+        return "\(uploads) now and carry on when you sign in again with this account. " + base
     }
 
     // MARK: Signed out

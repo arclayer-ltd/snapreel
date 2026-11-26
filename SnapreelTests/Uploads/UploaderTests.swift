@@ -18,6 +18,8 @@ final class UploaderTests: XCTestCase {
     private var poster = Data(repeating: 7, count: 120_000)
     private var preview = Data(repeating: 9, count: 400_000)
     private var prepare: ((PrepareRequest, @escaping @MainActor (PrepareUpdate) -> Void) async throws -> Void)?
+    /// Holds every pause (a wait before trying again) until it is set back to false.
+    private var holdsPauses = false
 
     private static let piece = Int(CloudConfig.pieceSize)
 
@@ -34,6 +36,7 @@ final class UploaderTests: XCTestCase {
         finishes = 0
         prepared = 0
         prepare = nil
+        holdsPauses = false
     }
 
     override func tearDown() async throws {
@@ -95,6 +98,7 @@ final class UploaderTests: XCTestCase {
             freeDisk: { 10_000_000_000 },
             now: { self.now },
             sleep: { seconds in
+                while self.holdsPauses { try? await Task.sleep(nanoseconds: 1_000_000) }
                 self.now += seconds
                 self.waited += seconds
                 await Task.yield()
@@ -505,6 +509,66 @@ final class UploaderTests: XCTestCase {
         XCTAssertEqual(uploader.jobs[id]?.stage, .failed)
         XCTAssertGreaterThan(waited, 600)
         XCTAssertLessThan(server.log.count, 200)
+    }
+
+    /// Online but snapreel.video doesn't answer: said as such, with when it tries again, not "Waiting for a connection"
+    /// and not a frozen percentage (tester t26-link).
+    func testAnUnreachableServerIsSaidAsSuch() async {
+        var cut = true
+        server.fault = { operation, _ in
+            guard cut, case .piece = operation else { return nil }
+            return .dropped
+        }
+        holdsPauses = true
+        let uploader = makeUploader()
+        start(uploader)
+        await until("a pause before trying again") { uploader.progress(for: self.id)?.retry != nil }
+        let retry = uploader.progress(for: id)?.retry
+        XCTAssertEqual(retry?.reason, .unreachable)
+        XCTAssertNotNil(retry?.at, "says when")
+        if case .uploading? = uploader.phase(for: id) {} else {
+            XCTFail("online: not 'waiting for a connection': \(String(describing: uploader.phase(for: id)))")
+        }
+        cut = false
+        holdsPauses = false
+        await untilEnded(uploader)
+        expectDone(uploader)
+    }
+
+    func testAServerErrorIsSaidAsSuch() async {
+        var failing = true
+        server.fault = { operation, _ in
+            guard failing, case .piece = operation else { return nil }
+            return .status(503, "busy")
+        }
+        holdsPauses = true
+        let uploader = makeUploader()
+        start(uploader)
+        await until("a pause before trying again") { uploader.progress(for: self.id)?.retry != nil }
+        XCTAssertEqual(uploader.progress(for: id)?.retry?.reason, .serverTrouble)
+        failing = false
+        holdsPauses = false
+        await untilEnded(uploader)
+        expectDone(uploader)
+    }
+
+    /// Before the web copy's size is known, no "42 KB of about 42 KB" (only the poster and preview are known).
+    func testNoSizeBeforeTheVideosEstimate() async {
+        var going: CheckedContinuation<Void, Never>?
+        prepare = { request, update in
+            try self.poster.write(to: request.folder.appendingPathComponent("poster.jpg"))
+            update(.file(.poster, size: Int64(self.poster.count)))
+            await withCheckedContinuation { going = $0 }
+            try self.writeAll(request, update)
+        }
+        let uploader = makeUploader()
+        start(uploader)
+        await until("the poster") { going != nil }
+        XCTAssertEqual(uploader.progress(for: id)?.totalBytes, 0)
+        XCTAssertNil(UploadText.preparingDetail(uploader.progress(for: id)))
+        going?.resume()
+        await untilEnded(uploader)
+        expectDone(uploader)
     }
 
     func testFortyPiecesFailingTogetherAreOneEvent() async {

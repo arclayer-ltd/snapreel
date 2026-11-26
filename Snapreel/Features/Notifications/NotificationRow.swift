@@ -81,7 +81,8 @@ struct NotificationRow: View {
 
     private var spokenLabel: String {
         let state = item.isRead ? "" : "Unread. "
-        return "\(state)\(item.title). \(item.body). \(Format.age(item.createdAt))."
+        let body = item.body.hasSuffix(".") || item.body.hasSuffix("!") || item.body.hasSuffix("?") ? item.body : item.body + "."
+        return "\(state)\(item.title). \(body) \(Format.age(item.createdAt))."
     }
 
     private var spokenHint: String {

@@ -21,6 +21,26 @@ struct LinkSettingsView: View {
     @State private var error: String?
     @State private var confirmsStop = false
     @State private var isStopping = false
+    @State private var confirmsDiscard = false
+    /// A field that can't be saved as it is, with why: shown under that field.
+    @State private var problem: Problem?
+    @State private var toast: ToastMessage?
+    @FocusState private var focus: Field?
+
+    /// The fields that take typing, also the places the form scrolls to.
+    enum Field: Hashable {
+        case password
+        case buttonText
+        case address
+    }
+
+    private struct Problem: Equatable {
+        var field: Field
+        var message: String
+    }
+
+    /// The top of the form, where an error from snapreel.video shows.
+    private static let topID = "top"
 
     private enum Loading: Equatable {
         case waiting
@@ -33,6 +53,7 @@ struct LinkSettingsView: View {
 
     private var link: CloudLink? { library.link(for: videoID) }
     private var isPro: Bool { auth.isPro }
+    private var hasChanges: Bool { draft != nil && draft != original }
 
     var body: some View {
         // A ZStack, not a Group: a Group hands `.task` and `.onAppear` to whichever branch is showing. In this sheet, on
@@ -63,8 +84,10 @@ struct LinkSettingsView: View {
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
                 if let onClose {
-                    Button("Close") { onClose() }
-                        .foregroundStyle(Color.srTextSecondary)
+                    Button("Close") {
+                        if hasChanges { confirmsDiscard = true } else { onClose() }
+                    }
+                    .foregroundStyle(Color.srTextSecondary)
                 }
             }
             ToolbarItem(placement: .confirmationAction) {
@@ -74,11 +97,21 @@ struct LinkSettingsView: View {
                     Button("Save") { save() }
                         .font(.srHeadline)
                         .foregroundStyle(Color.srRed)
-                        .disabled(draft == original || draft == nil)
-                        .opacity(draft == original || draft == nil ? 0.4 : 1)
+                        .disabled(!hasChanges)
+                        .opacity(hasChanges ? 1 : 0.4)
+                        .accessibilityHint(hasChanges ? "" : "Nothing changed yet")
                 }
             }
         }
+        .confirmationDialog("Discard your changes?", isPresented: $confirmsDiscard, titleVisibility: .visible) {
+            Button("Discard changes", role: .destructive) { onClose?() }
+            Button("Keep editing", role: .cancel) {}
+        } message: {
+            Text("The link keeps the settings it had.")
+        }
+        // A swipe down doesn't throw changes away either: Close asks first.
+        .interactiveDismissDisabled(hasChanges)
+        .toast($toast, bottomInset: Space.xl)
         .confirmationDialog("Stop sharing this link?", isPresented: $confirmsStop, titleVisibility: .visible) {
             Button("Stop sharing", role: .destructive) { stopSharing() }
             Button("Keep sharing", role: .cancel) {}
@@ -93,26 +126,57 @@ struct LinkSettingsView: View {
     // MARK: Form
 
     private func form(_ link: CloudLink) -> some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: Space.xl) {
-                linkHeader(link)
-                accessGroup
-                expiryGroup
-                viewersGroup
-                callToActionGroup
-                if let error {
-                    Label(error, systemImage: "exclamationmark.circle.fill")
-                        .font(.srFootnote)
-                        .foregroundStyle(Color.srRedText)
-                        .fixedSize(horizontal: false, vertical: true)
+        ScrollViewReader { proxy in
+            ScrollView {
+                VStack(alignment: .leading, spacing: Space.xl) {
+                    linkHeader(link)
+                        .id(Self.topID)
+                    if let error {
+                        Label(error, systemImage: "exclamationmark.circle.fill")
+                            .font(.srFootnote)
+                            .foregroundStyle(Color.srRedText)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    accessGroup
+                    expiryGroup
+                    viewersGroup
+                    callToActionGroup
+                    stopButton
                 }
-                stopButton
+                .padding(.horizontal, Space.gutter)
+                .padding(.top, Space.s)
+                .padding(.bottom, Space.xxl)
             }
-            .padding(.horizontal, Space.gutter)
-            .padding(.top, Space.s)
-            .padding(.bottom, Space.xxl)
+            .scrollDismissesKeyboard(.interactively)
+            .onChange(of: focus) { field in
+                guard let field else { return }
+                // After the keyboard is up, so the field ends above it.
+                Task { @MainActor in
+                    try? await Task.sleep(nanoseconds: 350_000_000)
+                    withAnimation(Motion.standard) { proxy.scrollTo(field, anchor: .center) }
+                }
+            }
+            .onChange(of: problem) { problem in
+                guard let problem else { return }
+                withAnimation(Motion.standard) { proxy.scrollTo(problem.field, anchor: .center) }
+            }
+            .onChange(of: error) { error in
+                guard error != nil else { return }
+                withAnimation(Motion.standard) { proxy.scrollTo(Self.topID, anchor: .top) }
+            }
         }
-        .scrollDismissesKeyboard(.interactively)
+    }
+
+    /// Why a field can't be saved, under it.
+    @ViewBuilder private func problemText(_ field: Field) -> some View {
+        if let problem, problem.field == field {
+            Label(problem.message, systemImage: "exclamationmark.circle.fill")
+                .font(.srFootnote)
+                .foregroundStyle(Color.srRedText)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, Space.m)
+                .padding(.bottom, Space.s)
+        }
     }
 
     private func linkHeader(_ link: CloudLink) -> some View {
@@ -150,15 +214,30 @@ struct LinkSettingsView: View {
             }
             if draft?.access == .password {
                 SettingsDivider()
-                HStack(spacing: Space.s) {
-                    IconTile(systemName: "key.fill")
-                    SecureField(draft?.hasPassword == true ? "Password set. Type to change it" : "Choose a password",
-                                text: binding(\.password))
-                        .font(.srBody)
-                        .textContentType(.newPassword)
+                VStack(alignment: .leading, spacing: 0) {
+                    HStack(spacing: Space.s) {
+                        IconTile(systemName: "key.fill")
+                            .accessibilityHidden(true)
+                        VStack(alignment: .leading, spacing: 2) {
+                            SecureField(draft?.hasPassword == true ? "Password set. Type to change it" : "Choose a password",
+                                        text: binding(\.password))
+                                .font(.srBody)
+                                .textContentType(.newPassword)
+                                .focused($focus, equals: .password)
+                                .submitLabel(.done)
+                                .accessibilityLabel("Password")
+                                .accessibilityHint("At least 4 characters")
+                            Text("At least 4 characters")
+                                .font(.srCaption)
+                                .foregroundStyle(Color.srTextSecondary)
+                                .accessibilityHidden(true)
+                        }
+                    }
+                    .padding(.horizontal, Space.m)
+                    .padding(.vertical, Space.s)
+                    problemText(.password)
                 }
-                .padding(.horizontal, Space.m)
-                .padding(.vertical, Space.s)
+                .id(Field.password)
             }
         }
     }
@@ -200,9 +279,11 @@ struct LinkSettingsView: View {
             toggleRow("Show a button", systemImage: "hand.tap.fill", value: \.ctaOn, pro: .callToAction)
             if draft?.ctaOn == true {
                 SettingsDivider()
-                field("Button text", text: binding(\.ctaLabel), systemImage: "textformat")
+                field(.buttonText, label: "Button text", placeholder: "Book a call", text: binding(\.ctaLabel),
+                      systemImage: "textformat")
                 SettingsDivider()
-                field("https://", text: binding(\.ctaURL), systemImage: "globe", isURL: true)
+                field(.address, label: "Web address", placeholder: "https://example.com", text: binding(\.ctaURL),
+                      systemImage: "globe", isURL: true)
             }
         }
     }
@@ -259,12 +340,15 @@ struct LinkSettingsView: View {
                            pro: ProFeature? = nil) -> some View {
         HStack(spacing: Space.s) {
             IconTile(systemName: systemImage)
+                .accessibilityHidden(true)
+            // The switch carries the name; the text beside it isn't read a second time.
             Text(title)
                 .font(.srBody)
                 .foregroundStyle(Color.srText)
-            if pro != nil && !isPro { ProBadge(compact: true) }
+                .accessibilityHidden(true)
+            if pro != nil && !isPro { ProBadge(compact: true).accessibilityHidden(true) }
             Spacer(minLength: Space.xs)
-            Toggle(title, isOn: Binding(get: { draft?[keyPath: value] ?? false },
+            Toggle(pro != nil && !isPro ? "\(title), Snapreel Pro" : title, isOn: Binding(get: { draft?[keyPath: value] ?? false },
                                         set: { newValue in
                                             if let pro, !isPro, newValue {
                                                 ProPresenter.paywall(.feature(pro))
@@ -279,17 +363,35 @@ struct LinkSettingsView: View {
         .padding(.vertical, Space.xs)
     }
 
-    private func field(_ placeholder: String, text: Binding<String>, systemImage: String, isURL: Bool = false) -> some View {
-        HStack(spacing: Space.s) {
-            IconTile(systemName: systemImage)
-            TextField(placeholder, text: text)
-                .font(.srBody)
-                .keyboardType(isURL ? .URL : .default)
-                .textInputAutocapitalization(isURL ? .never : .sentences)
-                .autocorrectionDisabled(isURL)
+    /// A text field with its name above it, so the name stays when typing starts, and its problem under it.
+    private func field(_ field: Field, label: String, placeholder: String, text: Binding<String>, systemImage: String,
+                       isURL: Bool = false) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: Space.s) {
+                IconTile(systemName: systemImage)
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(label)
+                        .font(.srCaption)
+                        .foregroundStyle(Color.srTextSecondary)
+                        .accessibilityHidden(true)
+                    TextField(placeholder, text: text)
+                        .font(.srBody)
+                        .keyboardType(isURL ? .URL : .default)
+                        .textContentType(isURL ? .URL : nil)
+                        .textInputAutocapitalization(isURL ? .never : .sentences)
+                        .autocorrectionDisabled(isURL)
+                        .focused($focus, equals: field)
+                        .submitLabel(field == .buttonText ? .next : .done)
+                        .onSubmit { if field == .buttonText { focus = .address } }
+                        .accessibilityLabel(label)
+                }
+            }
+            .padding(.horizontal, Space.m)
+            .padding(.vertical, Space.s)
+            problemText(field)
         }
-        .padding(.horizontal, Space.m)
-        .padding(.vertical, Space.s)
+        .id(field)
     }
 
     private func binding(_ keyPath: WritableKeyPath<LinkDraft, String>) -> Binding<String> {
@@ -333,28 +435,38 @@ struct LinkSettingsView: View {
     }
 
     private func save() {
-        guard let draft, let original else { return }
-        if draft.access == .password && !draft.hasPassword && draft.password.count < 4 {
-            error = "Choose a password of at least 4 characters."
-            return
-        }
-        if draft.ctaOn && (draft.ctaLabel.trimmingCharacters(in: .whitespaces).isEmpty || URL(string: draft.ctaURL)?.scheme == nil) {
-            error = "Give the button some text and a full web address (starting https://)."
-            return
-        }
+        guard var draft, let original else { return }
         error = nil
+        problem = nil
+        if draft.access == .password && ((!draft.hasPassword && draft.password.count < 4)
+                                         || (!draft.password.isEmpty && draft.password.count < 4)) {
+            return refuse(.password, "Choose a password of at least 4 characters.")
+        }
+        if draft.ctaOn {
+            if draft.ctaLabel.trimmingCharacters(in: .whitespaces).isEmpty {
+                return refuse(.buttonText, "Give the button some text, for example \u{201C}Book a call\u{201D}.")
+            }
+            guard let address = LinkDraft.webAddress(draft.ctaURL) else {
+                return refuse(.address, "Type a web address, for example example.com/book.")
+            }
+            draft.ctaURL = address
+            self.draft = draft
+        }
+        focus = nil
         isSaving = true
         let change = draft.changes(from: original)
+        let sent = draft
         Task { @MainActor in
             do {
                 try await ShareLinks.shared.update(videoID, change)
                 Haptics.success()
-                var saved = draft
+                var saved = sent
                 if !saved.password.isEmpty { saved.hasPassword = true }
                 saved.password = ""
                 self.draft = saved
                 self.original = saved
-                AppEnvironment.shared.router.showToast("Link settings saved", systemImage: "checkmark.circle.fill")
+                // Here, not on the screen underneath (the sheet would cover it).
+                toast = ToastMessage(text: "Link settings saved", systemImage: "checkmark.circle.fill")
             } catch CloudError.limit {
                 ProPresenter.paywall(.feature(.password))
             } catch {
@@ -362,6 +474,12 @@ struct LinkSettingsView: View {
             }
             isSaving = false
         }
+    }
+
+    private func refuse(_ field: Field, _ message: String) {
+        Haptics.error()
+        problem = Problem(field: field, message: message)
+        focus = field
     }
 
     private func stopSharing() {
@@ -444,6 +562,16 @@ struct LinkDraft: Equatable {
         ctaOn = detail.cta != nil
         ctaLabel = detail.cta?.label ?? ""
         ctaURL = detail.cta?.url ?? ""
+    }
+
+    /// "example.com/book" as "https://example.com/book"; nil when it can't be a web address.
+    static func webAddress(_ typed: String) -> String? {
+        var text = typed.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty, !text.contains(" ") else { return nil }
+        if !text.lowercased().hasPrefix("http://") && !text.lowercased().hasPrefix("https://") { text = "https://" + text }
+        guard let url = URL(string: text), let host = url.host, host.contains("."), !host.hasSuffix("."),
+              !host.hasPrefix(".") else { return nil }
+        return text
     }
 
     func changes(from original: LinkDraft) -> UpdateVideoRequest {

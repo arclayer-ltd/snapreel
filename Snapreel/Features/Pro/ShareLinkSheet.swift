@@ -27,6 +27,13 @@ struct ShareLinkSheet: View {
                     }
                     statusCard
                     if link != nil {
+                        if case .failed = state {
+                            // The link still works for sharing, but says so: nothing plays yet.
+                            Text("Anyone who opens the link now sees that the video is still uploading.")
+                                .font(.srFootnote)
+                                .foregroundStyle(Color.srTextSecondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
                         actions
                     }
                 }
@@ -69,12 +76,13 @@ struct ShareLinkSheet: View {
         }
     }
 
+    /// "Link copied" only right after a copy and while the upload hasn't stopped; opened to check on it, it says so.
     private var title: String {
         switch state {
         case .creating: return "Making your link"
-        case .failed: return link == nil ? "No link yet" : "Link copied"
+        case .failed: return link == nil ? "No link yet" : "Upload stopped"
         case .notShared: return "Share a link"
-        default: return "Link copied"
+        default: return links.wasJustCopied(videoID) ? "Link copied" : "Your link"
         }
     }
 
@@ -102,8 +110,22 @@ struct ShareLinkSheet: View {
         var parts: [String] = []
         if let duration = video?.duration ?? link?.durationS { parts.append(Format.clock(duration)) }
         if let link, state == .ready { parts.append(ProText.views(link.views)) }
-        parts.append(AuthService.shared.isPro ? "1080p" : "720p")
+        if let quality { parts.append(quality) }
         return parts.joined(separator: " · ")
+    }
+
+    /// The web copy's size: the recording's own when it is smaller than the plan's, and on Free what Pro would send.
+    private var quality: String? {
+        guard let video else { return AuthService.shared.isPro ? "1080p" : "720p" }
+        guard !video.isAudioOnly else { return nil }
+        func lines(longest: Int) -> Int {
+            let long = max(video.pixelWidth, video.pixelHeight), short = min(video.pixelWidth, video.pixelHeight)
+            guard long > longest else { return short }
+            return Int((Double(short) * Double(longest) / Double(long)).rounded())
+        }
+        let free = lines(longest: 1_280), pro = lines(longest: 1_920)
+        if AuthService.shared.isPro { return "\(pro)p" }
+        return pro > free ? "\(free)p (\(pro)p with Pro)" : "\(free)p"
     }
 
     private func linkField(_ link: CloudLink) -> some View {
@@ -163,12 +185,12 @@ struct ShareLinkSheet: View {
         case .preparing:
             let progress = uploader.progress(for: videoID)
             progressCard(title: UploadText.preparing(progress), fraction: progress?.prepared,
-                         detail: UploadText.preparingDetail(progress),
+                         detail: UploadText.preparingDetail(progress), retry: progress?.retry,
                          message: "Making a web copy. Keep Snapreel open until this part is done. Paste the link now: it plays once the upload is done.")
         case .uploading(let fraction):
             let progress = uploader.progress(for: videoID)
             progressCard(title: "Uploading \(Int((fraction * 100).rounded()))%", fraction: fraction,
-                         detail: UploadText.uploadingDetail(progress),
+                         detail: UploadText.uploadingDetail(progress), retry: progress?.retry,
                          message: "You can leave Snapreel or lock your iPhone: the upload carries on. The link plays once it's done.")
         case .waitingForNetwork(let fraction):
             VStack(alignment: .leading, spacing: Space.s) {
@@ -194,6 +216,10 @@ struct ShareLinkSheet: View {
             VStack(alignment: .leading, spacing: Space.s) {
                 statusRow(systemImage: "exclamationmark.triangle.fill", tint: .srRedText,
                           title: link == nil ? "Couldn't make the link" : "The upload stopped", message: message)
+                Text(UploadText.failureHelp)
+                    .font(.srFootnote)
+                    .foregroundStyle(Color.srTextSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
                 // Nothing to retry while links aren't switched on in this build.
                 if link != nil || CloudConfig.isConfigured {
                     Button {
@@ -210,8 +236,17 @@ struct ShareLinkSheet: View {
         }
     }
 
-    private func progressCard(title: String, fraction: Double?, detail: String? = nil, message: String) -> some View {
+    private func progressCard(title: String, fraction: Double?, detail: String? = nil, retry: UploadRetry? = nil,
+                              message: String) -> some View {
         VStack(alignment: .leading, spacing: Space.s) {
+            if let retry {
+                // Said first: the numbers below aren't moving while Snapreel waits.
+                TimelineView(.periodic(from: .now, by: 1)) { context in
+                    statusRow(systemImage: retry.reason == .unreachable ? "wifi.exclamationmark" : "exclamationmark.icloud.fill",
+                              tint: .srRedText, title: UploadText.retryTitle(retry),
+                              message: UploadText.retryDetail(retry, now: context.date))
+                }
+            }
             HStack(spacing: Space.xs) {
                 Image(systemName: "arrow.up.circle.fill")
                     .foregroundStyle(Color.srRed)
@@ -228,10 +263,12 @@ struct ShareLinkSheet: View {
                     .foregroundStyle(Color.srText)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            Text(message)
-                .font(.srFootnote)
-                .foregroundStyle(Color.srTextSecondary)
-                .fixedSize(horizontal: false, vertical: true)
+            if retry == nil {
+                Text(message)
+                    .font(.srFootnote)
+                    .foregroundStyle(Color.srTextSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
         .padding(Space.m)
         .srCard()
