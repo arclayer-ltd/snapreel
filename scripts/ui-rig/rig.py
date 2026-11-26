@@ -243,6 +243,7 @@ def send(sid, steps, opts=None, limit=None):
         die("there is no session called %s (it may have ended); open sessions: %s" % (sid, ", ".join(known_sessions()) or "none"))
     w.push_fast(in_ref, {"req.json": json.dumps(request).encode()})
     limit = limit or 200 + sum(step_limit(s) for s in steps)
+    title, checked = recall(sid).get("title"), time.time()
     while True:
         answer = None
         for ref, sha in w.refs(out_ref + "/").items():
@@ -262,6 +263,19 @@ def send(sid, steps, opts=None, limit=None):
                     die("session %s is over: %s" % (sid, status.get("note")))
         if answer:
             break
+        if title and time.time() - checked > 30:
+            # The Mac's job removes its branch when it ends: no branch, no answer coming.
+            checked = time.time()
+            try:
+                branch = "refs/heads/ui-rig/" + title
+                gone = branch not in w.refs(branch)
+            except WireError:
+                gone = False
+            if gone:
+                status = read_status(w, sid) or {}
+                remember(sid, over=True)
+                die("session %s is over: its Mac stopped without answering (the GitHub job ended). Last word from it: %s" % (
+                    sid, status.get("note") or "none"))
         if time.time() - started > limit:
             status = read_status(w, sid) or {}
             if status.get("state") in ("ended", "failed"):
@@ -319,6 +333,8 @@ def show(answer, saved, took, quiet=False):
         state.append("the app answered in %.1f s" % answer["answer_time"])
     if answer.get("slow_mac"):
         state.append("the Mac was slow %d time(s)" % answer["slow_mac"])
+    if answer.get("mac"):
+        state.append("slow answer; " + answer["mac"])
     if answer.get("crashes"):
         state.append("%d crash(es) so far" % answer["crashes"])
     if answer.get("hangs"):

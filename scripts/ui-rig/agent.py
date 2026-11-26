@@ -21,7 +21,7 @@ import traceback
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from gitwire import Wire, WireError  # noqa: E402
-from ios_driver import Hang, IOSDriver, StepError  # noqa: E402
+from ios_driver import Hang, IOSDriver, StepError, mac_health  # noqa: E402
 
 HELP = ("tap doubletap press drag swipe scrollto pinch rotate type key clear back home open reopen background switcher "
         "tray orient theme textsize contrast allow deny ask photo launch kill wait waitfor gone shot full zoom tree video "
@@ -185,9 +185,8 @@ class Steps:
     def do_open(self, a):
         self._need(a, 1, "open https://... | open photos|safari|settings|files|snapreel")
         if ":" in a[0]:
-            self.d.open_url(a[0])
-        else:
-            self.d.open_app(a[0])
+            return self.d.open_url(a[0]) or "opened " + a[0]
+        self.d.open_app(a[0])
         return "opened " + a[0]
 
     def do_reopen(self, a):
@@ -471,6 +470,10 @@ class Agent:
             except Hang as error:
                 entry.update(ok=False, text="the app did not answer (%s)" % error)
                 self._report_hang(entry, 'during "%s"' % line)
+            except subprocess.TimeoutExpired as error:  # the phone (or the Mac under it) is slow, not the rig broken
+                entry.update(ok=False, text="the phone did not finish `%s` in %d s; %s. Look again; if this keeps "
+                             "happening, the Mac is overloaded: stop the session and start another." % (
+                                 " ".join(map(str, error.cmd[2:3])), error.timeout, mac_health() or "the Mac is busy"))
             except Exception as error:  # the rig's own fault; say so instead of dying
                 entry.update(ok=False, text="rig error: %s: %s" % (type(error).__name__, error), trace=traceback.format_exc()[-1500:])
             entry["seconds"] = round(time.time() - started, 1)
@@ -589,18 +592,26 @@ class Live:
         os.execv(sys.executable, [sys.executable] + args + ["--resume"])
 
     def watchdog(self, agent, request, deadline, idle_minutes):
-        """If the steps take far too long, says where they got stuck and starts over."""
+        """If the steps take far too long, says where they got stuck and starts over. Starting the touch driver
+        again gets its own time (up to 5 minutes) first: starting over would only begin that again."""
         limit = 100 + sum(step_limit(s) for s in request["steps"])
         me = threading.main_thread().ident
+        guard = Guard()
 
         def bite():
+            if guard.off:
+                return
+            since = getattr(agent.d, "restarting", None)
+            if since and time.time() - since < 300:
+                guard.arm(30, bite)
+                return
             frame = sys._current_frames().get(me)
             where = [l.strip().replace("\n", " | ") for l in traceback.format_stack(frame)[-6:]]
             print("stuck:\n" + "\n".join(where), flush=True)
             answer = {"id": request["id"], "ends": deadline, "size": list(agent.d.size), "results": [
                 {"step": "; ".join(request["steps"]), "ok": False,
                  "text": "stuck for %d s, so the rig started its own side again; the app was left as it is. Look again, and "
-                         "`launch` if it does not answer. (%s)" % (limit, where[-1][:200])}]}
+                         "`launch` if it does not answer. %s (%s)" % (limit, mac_health(), where[-1][:200])}]}
             try:
                 fresh = Wire(os.environ["GITHUB_REPOSITORY"], os.environ["GITHUB_TOKEN"])
                 fresh.push_fast(self.out_ref, {"res.json": json.dumps(answer).encode()})
@@ -608,10 +619,8 @@ class Live:
                 print("not sent: %s" % error, flush=True)
             self.start_over(agent, deadline, idle_minutes)
 
-        timer = threading.Timer(limit, bite)
-        timer.daemon = True
-        timer.start()
-        return timer
+        guard.arm(limit, bite)
+        return guard
 
     def serve(self, agent, minutes, idle_minutes):
         deadline, last_seen = time.time() + minutes * 60, time.time()
@@ -658,6 +667,11 @@ class Live:
                         type(error).__name__, str(error)[:300])}], "size": list(agent.d.size)}, {}
                 if guard:
                     guard.cancel()
+                took = time.time() - got
+                health = mac_health() if took > 45 else ""
+                print("[%s] answered in %.0f s%s" % (self.sid, took, "; " + health if health else ""), flush=True)
+                if health:
+                    answer["mac"] = health
                 answer.update(id=request["id"], ends=deadline, waited=round(got - request.get("sent", got), 1), wire=self.wire.notes)
                 self.wire.notes = []
                 files = dict(files)
@@ -670,6 +684,24 @@ class Live:
             else:
                 quiet = time.time() - last_seen
                 time.sleep(0.3 if quiet < 60 else 1.0 if quiet < 300 else 2.5)
+
+
+class Guard:
+    """A timer that can be set again from its own callback and still be called off."""
+
+    def __init__(self):
+        self.off, self.timer = False, None
+
+    def arm(self, seconds, callback):
+        if not self.off:
+            self.timer = threading.Timer(seconds, callback)
+            self.timer.daemon = True
+            self.timer.start()
+
+    def cancel(self):
+        self.off = True
+        if self.timer:
+            self.timer.cancel()
 
 
 def batch(agent, script, out, opts):
@@ -815,6 +847,11 @@ def main():
         why, code = "the rig failed: %s: %s" % (type(error).__name__, error), 1
     finally:
         live.status(why, "failed" if code else "ended")
+        try:
+            with open(os.path.join(args.work, "ended"), "w") as f:
+                f.write(why + "\n")  # the workflow tells a session that ended from one that vanished
+        except OSError:
+            pass
         driver.stop()
     if code and args.kind == "phone":
         with open(os.path.join(os.path.dirname(os.path.abspath(args.work)), "failed.txt"), "a") as f:

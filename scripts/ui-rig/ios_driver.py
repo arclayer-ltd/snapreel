@@ -91,6 +91,25 @@ def simctl(*args, **kw):
     return run("xcrun", "simctl", *args, **kw)
 
 
+def mac_health():
+    """One line on how loaded this computer is, for answers that came slowly ("" when it cannot tell)."""
+    try:
+        parts = ["load %.0f on %d cores" % (os.getloadavg()[0], os.cpu_count() or 1)]
+    except OSError:
+        return ""
+    try:
+        free = subprocess.run(["sysctl", "-n", "kern.memorystatus_level"], capture_output=True, text=True, timeout=5).stdout.strip()
+        if free.isdigit():
+            parts.append("%s%% of its memory free" % free)
+        swap = subprocess.run(["sysctl", "-n", "vm.swapusage"], capture_output=True, text=True, timeout=5).stdout
+        used = re.search(r"used = ([\d.]+)M", swap)
+        if used and float(used.group(1)) > 200:
+            parts.append("%.1f GB swapped to disk" % (float(used.group(1)) / 1024))
+    except (OSError, subprocess.SubprocessError):
+        pass
+    return "the Mac: " + ", ".join(parts)
+
+
 class IOSDriver:
     kind = "phone"
 
@@ -113,6 +132,9 @@ class IOSDriver:
         self.conn = None
         self.wda_stuck = False  # the touch driver is still waiting for a hung app
         self.ocr, self.ocr_used, self.no_ocr, self.words = None, False, False, []
+        self.ocr_late, self.ocr_warm, self.ocr_rest = 0, False, 0.0  # answers still to come; first answer in; skip until
+        self.opening = None     # an `openurl` the phone has not finished
+        self.restarting = None  # since when the touch driver is being started again
         self.photos_ready = False
         self.preloaded, self.restored = set(), False
         self.slow_mac = 0       # how often the Mac, not the app, was the slow one
@@ -133,6 +155,7 @@ class IOSDriver:
         self.status("starting the touch driver")
         self._start_wda()
         self._warm_up()
+        self._ocr_warm_up()
 
     def state(self):
         return {k: getattr(self, k) for k in ("udid", "device", "ios", "size", "pid", "expected_gone", "app", "crashes", "hangs",
@@ -151,9 +174,10 @@ class IOSDriver:
             self._drop()
             try:
                 self._start_wda()
-            except StepError as error:
+            except (StepError, subprocess.SubprocessError) as error:
                 print("the touch driver is not back yet: %s" % error, flush=True)
                 self.session, self.wda_stuck = self.session or "none", True
+        self._ocr_warm_up()
 
     def _trust(self):
         """The practice server's certificate (made on this runner a minute ago)."""
@@ -312,11 +336,18 @@ class IOSDriver:
 
     def _start_wda(self):
         env = dict(os.environ, SIMCTL_CHILD_USE_PORT=str(self.port), SIMCTL_CHILD_MJPEG_SERVER_PORT=str(self.port + 1000))
-        problem = ""
         again = self.session is not None  # it ran before: do not spend minutes on it now
         if again:
             # One that waits for a hung app does not even let itself be closed.
             run("pkill", "-9", "-f", "Devices/%s/.*WebDriverAgentRunner" % self.udid, check=False)
+            self.restarting = time.time()  # the watchdog gives this its own time
+        try:
+            self._launch_wda(env, again)
+        finally:
+            self.restarting = None
+
+    def _launch_wda(self, env, again):
+        problem = ""
         for attempt in range(2 if again else 4):
             try:
                 out = subprocess.run(["xcrun", "simctl", "launch", "--terminate-running-process",
@@ -641,31 +672,74 @@ class IOSDriver:
             hidden -= keep
         return hidden
 
-    def _read_words(self):
-        """The words in the current picture, as (lower-case text, x, y, width, height) in points; None without them."""
+    def _ocr_start(self):
+        """Starts the word reader (Apple's Vision, on the Mac) unless it runs."""
+        if self.ocr is not None and self.ocr.poll() is None:
+            return
+        self.ocr, self.ocr_late, self.ocr_warm = None, 0, False
+        tool = self.opt.get("ocr") or os.path.join(os.environ.get("W", "/nonexistent"), "ocr")
+        if not os.path.exists(tool):
+            if self.no_ocr:
+                return
+            self.no_ocr = True  # one try
+            source = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ocr.swift")
+            run("swiftc", "-O", source, "-o", tool, timeout=240)
+        self.ocr = subprocess.Popen([tool], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, bufsize=1)
+
+    def _ocr_warm_up(self):
+        """Gives the reader a first picture now, so the tester's first look does not wait for Vision to load."""
         try:
+            self._ocr_start()
+            if self.ocr is not None and not self.ocr_warm and not self.ocr_late:
+                path = os.path.join(self.work, "raw-warm.jpg")
+                self._raw_shot(path)
+                self.ocr.stdin.write(path + "\n")
+                self.ocr.stdin.flush()
+                self.ocr_late = 1
+        except (OSError, StepError, Hang, subprocess.SubprocessError) as error:
+            print("the word reader did not start: %s" % error, flush=True)
+
+    def _read_words(self):
+        """The words in the current picture, as (lower-case text, x, y, width, height) in points; None without them.
+        On a slow Mac the reader's first answer can take half a minute: a late answer is not a dead reader, so it is
+        kept (the late answer is skipped when it comes) and left alone for a minute instead of being started again."""
+        if time.time() < self.ocr_rest:
+            return None
+        patience = 10 if self.ocr_warm else 45
+        try:
+            self._ocr_start()
             if self.ocr is None:
-                tool = self.opt.get("ocr") or os.path.join(os.environ.get("W", "/nonexistent"), "ocr")
-                if not os.path.exists(tool):
-                    if self.no_ocr:
-                        return None
-                    self.no_ocr = True  # one try
-                    source = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ocr.swift")
-                    run("swiftc", "-O", source, "-o", tool, timeout=240)
-                self.ocr = subprocess.Popen([tool], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, bufsize=1)
+                return None
+            while self.ocr_late and select.select([self.ocr.stdout], [], [], 0)[0]:
+                if not self.ocr.stdout.readline():
+                    raise OSError("the reader stopped")
+                self.ocr_late -= 1
             path = os.path.join(self.work, "raw-words.jpg")
             self._raw_shot(path)
             self.ocr.stdin.write(path + "\n")
             self.ocr.stdin.flush()
-            if not select.select([self.ocr.stdout], [], [], 8)[0]:
-                raise OSError("no answer")
+            end = time.time() + patience
+            while True:
+                left = end - time.time()
+                if left <= 0 or not select.select([self.ocr.stdout], [], [], left)[0]:
+                    self.ocr_late += 1
+                    raise OSError("no answer in %d s" % patience)
+                line = self.ocr.stdout.readline()
+                if not line:
+                    raise OSError("the reader stopped")
+                if self.ocr_late:
+                    self.ocr_late -= 1  # an earlier picture's answer
+                    continue
+                break
+            self.ocr_warm = True
             width, height = self.size
-            return [(t.lower(), x * width, y * height, w * width, h * height) for t, x, y, w, h in json.loads(self.ocr.stdout.readline())]
+            return [(t.lower(), x * width, y * height, w * width, h * height) for t, x, y, w, h in json.loads(line)]
         except (OSError, ValueError, StepError, Hang) as error:
-            print("words could not be read: %s" % error, flush=True)
-            if self.ocr is not None:
+            print("words could not be read: %s%s" % (error, "; " + mac_health() if "no answer" in str(error) else ""), flush=True)
+            self.ocr_rest = time.time() + 60
+            if self.ocr is not None and (self.ocr.poll() is not None or self.ocr_late > 3 or "no answer" not in str(error)):
                 self.ocr.kill()
-            self.ocr = None
+                self.ocr, self.ocr_late, self.ocr_warm = None, 0, False
             return None
 
     def tree_lines(self, everything=False):
@@ -959,11 +1033,82 @@ class IOSDriver:
         simctl("terminate", self.udid, BUNDLE, check=False)
 
     def open_url(self, url):
+        """Opens a link the way iOS does: in the app that claims it (Snapreel for snapreel.video/v/...), or in Safari.
+        `simctl openurl` waits for the phone to say it is done, which a busy phone can leave for minutes, so after
+        20 s the rig carries on and lets it finish by itself (or gives up on it after 2 minutes)."""
         if not re.match(r"^[a-z][a-z0-9+.-]*:", url):
             raise StepError("give a full address, for example https://... or snapreel://...")
-        simctl("openurl", self.udid, url, timeout=60)
+        self._reap_open(force=True)
+        begun = time.time()
+        self.opening = (subprocess.Popen(["xcrun", "simctl", "openurl", self.udid, url], stdout=subprocess.DEVNULL,
+                                         stderr=subprocess.PIPE, text=True), begun)
+        note = ""
+        try:
+            _, err = self.opening[0].communicate(timeout=20)
+            if self.opening[0].returncode:
+                self.opening = None
+                raise StepError("the phone could not open %s: %s" % (url, (err or "").strip()[-200:]))
+            self.opening = None
+        except subprocess.TimeoutExpired:
+            note = ("; the phone has not said it is done after 20 s, so look at the screen (it may still open, or be "
+                    "asking something). %s" % mac_health())
         time.sleep(1.5)
         self._refresh_pid()
+        front = self.front_app()
+        return "asked the phone to open %s%s%s" % (url, "; in front now: " + front if front else "", note)
+
+    def _reap_open(self, force=False):
+        """Ends an `openurl` that is still waiting once it has had its time (or when another one starts)."""
+        if self.opening is None:
+            return
+        process, begun = self.opening
+        if process.poll() is not None:
+            self.opening = None
+        elif force or time.time() - begun > 120:
+            process.kill()
+            self.opening = None
+
+    def front_app(self):
+        """Which app is in front, as a person would name it ("" if the touch driver cannot tell)."""
+        if self.hung or self.wda_stuck:
+            return ""
+        try:
+            info = self._http("GET", "/wda/activeAppInfo", timeout=10).get("value") or {}
+        except (Hang, StepError, OSError, http.client.HTTPException, ValueError):
+            return ""
+        bundle = info.get("bundleId", "")
+        names = {BUNDLE: "Snapreel", "com.apple.mobilesafari": "Safari", "com.apple.springboard": "the Home screen"}
+        names.update({value: key.capitalize() for key, value in SYSTEM_APPS.items()})
+        return names.get(bundle, bundle)
+
+    def clipboard(self, text=None):
+        """The phone's clipboard: what the app copied (Copy link), or put text there to paste.
+        `simctl pbpaste` waits for the phone's pasteboard service; when that is slow the touch driver, which runs
+        inside the phone, reads it instead."""
+        try:
+            if text is not None:
+                subprocess.run(["xcrun", "simctl", "pbcopy", self.udid], input=text, text=True, timeout=30,
+                               capture_output=True, check=True)
+                return "put that on the clipboard"
+            out = subprocess.run(["xcrun", "simctl", "pbpaste", self.udid], capture_output=True, text=True, timeout=30,
+                                 errors="replace")
+            if out.returncode == 0:
+                return "clipboard: " + (out.stdout.strip() or "(empty)")
+            problem = (out.stderr or "").strip()[-200:]
+        except subprocess.TimeoutExpired:
+            problem = "no answer in 30 s"
+        except subprocess.CalledProcessError as error:
+            problem = (error.stderr or "").strip()[-200:]
+        print("simctl clipboard: %s" % problem, flush=True)
+        try:
+            if text is not None:
+                self._wda("POST", "/wda/setPasteboard", {"content": base64.b64encode(text.encode()).decode(),
+                                                         "contentType": "plaintext"})
+                return "put that on the clipboard"
+            got = self._wda("POST", "/wda/getPasteboard", {"contentType": "plaintext"}) or ""
+            return "clipboard: " + (base64.b64decode(got).decode("utf-8", "replace").strip() or "(empty)")
+        except (Hang, StepError, OSError, http.client.HTTPException, ValueError) as error:
+            raise StepError("the phone's clipboard could not be read (%s; then %s). %s" % (problem, error, mac_health()))
 
     def alive(self):
         if not self.pid:
@@ -1267,6 +1412,7 @@ class IOSDriver:
             return f.read()
 
     def stop(self):
+        self._reap_open(force=True)
         if self.video:
             try:
                 os.kill(self.video[0], signal.SIGINT)
