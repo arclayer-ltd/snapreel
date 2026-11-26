@@ -1,147 +1,208 @@
 import "server-only";
 import { PRODUCT_MONTHLY, PRODUCT_YEARLY } from "@/lib/contract";
-import type { Enums } from "./database.types";
 import { env } from "./env";
 import { HttpError } from "./http";
-import { JwsError, verifyAppleJws, type JwsRenewalInfo, type JwsTransaction, type NotificationPayload } from "./jws";
+import {
+  JwsError,
+  verifyAppleJws,
+  type JwsRenewalInfo,
+  type JwsTransaction,
+  type NotificationPayload,
+  type VerifyOptions,
+} from "./jws";
+import {
+  isEntitled,
+  isNewPurchase,
+  maskEmail,
+  notificationOwner,
+  resolveOwner,
+  shouldApply,
+  statusFor,
+  type StoredSubscription,
+  type StoreEnvironment,
+} from "./subscription-rules";
 import { db } from "./supabase";
 
-const PRODUCTS = new Set<string>([PRODUCT_MONTHLY, PRODUCT_YEARLY]);
+export { statusFor };
 
-export function verifyJwsOr400<T>(jws: unknown, what: string): T {
+const PRODUCTS = new Set<string>([PRODUCT_MONTHLY, PRODUCT_YEARLY]);
+const COLUMNS = "user_id, product_id, original_transaction_id, status, expires_at, environment";
+
+// Routes never pass `opts`: every request is checked against Apple's pinned root. The self-test calls these functions
+// directly with a throwaway root.
+export function verifyJwsOr400<T>(jws: unknown, what: string, opts?: VerifyOptions): T {
   if (typeof jws !== "string") throw new HttpError(400, "bad_request", `${what} must be a JWS string.`);
   try {
-    return verifyAppleJws<T>(jws);
+    return verifyAppleJws<T>(jws, opts);
   } catch (error) {
     if (error instanceof JwsError) throw new HttpError(400, "invalid_signature", `${what} failed Apple's signature check: ${error.message}.`);
     throw error;
   }
 }
 
-const storeEnvironment = (e: string | undefined): Enums<"store_environment"> => (e === "Production" ? "Production" : "Sandbox");
-
-export interface SubscriptionUpdate {
-  userId: string;
-  productId: string;
-  originalTransactionId: string;
-  status: Enums<"subscription_status">;
-  expiresAt: string | null;
-  environment: Enums<"store_environment">;
-}
-
-// The subscription state a transaction (plus, from a notification, its renewal info and type) stands for.
-export function statusFor(
-  tx: JwsTransaction,
-  opts: { notificationType?: string; subtype?: string; renewal?: JwsRenewalInfo | null } = {},
-): { status: Enums<"subscription_status">; expiresAt: string | null } {
-  const expires = tx.expiresDate ?? null;
-  if (tx.revocationDate || opts.notificationType === "REFUND" || opts.notificationType === "REVOKE") {
-    return { status: "revoked", expiresAt: expires ? new Date(expires).toISOString() : null };
-  }
-  const grace = opts.renewal?.gracePeriodExpiresDate;
-  if (grace && grace > Date.now() && (opts.notificationType === "DID_FAIL_TO_RENEW" || (expires && expires < Date.now()))) {
-    return { status: "in_grace", expiresAt: new Date(grace).toISOString() };
-  }
-  if (opts.notificationType === "EXPIRED" || opts.notificationType === "GRACE_PERIOD_EXPIRED") {
-    return { status: "expired", expiresAt: expires ? new Date(expires).toISOString() : null };
-  }
-  if (expires && expires <= Date.now()) return { status: "expired", expiresAt: new Date(expires).toISOString() };
-  return { status: "active", expiresAt: expires ? new Date(expires).toISOString() : null };
-}
+const storeEnvironment = (e: string | undefined): StoreEnvironment => (e === "Production" ? "Production" : "Sandbox");
 
 export function checkTransaction(tx: JwsTransaction): void {
   if (tx.bundleId !== env.bundleId) throw new HttpError(400, "wrong_app", "That purchase belongs to a different app.");
   if (!PRODUCTS.has(tx.productId)) throw new HttpError(400, "unknown_product", "That product isn't Snapreel Pro.");
 }
 
-export async function saveSubscription(u: SubscriptionUpdate): Promise<void> {
-  const supabase = db();
-  // One Apple subscription belongs to one Snapreel account. appAccountToken pins it when the app buys; a row for
-  // the same original transaction under another user (from before a token check existed) is moved, not copied.
-  const { data: existing } = await supabase
+// Reads throw instead of quietly answering "nothing there": a database hiccup must end in a 500, which the app and
+// Apple both retry, never in a purchase that is dropped or handed to the wrong account.
+async function subscriptionByTransaction(originalTransactionId: string): Promise<StoredSubscription | null> {
+  const { data, error } = await db()
     .from("subscriptions")
-    .select("user_id")
-    .eq("original_transaction_id", u.originalTransactionId)
+    .select(COLUMNS)
+    .eq("original_transaction_id", originalTransactionId)
     .maybeSingle();
-  if (existing && existing.user_id !== u.userId) {
-    await supabase.from("subscriptions").delete().eq("original_transaction_id", u.originalTransactionId);
-  }
-  const { error } = await supabase.from("subscriptions").upsert(
-    {
-      user_id: u.userId,
-      product_id: u.productId,
-      original_transaction_id: u.originalTransactionId,
-      status: u.status,
-      expires_at: u.expiresAt,
-      environment: u.environment,
-    },
-    { onConflict: "user_id" },
-  );
   if (error) throw error;
+  return data;
+}
+
+async function subscriptionOf(userId: string): Promise<StoredSubscription | null> {
+  const { data, error } = await db().from("subscriptions").select(COLUMNS).eq("user_id", userId).maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+async function accountOf(userId: string): Promise<{ email: string | null } | null> {
+  if (!/^[0-9a-f]{8}-([0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(userId)) return null;
+  const { data, error } = await db().auth.admin.getUserById(userId);
+  if (data?.user) return { email: data.user.email ?? null };
+  if (!error || error.status === 404 || error.code === "user_not_found") return null; // deleted since
+  throw error;
+}
+
+// Writes the subscription to `row.user_id`. `recorded` is the row that has this subscription now, if any; when it's
+// another account's, that row changes hands in one statement, so a failure half-way can't lose the subscription.
+// Callers have already decided that a row of the new owner's own may go.
+async function storeSubscription(row: StoredSubscription, recorded: StoredSubscription | null): Promise<void> {
+  if (!recorded || recorded.user_id === row.user_id) {
+    const { error } = await db().from("subscriptions").upsert(row, { onConflict: "user_id" });
+    if (error) throw error;
+    return;
+  }
+  const own = await db().from("subscriptions").delete().eq("user_id", row.user_id);
+  if (own.error) throw own.error;
+  const moved = await db().from("subscriptions").update(row).eq("original_transaction_id", row.original_transaction_id);
+  if (moved.error) throw moved.error;
+}
+
+async function otherAccount(ownerId: string, canMove: boolean): Promise<HttpError> {
+  const hint = maskEmail((await accountOf(ownerId))?.email);
+  return new HttpError(
+    403,
+    "other_account",
+    hint
+      ? `This Apple Account's Snapreel Pro is on another Snapreel account (${hint}).`
+      : "This Apple Account's Snapreel Pro is on another Snapreel account.",
+    { hint, canMove },
+  );
 }
 
 // POST /api/purchases/verify: the app's StoreKit 2 Transaction.jwsRepresentation.
-export async function verifyPurchase(userId: string, signedTransaction: unknown): Promise<void> {
-  const tx = verifyJwsOr400<JwsTransaction>(signedTransaction, "signedTransaction");
+// `move` takes a running subscription over from another Snapreel account: the app asks the person first, and only the
+// Apple Account that pays for it can present its signed transaction.
+export async function verifyPurchase(
+  userId: string,
+  signedTransaction: unknown,
+  options: { move?: boolean; jws?: VerifyOptions } = {},
+): Promise<void> {
+  const tx = verifyJwsOr400<JwsTransaction>(signedTransaction, "signedTransaction", options.jws);
   checkTransaction(tx);
-  if (!tx.appAccountToken || tx.appAccountToken.toLowerCase() !== userId.toLowerCase()) {
-    throw new HttpError(
-      403,
-      "other_account",
-      "This purchase was made while signed in to a different Snapreel account. Sign in to that account to use it.",
-    );
-  }
+  const token = tx.appAccountToken?.toLowerCase() ?? null;
   const { status, expiresAt } = statusFor(tx);
-  await saveSubscription({
+  const running = isEntitled({ status, expires_at: expiresAt }) && !tx.isUpgraded;
+
+  const recorded = await subscriptionByTransaction(tx.originalTransactionId);
+  const asksForToken = !recorded && !!token && token !== userId.toLowerCase();
+  const owner = resolveOwner({
     userId,
-    productId: tx.productId,
+    recordedUserId: recorded?.user_id ?? null,
+    token,
+    tokenAccountExists: asksForToken ? !!(await accountOf(token)) : true,
+    newPurchase: isNewPurchase(tx, recorded),
+  });
+  if (owner.kind === "other" && !(options.move && running)) throw await otherAccount(owner.ownerId, running);
+
+  const mine = recorded?.user_id === userId ? recorded : await subscriptionOf(userId);
+  const incoming = {
     originalTransactionId: tx.originalTransactionId,
     status,
     expiresAt,
     environment: storeEnvironment(tx.environment),
-  });
+    isUpgraded: tx.isUpgraded,
+  };
+  if (owner.kind === "other") {
+    // A move the person asked for.
+    if (!shouldApply(recorded, incoming)) throw await otherAccount(owner.ownerId, false); // refunded or replaced since
+    if (mine && isEntitled(mine)) {
+      throw new HttpError(409, "already_pro", "This Snapreel account already has Pro from another subscription.");
+    }
+  } else if (!shouldApply(mine, incoming)) {
+    return;
+  }
+  const row: StoredSubscription = {
+    user_id: userId,
+    product_id: tx.productId,
+    original_transaction_id: tx.originalTransactionId,
+    status,
+    expires_at: expiresAt,
+    environment: incoming.environment,
+  };
+  await storeSubscription(row, recorded);
 }
 
 // POST /api/appstore/notifications: App Store Server Notifications V2.
-export async function handleNotification(signedPayload: unknown): Promise<{ handled: boolean; type: string }> {
-  const payload = verifyJwsOr400<NotificationPayload>(signedPayload, "signedPayload");
+export async function handleNotification(
+  signedPayload: unknown,
+  options: { jws?: VerifyOptions } = {},
+): Promise<{ handled: boolean; type: string }> {
+  const payload = verifyJwsOr400<NotificationPayload>(signedPayload, "signedPayload", options.jws);
   const type = payload.notificationType + (payload.subtype ? `/${payload.subtype}` : "");
   const data = payload.data;
   if (!data) return { handled: false, type }; // summary notifications carry no transaction
   if (data.bundleId && data.bundleId !== env.bundleId) throw new HttpError(400, "wrong_app", "Notification for another app.");
   if (payload.notificationType === "TEST" || !data.signedTransactionInfo) return { handled: false, type };
 
-  const tx = verifyJwsOr400<JwsTransaction>(data.signedTransactionInfo, "signedTransactionInfo");
+  const tx = verifyJwsOr400<JwsTransaction>(data.signedTransactionInfo, "signedTransactionInfo", options.jws);
   checkTransaction(tx);
-  const renewal = data.signedRenewalInfo ? verifyJwsOr400<JwsRenewalInfo>(data.signedRenewalInfo, "signedRenewalInfo") : null;
+  const renewal = data.signedRenewalInfo
+    ? verifyJwsOr400<JwsRenewalInfo>(data.signedRenewalInfo, "signedRenewalInfo", options.jws)
+    : null;
 
-  let userId = tx.appAccountToken?.toLowerCase() ?? null;
-  if (userId) {
-    const { data: user } = await db().auth.admin.getUserById(userId);
-    if (!user?.user) userId = null; // account deleted since
-  }
-  if (!userId) {
-    const { data: row } = await db()
-      .from("subscriptions")
-      .select("user_id")
-      .eq("original_transaction_id", tx.originalTransactionId)
-      .maybeSingle();
-    userId = row?.user_id ?? null;
-  }
+  const recorded = await subscriptionByTransaction(tx.originalTransactionId);
+  const token = tx.appAccountToken?.toLowerCase() ?? null;
+  const newPurchase = isNewPurchase(tx, recorded);
+  const userId = notificationOwner({
+    recordedUserId: recorded?.user_id ?? null,
+    token,
+    tokenAccountExists: (!recorded || newPurchase) && !!token && !!(await accountOf(token)),
+    newPurchase,
+  });
+  // Nobody's yet: the app sends the transaction itself when its owner signs in.
   if (!userId) return { handled: false, type };
 
-  const { status, expiresAt } = statusFor(tx, {
-    notificationType: payload.notificationType,
-    subtype: payload.subtype,
-    renewal,
-  });
-  await saveSubscription({
-    userId,
-    productId: tx.productId,
+  const { status, expiresAt } = statusFor(tx, { notificationType: payload.notificationType, subtype: payload.subtype, renewal });
+  const environment = storeEnvironment(data.environment ?? tx.environment);
+  const existing = recorded?.user_id === userId ? recorded : await subscriptionOf(userId);
+  const apply = shouldApply(existing, {
     originalTransactionId: tx.originalTransactionId,
     status,
     expiresAt,
-    environment: storeEnvironment(data.environment ?? tx.environment),
+    environment,
+    isUpgraded: tx.isUpgraded,
+    notificationType: payload.notificationType,
   });
+  if (!apply) return { handled: false, type };
+  const row: StoredSubscription = {
+    user_id: userId,
+    product_id: tx.productId,
+    original_transaction_id: tx.originalTransactionId,
+    status,
+    expires_at: expiresAt,
+    environment,
+  };
+  await storeSubscription(row, recorded);
   return { handled: true, type };
 }

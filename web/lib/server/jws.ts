@@ -110,6 +110,9 @@ export interface JwsTransaction {
   expiresDate?: number;
   revocationDate?: number;
   appAccountToken?: string;
+  /** True once an upgrade inside the subscription group replaced this transaction. */
+  isUpgraded?: boolean;
+  transactionReason?: "PURCHASE" | "RENEWAL";
   environment: "Production" | "Sandbox" | "Xcode" | "LocalTesting";
   type?: string;
   signedDate?: number;
