@@ -42,7 +42,8 @@ struct VideoThumbnail: View {
         }
         .aspectRatio(aspectRatio, contentMode: .fit)
         .overlay(alignment: .bottomTrailing) {
-            if showsDuration { badge.padding(Space.xs) }
+            // While saving or failed the overlay says so; the badge would sit on top of its words.
+            if showsDuration, video.state.isReady { badge.padding(Space.xs) }
         }
         .overlay { stateOverlay }
         .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))

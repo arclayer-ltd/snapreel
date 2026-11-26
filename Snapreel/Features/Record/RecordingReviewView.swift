@@ -71,6 +71,8 @@ struct RecordingReviewView: View {
                 }
                 .buttonStyle(.srPrimary)
             }
+            // At the largest sizes Edit was cut to "E" beside Done.
+            .dynamicTypeSize(...DynamicTypeSize.accessibility1)
         }
         .padding(.horizontal, Space.m)
         .padding(.top, Space.xs)
@@ -201,6 +203,9 @@ private struct ReviewActionButton: View {
                     .multilineTextAlignment(.center)
                     .lineLimit(2)
                     .fixedSize(horizontal: false, vertical: true)
+                    // Five to a row: past this size the words break apart. Holding a button shows
+                    // its name large instead.
+                    .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
             }
             .frame(maxWidth: .infinity, alignment: .top)
         }
@@ -208,6 +213,9 @@ private struct ReviewActionButton: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(title)
         .accessibilityAddTraits(.isButton)
+        .accessibilityShowsLargeContentViewer {
+            Label(title, systemImage: systemImage)
+        }
     }
 }
 

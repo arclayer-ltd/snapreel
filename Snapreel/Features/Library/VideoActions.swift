@@ -399,7 +399,8 @@ struct LibraryActionsSheet: View {
                 Text(verbatim: Self.dateLine(video))
                     .font(.srFootnote)
                     .foregroundStyle(Color.srTextTertiary)
-                    .lineLimit(1)
+                    // At the largest sizes "Saving 12%" was cut off the end.
+                    .lineLimit(typeSize.isAccessibilitySize ? 3 : 1)
                     .minimumScaleFactor(0.85)
             }
             Spacer(minLength: 0)
