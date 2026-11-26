@@ -9,7 +9,7 @@ import type { Activity, Insights, Me, PublicVideo, VideoDetail } from "@/lib/con
 import { errorMessage, ownerApi } from "@/lib/client/api";
 import { formatDate, formatTime, formatUntil, isPast } from "@/lib/client/format";
 import { watchUrl } from "@/lib/client/links";
-import { ChevronLeftIcon, ClockIcon, ExternalIcon, LockIcon, TrashIcon, UploadIcon } from "@/components/player/icons";
+import { AlertIcon, ChevronLeftIcon, ClockIcon, ExternalIcon, LockIcon, TrashIcon, UploadIcon } from "@/components/player/icons";
 import { PlaybackContext, PlaybackStore } from "@/components/player/playback";
 import { Player } from "@/components/player/Player";
 import { CopyLinkButton, Dialog, Spinner, btn } from "@/components/player/ui";
@@ -69,6 +69,9 @@ export function VideoDashboard({
     setStopError(null);
     try {
       await ownerApi.deleteVideo(video.id);
+      try {
+        sessionStorage.setItem("sr_flash", `“${video.title}” isn’t shared any more. Its link has stopped working.`);
+      } catch {}
       router.replace("/app");
       router.refresh();
     } catch (err) {
@@ -119,11 +122,16 @@ export function VideoDashboard({
           </p>
         </div>
         <div className="flex w-full flex-wrap gap-2 sm:w-auto">
-          <CopyLinkButton url={url} variant="primary" size="md" className="max-sm:flex-1" />
-          <a href={`/v/${video.slug}`} target="_blank" rel="noopener" className={btn("secondary", "md", "max-sm:flex-1")}>
-            Open
-            <ExternalIcon size={17} />
-          </a>
+          {/* A failed upload has nothing to watch yet: no link to hand out until the phone sends it again. */}
+          {video.status !== "failed" && (
+            <>
+              <CopyLinkButton url={url} variant="primary" size="md" className="max-sm:flex-1" />
+              <a href={`/v/${video.slug}`} target="_blank" rel="noopener" className={btn("secondary", "md", "max-sm:flex-1")}>
+                Open
+                <ExternalIcon size={17} />
+              </a>
+            </>
+          )}
           <button type="button" onClick={() => setConfirmStop(true)} className={btn("quiet", "md", "text-red-text max-sm:w-full")}>
             <TrashIcon size={17} />
             Stop sharing
@@ -153,10 +161,21 @@ export function VideoDashboard({
           </div>
 
           <div className={shown("insights")}>
-            <InsightsPanel video={video} insights={insights} pro={pro} />
+            <InsightsPanel
+              video={video}
+              insights={insights}
+              pro={pro}
+              activityCount={activity.comments.length + activity.reactions.length}
+            />
           </div>
           <div className={shown("activity")}>
-            <ActivityPanel initial={activity} allowComments={video.allowComments} />
+            <ActivityPanel
+              initial={activity}
+              allowComments={video.allowComments}
+              videoId={video.id}
+              slug={video.slug}
+              ownerName={me.user.displayName}
+            />
           </div>
         </div>
         <div className={`lg:sticky lg:top-24 ${shown("settings")}`}>
@@ -238,7 +257,13 @@ function Preview({
       )}
       <div className="relative flex max-w-sm flex-col items-center gap-3 px-6 text-center">
         <span className="flex h-12 w-12 items-center justify-center rounded-full bg-white/15">
-          {video.status === "uploading" ? <UploadIcon size={22} /> : <ClockIcon size={22} />}
+          {video.status === "uploading" ? (
+            <UploadIcon size={22} />
+          ) : video.status === "failed" ? (
+            <AlertIcon size={22} />
+          ) : (
+            <ClockIcon size={22} />
+          )}
         </span>
         <p className="text-[15px] font-medium">{message}</p>
       </div>

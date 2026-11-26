@@ -7,7 +7,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import type { Me, VideoSummary } from "@/lib/contract";
 import { formatCount, formatTime, plural } from "@/lib/client/format";
-import { AlertIcon, ChevronRightIcon, LockIcon, MicIcon, SearchIcon } from "@/components/player/icons";
+import { AlertIcon, ChevronRightIcon, CloseIcon, LockIcon, MicIcon, SearchIcon } from "@/components/player/icons";
 import { RelativeTime } from "@/components/player/ui";
 import settingUp from "./art/setting-up.webp";
 import { ProBadge, StatusDot, linkState, statusLabel } from "./kit";
@@ -45,7 +45,19 @@ function sortVideos(list: VideoSummary[], sort: Sort): VideoSummary[] {
 export function VideoLibrary({ videos, me }: { videos: VideoSummary[]; me: Me }) {
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<Sort>("newest");
+  const [flash, setFlash] = useState<string | null>(null);
   const router = useRouter();
+
+  // Said once after the page that sent here (Stop sharing) is gone.
+  useEffect(() => {
+    try {
+      const said = sessionStorage.getItem("sr_flash");
+      if (!said) return;
+      sessionStorage.removeItem("sr_flash");
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- sessionStorage is only readable after mount
+      setFlash(said);
+    } catch {}
+  }, []);
 
   // Anything still uploading: keep the list fresh, so it turns "Live" by itself.
   const uploading = videos.some((v) => v.status === "uploading");
@@ -87,6 +99,19 @@ export function VideoLibrary({ videos, me }: { videos: VideoSummary[]; me: Me })
         <UsageMeter me={me} pro={pro} />
       </div>
 
+      {flash && (
+        <p role="status" className="mt-4 flex items-center gap-2 rounded-2xl bg-fill px-4 py-3 text-sm">
+          <span className="flex-1">{flash}</span>
+          <button
+            type="button"
+            onClick={() => setFlash(null)}
+            className="-my-2 min-h-11 rounded px-2 font-semibold text-text-2 hover:text-text focus-visible:outline-2 focus-visible:outline-sr-red"
+          >
+            OK
+          </button>
+        </p>
+      )}
+
       {videos.length === 0 ? (
         <EmptyState />
       ) : (
@@ -101,8 +126,18 @@ export function VideoLibrary({ videos, me }: { videos: VideoSummary[]; me: Me })
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Search by title"
-                className="h-full min-w-0 flex-1 bg-transparent text-base text-text placeholder:text-text-3 focus:outline-none"
+                className="sr-search h-full min-w-0 flex-1 bg-transparent text-base text-text placeholder:text-text-3 focus:outline-none"
               />
+              {query && (
+                <button
+                  type="button"
+                  onClick={() => setQuery("")}
+                  aria-label="Clear the search"
+                  className="-mr-2 flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-text-2 hover:text-text focus-visible:outline-2 focus-visible:outline-sr-red"
+                >
+                  <CloseIcon size={16} />
+                </button>
+              )}
             </label>
             <label className="flex h-11 shrink-0 items-center gap-2 rounded-full border border-line bg-surface pl-4 pr-2 text-sm text-text-2 focus-within:border-sr-red focus-within:ring-2 focus-within:ring-sr-red/25">
               Sort
@@ -122,7 +157,7 @@ export function VideoLibrary({ videos, me }: { videos: VideoSummary[]; me: Me })
 
           <div className="mt-4 overflow-hidden rounded-3xl border border-line bg-surface">
             <div
-              className="hidden grid-cols-[minmax(0,1fr)_4.5rem_4.5rem_4.5rem_5.5rem_7.5rem_7rem_1.5rem] items-center gap-3 border-b border-line px-5 py-3 text-xs font-medium uppercase tracking-wide text-text-3 lg:grid"
+              className="hidden grid-cols-[minmax(0,1fr)_4.5rem_4.5rem_4.5rem_5.5rem_7.5rem_7rem_1.5rem] items-center gap-5 border-b border-line px-5 py-3 text-xs font-medium uppercase tracking-wide text-text-3 lg:grid"
               aria-hidden="true"
             >
               <span>Video</span>
@@ -212,7 +247,7 @@ function VideoRow({ video }: { video: VideoSummary }) {
   return (
     <Link
       href={`/app/v/${video.id}`}
-      className="group grid grid-cols-[auto_minmax(0,1fr)_1.25rem] items-center gap-3 px-3 py-3 transition-colors hover:bg-fill/60 focus-visible:bg-fill focus-visible:outline-none sm:gap-4 sm:px-5 lg:grid-cols-[minmax(0,1fr)_4.5rem_4.5rem_4.5rem_5.5rem_7.5rem_7rem_1.5rem] lg:gap-3 motion-reduce:transition-none"
+      className="group grid grid-cols-[auto_minmax(0,1fr)_1.25rem] items-center gap-3 px-3 py-3 transition-colors hover:bg-fill/60 focus-visible:bg-fill focus-visible:outline-none sm:gap-4 sm:px-5 lg:grid-cols-[minmax(0,1fr)_4.5rem_4.5rem_4.5rem_5.5rem_7.5rem_7rem_1.5rem] lg:gap-5 motion-reduce:transition-none"
     >
       <div className="contents lg:flex lg:min-w-0 lg:items-center lg:gap-4">
         <Thumb video={video} />

@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useState, type FormEvent } from "react";
+import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import type { NewReport } from "@/lib/contract";
 import { errorMessage, publicApi } from "@/lib/client/api";
 import { CheckIcon } from "../icons";
@@ -11,7 +11,7 @@ const REASONS: { value: NewReport["reason"]; label: string; hint: string }[] = [
   { value: "abuse", label: "Harassment or hate", hint: "Bullying, threats or hateful content" },
   { value: "illegal", label: "Illegal content", hint: "Something that breaks the law" },
   { value: "copyright", label: "Copyright", hint: "It uses work that belongs to you or someone else" },
-  { value: "other", label: "Something else", hint: "Tell us what's wrong" },
+  { value: "other", label: "Something else", hint: "Tell us what’s wrong" },
 ];
 
 export function ReportDialog({ slug, open, onClose }: { slug: string; open: boolean; onClose: () => void }) {
@@ -22,6 +22,11 @@ export function ReportDialog({ slug, open, onClose }: { slug: string; open: bool
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sent, setSent] = useState(false);
+  const errorRef = useRef<HTMLParagraphElement>(null);
+  // A message under the form, and Send right under it, both in sight (it ended half off a phone screen).
+  useEffect(() => {
+    if (error) errorRef.current?.parentElement?.lastElementChild?.scrollIntoView({ block: "nearest" });
+  }, [error]);
 
   function close() {
     onClose();
@@ -36,7 +41,7 @@ export function ReportDialog({ slug, open, onClose }: { slug: string; open: bool
   async function submit(e: FormEvent) {
     e.preventDefault();
     if (!reason) {
-      setError("Choose what's wrong with this video.");
+      setError("Choose what’s wrong with this video.");
       return;
     }
     if (reason === "other" && !details.trim()) {
@@ -44,7 +49,7 @@ export function ReportDialog({ slug, open, onClose }: { slug: string; open: bool
       return;
     }
     if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
-      setError("That email address doesn't look right.");
+      setError("That email address doesn’t look right.");
       return;
     }
     setBusy(true);
@@ -53,7 +58,7 @@ export function ReportDialog({ slug, open, onClose }: { slug: string; open: bool
       await publicApi.report(slug, { reason, details: details.trim(), email: email.trim() || null });
       setSent(true);
     } catch (err) {
-      setError(errorMessage(err, "Your report didn't send. Try again, or email support@snapreel.video."));
+      setError(errorMessage(err, "Your report didn’t send. Try again, or email support@snapreel.video."));
     } finally {
       setBusy(false);
     }
@@ -69,7 +74,7 @@ export function ReportDialog({ slug, open, onClose }: { slug: string; open: bool
             </span>
             <p className="text-[15px] leading-relaxed text-text-2">
               We&rsquo;ve got your report and will look at this video. If it breaks our rules, we&rsquo;ll take it down.
-              {email.trim() ? " We'll email you when we've looked at it." : ""}
+              {email.trim() ? " We’ll email you when we’ve looked at it." : ""}
             </p>
           </div>
           <div className="flex justify-end">
@@ -137,7 +142,7 @@ export function ReportDialog({ slug, open, onClose }: { slug: string; open: bool
             />
           </div>
           {error && (
-            <p role="alert" className="text-sm text-red-text">
+            <p ref={errorRef} role="alert" className="scroll-mb-24 text-sm text-red-text">
               {error}
             </p>
           )}

@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
 import { DashboardNav, DashboardNavLinks, DashboardTabBar, DashboardTabs } from "@/components/dashboard/DashboardNav";
+import { ScrollToTop } from "@/components/dashboard/ScrollToTop";
 import { PagePaint, appViewport } from "@/components/player/page-paint";
 import { SnapreelWordmark } from "@/components/player/watch/WatchChrome";
 import { PREVIEW } from "@/lib/client/preview-data";
@@ -39,6 +40,9 @@ export default function DashboardLayout({ children }: LayoutProps<"/app">) {
       {/* On phones the sections are along the bottom, in reach of a thumb. */}
       <Suspense fallback={<DashboardTabBar pathname="" />}>
         <DashboardTabs />
+      </Suspense>
+      <Suspense>
+        <ScrollToTop />
       </Suspense>
     </div>
   );

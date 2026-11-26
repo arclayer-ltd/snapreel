@@ -79,7 +79,7 @@ export function EmbedMessage({ slug, text }: { slug: string; text: string }) {
         href={`/v/${slug}`}
         target="_blank"
         rel="noopener"
-        className="inline-flex items-center gap-1.5 rounded-full bg-white px-4 py-2 text-sm font-semibold text-[#13141b] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+        className="inline-flex h-11 items-center gap-1.5 rounded-full bg-white px-5 text-sm font-semibold text-[#13141b] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
       >
         Open on Snapreel
         <ExternalIcon size={15} />
