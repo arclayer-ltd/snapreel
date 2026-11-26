@@ -45,7 +45,7 @@ function authMessage(err: unknown, fallback: string): string {
     return "Too many tries. Wait a minute, then try again.";
   }
   if (code === "otp_expired" || /expired|invalid/i.test(msg)) {
-    return "That code didn’t work. It may have expired, so send a new one.";
+    return "That code didn’t work. Use the newest email: each new code replaces the one before.";
   }
   if (/network|fetch/i.test(msg)) return "Couldn’t reach Snapreel. Check your connection.";
   return fallback;
@@ -71,12 +71,19 @@ export function LoginForm({
     initialError ? "Sign in with Apple didn’t finish. Try again, or use your email." : null,
   );
   const [sentAt, setSentAt] = useState(0);
+  const [sentFor, setSentFor] = useState("");
   const [now, setNow] = useState(0);
   const [codeFocused, setCodeFocused] = useState(false);
   const [canPaste, setCanPaste] = useState(false);
   const [resent, setResent] = useState(false);
   const lastTried = useRef("");
   const cooldown = sentAt > 0 ? Math.max(0, Math.ceil((sentAt + RESEND_AFTER_S * 1000 - now) / 1000)) : 0;
+
+  // Shown again after being hidden (the router keeps pages it has left): nothing is still "working".
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- resets a spinner left from before the page was hidden
+    setBusy(null);
+  }, []);
 
   // Back from Mail to a page that had to reload: straight to the code, not the email again.
   useEffect(() => {
@@ -86,6 +93,7 @@ export function LoginForm({
     if (!pending) return;
     setEmail(pending.email);
     setSentAt(pending.sentAt);
+    setSentFor(pending.email);
     setNow(Date.now());
     setStep("code");
     /* eslint-enable react-hooks/set-state-in-effect */
@@ -156,6 +164,10 @@ export function LoginForm({
       setError("Enter your email address, like name@example.com.");
       return;
     }
+    if (cooldown > 0 && address.toLowerCase() === sentFor.toLowerCase()) {
+      setError(`A code was just sent to that address. You can ask for another in ${cooldown} s.`);
+      return;
+    }
     setError(null);
     setBusy("email");
     try {
@@ -171,6 +183,7 @@ export function LoginForm({
       const at = Date.now();
       setResent(step === "code");
       setSentAt(at);
+      setSentFor(address);
       setNow(at);
       savePending({ email: address, sentAt: at });
       setStep("code");
@@ -292,7 +305,7 @@ export function LoginForm({
             type="button"
             onClick={() => {
               savePending(null);
-              setSentAt(0);
+              // The resend wait stays for that address, so going back can't be used to skip it.
               setCode("");
               setResent(false);
               setStep("email");

@@ -206,6 +206,9 @@ export function Player({
     setCanFullscreen(document.fullscreenEnabled || (!isAudio && typeof v?.webkitEnterFullscreen === "function"));
     setFinePointer(window.matchMedia("(pointer: fine)").matches);
     setCaptionsOn(readStoredCaptions());
+    try {
+      if (v && localStorage.getItem("sr_muted") === "on") v.muted = true;
+    } catch {}
   }, [isAudio, checkPip]);
 
   // Captions come from the WebVTT file when there is one, otherwise from the transcript. The API gives the address on
@@ -401,7 +404,9 @@ export function Player({
     (e: KeyboardEvent | ReactKeyboardEvent, scoped: boolean) => {
       if (e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey) return;
       const target = e.target instanceof Element ? e.target : null;
-      if (target?.closest("input, textarea, select, [contenteditable='true'], [role='slider'], [role='menu']")) return;
+      if (target?.closest("input, textarea, select, [contenteditable='true'], [role='menu']")) return;
+      // The seek bar moves itself with the arrows; m, c, f and the rest still work while it has focus.
+      if (target?.closest("[role='slider']") && /^(Arrow|Home|End|Page)/.test(e.key)) return;
       if (document.querySelector("dialog[open]")) return;
       const onControl = !!target?.closest("button, a, summary, [role='button']");
       const inPlayer = scoped || (!!target && !!containerRef.current?.contains(target));
@@ -594,6 +599,10 @@ export function Player({
     if (!v) return;
     v.muted = !v.muted;
     if (!v.muted && v.volume === 0) v.volume = 0.6;
+    // Kept like captions; muting by the browser's autoplay rule isn't the viewer's choice, so it isn't kept.
+    try {
+      localStorage.setItem("sr_muted", v.muted ? "on" : "off");
+    } catch {}
     setAutoMuted(false);
     flash(v.muted ? "Muted" : "Sound on");
   }
@@ -806,14 +815,19 @@ export function Player({
         aria-hidden="true"
       />
 
-      {/* Captions */}
-      {activeCue && (
+      {/* Captions: low down while the controls are hidden; at the top while they show, so they never cover the play
+          button or the centre controls. None before the start or on the end screen. */}
+      {activeCue && started && !ended && (
         <div
-          className={`pointer-events-none absolute inset-x-0 z-20 flex justify-center px-4 transition-[bottom] duration-200 motion-reduce:transition-none ${
-            visible ? "bottom-[5.75rem]" : "bottom-5"
+          className={`pointer-events-none absolute inset-x-0 z-20 flex justify-center px-4 ${
+            visible ? (topOverlay ? "top-14" : "top-2") : "bottom-5"
           }`}
         >
-          <p className="max-w-[min(90%,46rem)] whitespace-pre-line rounded-lg bg-black/78 px-3 py-1.5 text-center text-[15px] font-medium leading-snug text-white sm:text-lg">
+          <p
+            className={`max-w-[min(90%,46rem)] whitespace-pre-line rounded-lg bg-black/78 text-center font-medium leading-snug text-white ${
+              visible ? "px-2.5 py-1 text-[13px] sm:text-[15px]" : "px-3 py-1.5 text-[15px] sm:text-lg"
+            }`}
+          >
             {activeCue.text}
           </p>
         </div>
@@ -925,6 +939,7 @@ export function Player({
             seekTo(t);
           }}
           onKeySeek={(t) => seekTo(t)}
+          onKeyToggle={toggle}
           tabbable={visible}
         />
         <div className="flex items-center gap-1">
@@ -995,7 +1010,7 @@ export function Player({
             className="inline-flex h-12 items-center gap-2 rounded-full bg-white px-5 text-[15px] font-semibold text-[#13141b] shadow-[0_8px_30px_rgb(0_0_0/0.35)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
           >
             <ReplayIcon size={20} />
-            Watch again
+            {isAudio ? "Play again" : "Watch again"}
           </button>
           {endScreen}
         </div>
@@ -1151,6 +1166,7 @@ function Scrubber({
   onScrub,
   onCommit,
   onKeySeek,
+  onKeyToggle,
   tabbable,
 }: {
   time: number;
@@ -1161,6 +1177,8 @@ function Scrubber({
   onScrub: (t: number | null) => void;
   onCommit: (t: number) => void;
   onKeySeek: (t: number) => void;
+  /** Space on the focused bar plays or pauses, as on the rest of the player, instead of scrolling the page. */
+  onKeyToggle: () => void;
   tabbable: boolean;
 }) {
   const trackRef = useRef<HTMLDivElement>(null);
@@ -1256,6 +1274,12 @@ function Scrubber({
         }}
         onPointerLeave={() => setHover(null)}
         onKeyDown={(e) => {
+          if (e.key === " " || e.key === "k") {
+            e.preventDefault();
+            e.stopPropagation();
+            onKeyToggle();
+            return;
+          }
           const big = duration * 0.1;
           let t: number | null = null;
           if (e.key === "ArrowLeft" || e.key === "ArrowDown") t = time - SKIP;

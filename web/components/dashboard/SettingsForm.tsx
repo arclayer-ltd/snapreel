@@ -46,6 +46,21 @@ function fromVideo(v: VideoDetail): FormState {
 
 const DAY = 86_400_000;
 
+/** "example.com/book" is meant as https://example.com/book. */
+function withScheme(url: string): string {
+  const u = url.trim();
+  return u && !/^[a-z][a-z0-9+.-]*:/i.test(u) ? `https://${u.replace(/^\/+/, "")}` : u;
+}
+
+/** The field a problem belongs to, so it can be marked and brought into view. */
+const PROBLEM_FIELD: [RegExp, string][] = [
+  [/title/i, "title"],
+  [/password/i, "pw"],
+  [/day/i, "expiry"],
+  [/text for the button/i, "cta-label"],
+  [/link/i, "cta-url"],
+];
+
 /** The changes to send. `now` is 0 while rendering (only "is anything different?" matters then) and the
  *  real time when saving, so relative expiry dates are worked out at the moment of saving. */
 function buildPatch(v: VideoDetail, f: FormState, now: number): { patch: UpdateVideoRequest; problem: string | null } {
@@ -89,10 +104,10 @@ function buildPatch(v: VideoDetail, f: FormState, now: number): { patch: UpdateV
 
   if (f.ctaOn) {
     const label = f.ctaLabel.trim();
-    const url = f.ctaUrl.trim();
+    const url = withScheme(f.ctaUrl);
     if (label !== (v.cta?.label ?? "") || url !== (v.cta?.url ?? "")) {
       if (!label) problem ??= "Add the text for the button.";
-      else if (!isValidCtaUrl(url)) problem ??= "The button's link needs to start with https://";
+      else if (!isValidCtaUrl(url)) problem ??= "That link doesn’t look right. Use an address like example.com/book.";
       else patch.cta = { label: label.slice(0, 40), url };
     }
   } else if (v.cta) {
@@ -101,6 +116,8 @@ function buildPatch(v: VideoDetail, f: FormState, now: number): { patch: UpdateV
 
   return { patch, problem };
 }
+
+const BAD = "border-sr-red ring-2 ring-sr-red/25";
 
 export function SettingsForm({
   video,
@@ -116,6 +133,7 @@ export function SettingsForm({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  const [badField, setBadField] = useState<string | null>(null);
 
   const { patch, problem } = useMemo(() => buildPatch(video, form, 0), [video, form]);
   const dirty = Object.keys(patch).length > 0 || (problem !== null && JSON.stringify(form) !== JSON.stringify(fromVideo(video)));
@@ -124,6 +142,7 @@ export function SettingsForm({
     setForm((f) => ({ ...f, [key]: value }));
     setSaved(false);
     setError(null);
+    setBadField(null);
   };
 
   async function save(e: FormEvent) {
@@ -131,6 +150,14 @@ export function SettingsForm({
     const { patch, problem } = buildPatch(video, form, Date.now());
     if (problem) {
       setError(problem);
+      // Mark the field and bring it into view: the message alone sat out of sight at the bottom of the card.
+      const field = PROBLEM_FIELD.find(([re]) => re.test(problem))?.[1] ?? null;
+      setBadField(field);
+      const el = field ? document.getElementById(`${ids}-${field}`) : null;
+      if (el) {
+        el.focus({ preventScroll: true });
+        el.scrollIntoView({ block: "center", behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+      }
       return;
     }
     if (!Object.keys(patch).length) return;
@@ -162,8 +189,15 @@ export function SettingsForm({
             value={form.title}
             onChange={(e) => set("title", e.target.value)}
             maxLength={120}
-            className={inputClass}
+            aria-invalid={badField === "title"}
+            aria-describedby={badField === "title" ? `${ids}-problem` : undefined}
+            className={`${inputClass} ${badField === "title" ? BAD : ""}`}
           />
+          {badField === "title" && error && (
+            <p id={`${ids}-problem`} className="mt-1 text-sm text-red-text">
+              {error}
+            </p>
+          )}
           <p className="mt-1 text-xs text-text-3">Shown on the watch page and in link previews.</p>
         </div>
 
@@ -343,7 +377,9 @@ export function SettingsForm({
                   autoCorrect="off"
                   value={form.ctaUrl}
                   onChange={(e) => set("ctaUrl", e.target.value)}
-                  placeholder="https://"
+                  onBlur={() => form.ctaUrl.trim() && set("ctaUrl", withScheme(form.ctaUrl))}
+                  aria-invalid={badField === "cta-url"}
+                  placeholder="example.com/book"
                   disabled={!pro}
                   className={inputClass}
                 />
@@ -352,7 +388,7 @@ export function SettingsForm({
           )}
         </div>
 
-        {error && (
+        {error && badField !== "title" && (
           <p role="alert" className="rounded-2xl bg-red-soft px-3.5 py-3 text-sm text-red-text">
             {error}
           </p>
@@ -363,8 +399,10 @@ export function SettingsForm({
             dirty || saved ? "" : "hidden"
           }`}
         >
-          <p className="flex-1 text-sm text-text-2" role="status">
-            {saved ? (
+          <p className={`flex-1 text-sm ${error ? "text-red-text" : "text-text-2"}`} role="status">
+            {error ? (
+              "Not saved: see the marked field"
+            ) : saved ? (
               <span className="inline-flex items-center gap-1.5 text-text">
                 <CheckIcon size={16} className="text-red-text" /> Saved
               </span>

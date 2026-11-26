@@ -5,7 +5,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { Transcript } from "@/lib/contract";
 import { formatTime, spokenTime } from "@/lib/client/format";
-import { SearchIcon } from "../icons";
+import { CloseIcon, SearchIcon } from "../icons";
 import { usePlayback } from "../playback";
 
 function highlight(text: string, query: string): ReactNode {
@@ -21,7 +21,7 @@ function highlight(text: string, query: string): ReactNode {
   );
 }
 
-export function TranscriptList({ transcript, onSeek }: { transcript: Transcript; onSeek: (t: number) => void }) {
+export function TranscriptList({ transcript, onSeek }: { transcript: Transcript; onSeek?: (t: number) => void }) {
   const { time, started } = usePlayback();
   const [query, setQuery] = useState("");
   const listRef = useRef<HTMLOListElement>(null);
@@ -58,11 +58,22 @@ export function TranscriptList({ transcript, onSeek }: { transcript: Transcript;
           <span className="sr-only">Search the transcript</span>
           <input
             type="search"
+            enterKeyHint="search"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search the transcript"
-            className="h-full min-w-0 flex-1 bg-transparent text-base text-text placeholder:text-text-3 focus:outline-none"
+            className="sr-search h-full min-w-0 flex-1 bg-transparent text-base text-text placeholder:text-text-3 focus:outline-none"
           />
+          {query && (
+            <button
+              type="button"
+              onClick={() => setQuery("")}
+              aria-label="Clear the search"
+              className="-mr-2 flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-text-2 hover:text-text focus-visible:outline-2 focus-visible:outline-sr-red"
+            >
+              <CloseIcon size={16} />
+            </button>
+          )}
         </label>
       </div>
       <ol
@@ -76,15 +87,16 @@ export function TranscriptList({ transcript, onSeek }: { transcript: Transcript;
           const current = i === active;
           return (
             <li key={i} data-index={i}>
-              <button
-                type="button"
-                onClick={() => onSeek(s.start)}
-                aria-current={current ? "true" : undefined}
-                aria-label={`${spokenTime(s.start)}: ${s.text}`}
-                className={`flex w-full gap-3 rounded-xl px-2.5 py-2 text-left transition-colors focus-visible:outline-2 focus-visible:outline-sr-red motion-reduce:transition-none ${
+              {onSeek ? (
+                <button
+                  type="button"
+                  onClick={() => onSeek(s.start)}
+                  aria-current={current ? "true" : undefined}
+                  aria-label={`${spokenTime(s.start)}: ${s.text}`}
+                  className={`flex w-full gap-3 rounded-xl px-2.5 py-2 text-left transition-colors focus-visible:outline-2 focus-visible:outline-sr-red motion-reduce:transition-none ${
                   current ? "bg-red-soft" : "hover:bg-fill"
                 }`}
-              >
+                >
                 <span
                   className={`w-10 shrink-0 pt-px text-[13px] font-semibold tabular-nums ${current ? "text-red-text" : "text-text-3"}`}
                 >
@@ -93,7 +105,19 @@ export function TranscriptList({ transcript, onSeek }: { transcript: Transcript;
                 <span className={`text-[15px] leading-relaxed ${current ? "text-text" : "text-text-2"}`}>
                   {highlight(s.text, query.trim())}
                 </span>
-              </button>
+                </button>
+              ) : (
+                <div className="flex w-full gap-3 px-2.5 py-2">
+                <span
+                  className={`w-10 shrink-0 pt-px text-[13px] font-semibold tabular-nums ${current ? "text-red-text" : "text-text-3"}`}
+                >
+                  {formatTime(s.start)}
+                </span>
+                <span className={`text-[15px] leading-relaxed ${current ? "text-text" : "text-text-2"}`}>
+                  {highlight(s.text, query.trim())}
+                </span>
+                </div>
+              )}
             </li>
           );
         })}

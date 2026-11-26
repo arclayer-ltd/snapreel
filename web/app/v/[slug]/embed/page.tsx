@@ -1,13 +1,13 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import { EmbedMessage, EmbedView } from "@/components/player/watch/EmbedView";
-import { loadPublicVideo } from "../watch-data";
+import { ERROR_TITLES, loadPublicVideo } from "../watch-data";
 
 export async function generateMetadata({ params }: PageProps<"/v/[slug]/embed">): Promise<Metadata> {
   const { slug } = await params;
   const v = await loadPublicVideo(slug);
   return {
-    title: "error" in v ? "Snapreel video" : { absolute: v.title },
+    title: "error" in v ? ERROR_TITLES[v.error] : { absolute: v.title },
     robots: { index: false, follow: false },
   };
 }

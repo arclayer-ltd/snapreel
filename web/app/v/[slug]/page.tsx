@@ -31,7 +31,7 @@ async function Watch({ params }: { params: Promise<{ slug: string }> }) {
     if (result.error === "password") return <PasswordGate slug={slug} />;
     return <StateScreen state={result.error} />;
   }
-  return <WatchView slug={slug} initial={result} />;
+  return <WatchView slug={slug} initial={result} viewerIsOwner={result.viewerIsOwner} />;
 }
 
 function WatchSkeleton() {
