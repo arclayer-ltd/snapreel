@@ -1,0 +1,1 @@
+{"state": "failed", "note": "the rig failed: TimeoutExpired: Command '['xcrun', 'simctl', 'keychain', '8124E4F2-0857-45CA-B02E-70E259334950', 'add-root-cert', '/Users/runner/work/snapreel/snapreel/w/stub/ca.pem']' timed out after 60 seconds", "started": 1795709750.2864919, "at": 1795710205.4765718}
