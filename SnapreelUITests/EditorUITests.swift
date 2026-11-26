@@ -152,6 +152,14 @@ final class EditorUITests: XCTestCase {
 
     func testTrimHandleAndCutHere() {
         openTool("Trim")
+        // Let the panel finish opening (the timeline moves while it does) before touching the handle.
+        XCTAssertTrue(app.descendants(matching: .any)["Start handle"].waitForExistence(timeout: 4))
+        var frame = timeline.frame
+        for _ in 0..<10 {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.2))
+            if timeline.frame == frame { break }
+            frame = timeline.frame
+        }
         // The start handle sits at the playhead when the video is at its start.
         drag(strip(-8), by: 90, hold: 0.1)
         XCTAssertTrue(wait(4) { self.time.length <= 116 }, "dragging the start handle trims (\(time.length))")
@@ -354,7 +362,10 @@ final class EditorUITests: XCTestCase {
         let length = time.length
         openSaveSheet()
         shot("save-sheet")
-        app.buttons["720p"].tap()
+        // Sizes that make the same file are one choice ("720p · Original"), and a 720p
+        // recording has no choice at all.
+        let small = app.buttons.matching(NSPredicate(format: "label BEGINSWITH '720p'")).firstMatch
+        if small.exists { small.tap() }
         tapButton("Save")
         if app.staticTexts["Saving your edit"].waitForExistence(timeout: 4) {
             shot("saving")
