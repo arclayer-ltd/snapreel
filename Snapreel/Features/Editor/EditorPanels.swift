@@ -9,7 +9,8 @@ struct EditorToolPanel: View {
     var body: some View {
         VStack(spacing: 0) {
             header
-            Group {
+            // A tall panel (large text, small screen) scrolls; the picture always keeps some room.
+            EditorPanelHeight(limit: UIScreen.main.bounds.height * 0.4) {
                 switch tool {
                 case .trim: EditorTrimPanel(model: model)
                 case .crop: EditorCropPanel(model: model)
@@ -43,18 +44,66 @@ struct EditorToolPanel: View {
                 Image(systemName: "checkmark")
                     .font(.system(size: 14, weight: .bold))
                     .foregroundStyle(Color.srOnInverse)
+                    .opacity(model.isRecordingVoice ? 0.4 : 1)
                     .frame(width: 34, height: 34)
                     .background(Circle().fill(Color.srInverse))
                     .frame(width: 44, height: 44)
                     .contentShape(Rectangle())
             }
             .buttonStyle(PressScaleStyle())
+            .disabled(model.isRecordingVoice)
             .accessibilityLabel("Done")
         }
         .padding(.leading, Space.gutter)
         .padding(.trailing, Space.xs)
         .frame(height: 46)
     }
+}
+
+/// Its content as it is, or scrolling when it is taller than `limit`.
+struct EditorPanelHeight<Content: View>: View {
+    let limit: CGFloat
+    @ViewBuilder let content: () -> Content
+
+    var body: some View {
+        EditorCappedHeight(limit: limit) {
+            ViewThatFits(in: .vertical) {
+                content()
+                ScrollView(.vertical) { content() }
+            }
+        }
+    }
+}
+
+/// As tall as its content wants, at most `limit`.
+private struct EditorCappedHeight: Layout {
+    let limit: CGFloat
+
+    private func height(_ width: CGFloat?, _ subviews: Subviews) -> CGSize {
+        let wanted = subviews.first?.sizeThatFits(ProposedViewSize(width: width, height: nil)) ?? .zero
+        return CGSize(width: width ?? wanted.width, height: min(wanted.height, limit))
+    }
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        height(proposal.width, subviews)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        subviews.first?.place(at: bounds.origin, proposal: ProposedViewSize(bounds.size))
+    }
+}
+
+/// Text that names the playhead's time, drawn again only when the second changes.
+struct EditorPlayheadText: View {
+    @ObservedObject var seconds: EditorSeconds
+    let text: (String) -> String
+
+    init(_ model: EditorModel, _ text: @escaping (String) -> String) {
+        self.seconds = model.clock.seconds
+        self.text = text
+    }
+
+    var body: some View { Text(text(Format.clock(Double(seconds.whole)))) }
 }
 
 /// A small helper line under a panel's controls.
@@ -88,11 +137,13 @@ struct EditorPanelButton: View {
             Label(title, systemImage: systemImage)
                 .font(.srSubheadlineStrong)
                 .lineLimit(1)
-                .minimumScaleFactor(0.75)
+                .minimumScaleFactor(0.6)
                 .foregroundStyle(prominent ? Color.white : (isDestructive ? Color.srStageRed : Color.srStageText))
                 .padding(.horizontal, Space.m)
-                .frame(height: 40)
+                .frame(minHeight: 40)
                 .background(Capsule().fill(prominent ? Color.srRed : Color.srStageControl))
+                .padding(.vertical, 2)
+                .contentShape(Rectangle())
         }
         .buttonStyle(PressScaleStyle())
         .disabled(!enabled)
@@ -128,13 +179,38 @@ struct EditorTrimPanel: View {
                 fact("Length", EditorText.precise(model.duration))
             }
             .padding(.horizontal, Space.gutter)
-            HStack(spacing: Space.s) {
-                EditorPanelButton(title: "Split at playhead", systemImage: "scissors") { model.splitAtPlayhead() }
-                Spacer(minLength: 0)
+            // The quick way on a long recording: no handle to drag across minutes of it.
+            HStack(spacing: Space.xs) {
+                action("Start here", "arrow.right.to.line", hint: "Cuts everything before the playhead") { model.cutToPlayhead(.start) }
+                action("Split", "scissors", hint: "Splits the clip at the playhead") { model.splitAtPlayhead() }
+                action("End here", "arrow.left.to.line", hint: "Cuts everything after the playhead") { model.cutToPlayhead(.end) }
             }
             .padding(.horizontal, Space.gutter)
-            EditorHint(text: "Drag the handles at either end to trim. Split, then tap a part to delete it or change its speed.")
+            EditorHint(text: "Drag the handles, or move the playhead and cut there. Split, then tap a part to delete it or change its speed.")
         }
+    }
+
+    private func action(_ title: String, _ systemImage: String, hint: String, _ body: @escaping () -> Void) -> some View {
+        Button {
+            Haptics.tap()
+            body()
+        } label: {
+            VStack(spacing: 4) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 16, weight: .semibold))
+                    .frame(height: 20)
+                Text(title)
+                    .font(.srSubheadlineStrong)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+            }
+            .foregroundStyle(Color.srStageText)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, Space.xs)
+            .background(RoundedRectangle(cornerRadius: Radius.m, style: .continuous).fill(Color.srStageControl))
+        }
+        .buttonStyle(PressScaleStyle())
+        .accessibilityHint(hint)
     }
 
     private func fact(_ title: String, _ value: String) -> some View {
@@ -145,6 +221,8 @@ struct EditorTrimPanel: View {
             Text(value)
                 .font(.srTimer)
                 .foregroundStyle(Color.srStageText)
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, Space.s)
@@ -175,7 +253,13 @@ struct EditorCropPanel: View {
                     model.flip()
                 }
                 Spacer(minLength: 0)
-                Button("Reset") { model.resetCrop() }
+                Button { model.resetCrop() } label: {
+                    Text("Reset")
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.6)
+                        .frame(minWidth: 44, minHeight: 44)
+                        .contentShape(Rectangle())
+                }
                     .font(.srSubheadlineStrong)
                     .foregroundStyle(Color.srStageTextSecondary)
                     .disabled(model.recipe.crop.isFullFrame && model.recipe.quarterTurns == 0 && !model.recipe.flipped)
@@ -235,6 +319,7 @@ struct EditorTextPanel: View {
                 EditorTextStyleRow(style: item.style, color: item.color,
                                    onStyle: { style in model.updateText(item.id) { $0.style = style } },
                                    onColor: { color in model.updateText(item.id) { $0.color = color } })
+                EditorHint(text: "Drag it to move it, drag the white corner to resize it, tap it to change the words.")
                 HStack(spacing: Space.s) {
                     EditorPanelButton(title: "Edit", systemImage: "pencil") { model.editText(item) }
                     EditorPanelButton(title: "Delete", systemImage: "trash", isDestructive: true) { model.deleteText(item.id) }
@@ -301,11 +386,14 @@ struct EditorShapesPanel: View {
                         }
                     }
                     Spacer(minLength: 0)
-                    CircleIconButton(systemName: "trash", label: "Delete", tone: .stage, size: 36) {
+                    CircleIconButton(systemName: "trash", label: "Delete", tone: .stage, size: 44) {
                         model.deleteSticker(item.id)
                     }
                 }
                 .padding(.horizontal, Space.gutter)
+                EditorHint(text: item.kind == .circle || item.kind == .emoji
+                           ? "Drag it to move it. Drag the white corner to make it larger or smaller."
+                           : "Drag it to move it. Drag the white corner to resize and turn it. Drag its bar on the timeline to move it in time.")
             } else {
                 EditorHint(text: "Point at what matters in a screen recording. Drag to place, pinch to resize, twist to turn.")
             }
@@ -451,16 +539,19 @@ struct EditorVoicePanel: View {
                     Text("Get ready…")
                         .font(.srHeadline)
                         .foregroundStyle(Color.srStageText)
-                    Text("Recording starts at \(Format.clock(model.playhead)).")
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.6)
+                    EditorPlayheadText(model) { "Recording starts at \($0)." }
                         .font(.srFootnote)
                         .foregroundStyle(Color.srStageTextSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 Spacer(minLength: 0)
                 Button("Cancel") { model.cancelCountdown() }
                     .buttonStyle(.srSecondaryCompact)
             }
             .padding(.horizontal, Space.gutter)
-            .frame(height: 84)
+            .frame(minHeight: 84)
         case .recording:
             HStack(spacing: Space.m) {
                 Button {
@@ -473,7 +564,7 @@ struct EditorVoicePanel: View {
                 VStack(alignment: .leading, spacing: 6) {
                     HStack(spacing: 6) {
                         Circle().fill(Color.srRed).frame(width: 8, height: 8)
-                        Text("Recording · \(Format.clock(model.recordingElapsed))")
+                        EditorPlayheadText(model) { _ in "Recording · \(Format.clock(model.recordingElapsed))" }
                             .font(.srTimer)
                             .foregroundStyle(Color.srStageText)
                     }
@@ -482,11 +573,12 @@ struct EditorVoicePanel: View {
                     Text("The video plays muted while you talk.")
                         .font(.srFootnote)
                         .foregroundStyle(Color.srStageTextTertiary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 Spacer(minLength: 0)
             }
             .padding(.horizontal, Space.gutter)
-            .frame(height: 96)
+            .frame(minHeight: 96)
         case .review(let take):
             VStack(alignment: .leading, spacing: Space.s) {
                 HStack(spacing: Space.xs) {
@@ -497,7 +589,8 @@ struct EditorVoicePanel: View {
                         .foregroundStyle(Color.srStageText)
                 }
                 HStack(spacing: Space.s) {
-                    CircleIconButton(systemName: "play.fill", label: "Play the take", tone: .stage, size: 40) {
+                    CircleIconButton(systemName: model.isPlaying ? "stop.fill" : "play.fill",
+                                     label: model.isPlaying ? "Stop" : "Play the take", tone: .stage, size: 44) {
                         model.playTake(take)
                     }
                     EditorPanelButton(title: "Re-record", systemImage: "arrow.counterclockwise") { model.rerecord(take) }
@@ -519,7 +612,7 @@ struct EditorVoicePanel: View {
             .buttonStyle(PressScaleStyle())
             .accessibilityLabel("Record voice-over")
             VStack(alignment: .leading, spacing: 3) {
-                Text("Record from \(Format.clock(model.playhead))")
+                EditorPlayheadText(model) { "Record from \($0)" }
                     .font(.srHeadline)
                     .foregroundStyle(Color.srStageText)
                 Text("Move the playhead to where you want to start. The video plays muted while you talk.")
@@ -607,6 +700,8 @@ struct EditorSoundPanel: View {
                         .foregroundStyle(audio.muted ? Color.srStageRed : Color.srStageText)
                         .frame(width: 36, height: 36)
                         .background(Circle().fill(Color.srStageControl))
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
                 }
                 .accessibilityLabel(audio.muted ? "Unmute recording" : "Mute recording")
                 VStack(alignment: .leading, spacing: 0) {
@@ -618,11 +713,14 @@ struct EditorSoundPanel: View {
                            in: 0...1, onEditingChanged: { editing in if !editing { model.endLiveChange() } })
                         .tint(Color.srRed)
                         .disabled(audio.muted)
+                        .accessibilityLabel("Recording's sound")
                 }
                 Text(audio.muted ? "Off" : "\(Int((audio.volume * 100).rounded()))%")
                     .font(.srTimerSmall)
                     .foregroundStyle(Color.srStageTextSecondary)
-                    .frame(width: 40, alignment: .trailing)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)
+                    .frame(width: 44, alignment: .trailing)
             }
             if !model.recipe.voiceClips.isEmpty {
                 HStack(spacing: Space.s) {
@@ -638,11 +736,14 @@ struct EditorSoundPanel: View {
                                               set: { model.setVoiceVolume($0, live: true) }),
                                in: 0...1, onEditingChanged: { editing in if !editing { model.endLiveChange() } })
                             .tint(Color.srRed)
+                            .accessibilityLabel("Voice-over volume")
                     }
                     Text("\(Int((audio.voiceVolume * 100).rounded()))%")
                         .font(.srTimerSmall)
                         .foregroundStyle(Color.srStageTextSecondary)
-                        .frame(width: 40, alignment: .trailing)
+                        .lineLimit(1)
+                    .minimumScaleFactor(0.6)
+                    .frame(width: 44, alignment: .trailing)
                 }
             }
             HStack(spacing: Space.xs) {
@@ -667,8 +768,10 @@ struct EditorSoundPanel: View {
             .font(.srSubheadlineStrong)
             .foregroundStyle(on ? Color.srOnInverse : Color.srStageText)
             .padding(.horizontal, Space.s)
-            .frame(height: 34)
+            .frame(minHeight: 36)
             .background(Capsule().fill(on ? Color.srInverse : Color.srStageControl))
+            .frame(minHeight: 44)
+            .contentShape(Rectangle())
         }
         .buttonStyle(PressScaleStyle())
         .accessibilityAddTraits(on ? .isSelected : [])
@@ -742,37 +845,57 @@ struct EditorBlurPanel: View {
 
 struct EditorThumbnailPanel: View {
     @ObservedObject var model: EditorModel
+    @Environment(\.dynamicTypeSize) private var textSize
 
     var body: some View {
-        HStack(spacing: Space.m) {
-            VStack(alignment: .leading, spacing: 3) {
-                if let time = model.recipe.thumbnailTime {
-                    Label("Frame at \(EditorText.precise(time))", systemImage: "checkmark.circle.fill")
-                        .font(.srSubheadlineStrong)
-                        .foregroundStyle(Color.srStageText)
-                        .labelStyle(EditorTintedIconLabel())
-                    Text("Your library shows this frame for the new recording.")
-                        .font(.srFootnote)
-                        .foregroundStyle(Color.srStageTextSecondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                } else {
-                    Text("Scrub to the frame people should see")
-                        .font(.srSubheadlineStrong)
-                        .foregroundStyle(Color.srStageText)
-                    Text("It becomes the picture on the recording's card in your library.")
-                        .font(.srFootnote)
-                        .foregroundStyle(Color.srStageTextSecondary)
-                        .fixedSize(horizontal: false, vertical: true)
+        Group {
+            if textSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: Space.s) {
+                    text
+                    button
                 }
-            }
-            Spacer(minLength: 0)
-            EditorPanelButton(title: model.recipe.thumbnailTime == nil ? "Use this frame" : "Use this one",
-                              systemImage: "photo", prominent: true) {
-                model.chooseThumbnail()
+                .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                HStack(spacing: Space.m) {
+                    text
+                    Spacer(minLength: 0)
+                    button
+                }
             }
         }
         .padding(.horizontal, Space.gutter)
         .padding(.vertical, Space.xs)
+    }
+
+    private var button: some View {
+        EditorPanelButton(title: model.recipe.thumbnailTime == nil ? "Use this frame" : "Use this one",
+                          systemImage: "photo", prominent: true) {
+            model.chooseThumbnail()
+        }
+    }
+
+    private var text: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            if let time = model.recipe.thumbnailTime {
+                Label("Frame at \(EditorText.precise(time))", systemImage: "checkmark.circle.fill")
+                    .font(.srSubheadlineStrong)
+                    .foregroundStyle(Color.srStageText)
+                    .labelStyle(EditorTintedIconLabel())
+                Text("Your library shows this frame for the new recording.")
+                    .font(.srFootnote)
+                    .foregroundStyle(Color.srStageTextSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                Text("Scrub to the frame people should see")
+                    .font(.srSubheadlineStrong)
+                    .foregroundStyle(Color.srStageText)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text("It becomes the picture on the recording's card in your library.")
+                    .font(.srFootnote)
+                    .foregroundStyle(Color.srStageTextSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
     }
 }
 

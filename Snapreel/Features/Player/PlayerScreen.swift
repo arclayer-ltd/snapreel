@@ -284,6 +284,7 @@ struct PlayerScreen: View {
                              onShare: { shareTarget = video },
                              onMore: { sheet = .actions(confirmingDelete: false) },
                              onEditTitle: { sheet = .title },
+                             onEditVideo: { router.edit(video.id) },
                              onStats: { sheet = .stats },
                              onSaveToPhotos: { photosTarget = video },
                              onToggleWatchLater: { chooseAction(.toggleWatchLater) },

@@ -50,7 +50,12 @@ print("\n".join(r["identifier"] for r in reversed(rs)))'); do
 
 # 375x812 points: iPhone 11 Pro renders 1125x2436 (same as the reference captures);
 # the minis render 1080x2340 at the same point size.
-DEVICE=$(pick_or_create "Snapreel X" "iPhone 11 Pro" "iPhone 13 mini" "iPhone 12 mini")
+# SCREENSHOT_DEVICE names another model (a small or a large screen).
+if [ -n "${SCREENSHOT_DEVICE:-}" ]; then
+  DEVICE=$(pick_or_create "Snapreel $SCREENSHOT_DEVICE" "$SCREENSHOT_DEVICE")
+else
+  DEVICE=$(pick_or_create "Snapreel X" "iPhone 11 Pro" "iPhone 13 mini" "iPhone 12 mini")
+fi
 if [ -z "$DEVICE" ]; then
   echo "No 375x812 simulator could be created" | tee "$OUT/../screenshots-missing.txt"
   exit 1
@@ -72,6 +77,7 @@ done
 # Re-applied after a reboot (the status bar override does not survive one).
 prepare_device() {
   xcrun simctl ui "$DEVICE" appearance "$APPEARANCE"
+  if [ -n "${SCREENSHOT_TEXT_SIZE:-}" ]; then xcrun simctl ui "$DEVICE" content_size "$SCREENSHOT_TEXT_SIZE" || true; fi
   for KEY in DidShowContinuousPathIntroduction DidShowGestureKeyboardIntroduction; do
     xcrun simctl spawn "$DEVICE" defaults write com.apple.keyboard.preferences "$KEY" -bool true || true
   done

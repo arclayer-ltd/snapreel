@@ -1,4 +1,5 @@
 import AVFoundation
+import Combine
 import UIKit
 
 enum EditRenderError: Error, Equatable {
@@ -12,22 +13,35 @@ enum EditRenderError: Error, Equatable {
         switch self {
         case .missingRecipe: return "This edit's details are missing, so it can't be saved."
         case .missingSource: return "The original recording is gone, so this edit can't be saved."
-        case .exportUnavailable: return "Your iPhone couldn't start saving this edit. Try again."
-        case .interrupted: return "Snapreel was closed while saving your edit. Try again."
-        case .failed: return "Something went wrong while saving your edit. Try again."
+        case .exportUnavailable: return "Your iPhone couldn't start saving this edit. Close other apps and try again."
+        case .interrupted: return "Saving was interrupted. Try again: it carries on from where it stopped."
+        case .failed: return "Something went wrong while saving your edit. Try again, or choose 720p for a smaller file."
         }
     }
 }
 
 /// Saves an edit as a new recording. The library row exists from the first moment (saving, with
 /// progress), and `RecordingSaver` does the rest exactly as for a recording: when the file is
-/// missing it asks `render` to make it, so a save interrupted by the app closing is made again
-/// next launch, and a failure offers "Try saving again" in the library.
+/// missing it asks `render` to make it, so a save interrupted by the app closing carries on next
+/// launch, and a failure offers "Try saving again" in the library.
 @MainActor
-final class EditRenderer {
+final class EditRenderer: ObservableObject {
     static let shared = EditRenderer()
 
-    private var sessions: [UUID: AVAssetExportSession] = [:]
+    /// A save in progress. It exists from before the first step, so Cancel works at any moment.
+    private final class Job {
+        var exporter: EditExporter?
+        var isCancelled = false
+    }
+
+    private var jobs: [UUID: Job] = [:]
+    private var observers: [NSObjectProtocol] = []
+    private var isInBackground = false
+    private var keptAwake = false
+    private var isBusy = false
+    private var waiting: [CheckedContinuation<Void, Never>] = []
+    /// Edits whose save waits because Snapreel isn't on screen.
+    @Published private(set) var isPaused = false
 
     /// Adds the new recording's row and starts saving. Returns its id.
     func begin(recipe: EditRecipe, source: Video, library: Library) -> UUID {
@@ -49,18 +63,54 @@ final class EditRenderer {
         source.needsTitle ? "Edited \(source.kind.titlePrefix.lowercased())" : "\(source.title) (edited)"
     }
 
-    /// Stops a save in progress (the editor's Cancel).
+    /// Stops a save in progress (the editor's Cancel), whatever step it is at.
     func cancel(_ id: UUID) {
-        sessions[id]?.cancelExport()
+        jobs[id]?.isCancelled = true
+        jobs[id]?.exporter?.cancel()
     }
 
-    func isRendering(_ id: UUID) -> Bool { sessions[id] != nil }
+    func isRendering(_ id: UUID) -> Bool { jobs[id] != nil }
+
+    static func workFolder(_ id: UUID, in editFolder: URL) -> URL {
+        editFolder.appendingPathComponent("saving-\(id.uuidString)", isDirectory: true)
+    }
 
     /// Makes the edited file at `url` from the stored recipe, reporting progress on the row.
     func render(_ id: UUID, to url: URL, library: Library) async throws {
         guard let output = library.editOutput(id) else { throw EditRenderError.missingRecipe }
+        let job = Job()
+        jobs[id] = job
+        observe()
+        keepAwake()
+        await takeTurn()
+        let background = BackgroundTime(name: "Saving an edit")
+        defer {
+            jobs[id] = nil
+            keepAwake()
+            background.end()
+            endTurn()
+        }
+        do {
+            try check(job)
+            try await render(output, id: id, job: job, to: url, library: library)
+        } catch {
+            try? FileManager.default.removeItem(at: url)
+            if job.isCancelled {
+                try? FileManager.default.removeItem(at: Self.workFolder(id, in: library.media.editFolder(output.recipe.sourceID)))
+                library.removeEditFilesIfUnused(output.recipe.sourceID)
+                throw CancellationError()
+            }
+            throw error
+        }
+    }
+
+    private func render(_ output: EditOutput, id: UUID, job: Job, to url: URL, library: Library) async throws {
         let recipe = output.recipe
         guard let source = library.video(recipe.sourceID), source.state.isReady else { throw EditRenderError.missingSource }
+        // A screen recording's file is swapped for one with a single sound track shortly after it
+        // is recorded; wait for that, so the file doesn't change underneath.
+        await RecordingSaver.shared.waitUntilFinished(source.id)
+        try check(job)
         let sourceURL = library.fileURL(for: source)
         guard FileManager.default.fileExists(atPath: sourceURL.path) else { throw EditRenderError.missingSource }
 
@@ -70,71 +120,114 @@ final class EditRenderer {
         } catch {
             throw EditRenderError.missingSource
         }
-        let estimate = EditEstimate.bytes(recipe: recipe, picture: info.hasVideo ? info.uprightSize : nil,
+        try check(job)
+        let settings = EditExportSettings(recipe: recipe, picture: info.hasVideo ? info.uprightSize : nil,
+                                          sourceBitRate: info.videoBitRate, frameRate: Double(info.frameRate),
                                           quality: recipe.quality)
-        guard DiskSpace.hasRoom(for: estimate) else { throw RecordingSaveError.noSpace }
+        guard EditEstimate.hasRoom(for: EditEstimate.bytes(recipe: recipe, settings: settings)) else { throw RecordingSaveError.noSpace }
 
         let folder = library.media.editFolder(source.id)
         let cleaned = folder.appendingPathComponent("clean-sound.m4a")
         if recipe.audio.reducesNoise && !FileManager.default.fileExists(atPath: cleaned.path) {
             try? await NoiseReducer.clean(source: sourceURL, to: cleaned) { _ in }
+            try check(job)
         }
-        setProgress(id, 0.05, library: library)
+        setProgress(id, 0.03, library: library)
 
-        let renderSize = recipe.renderSize(source: info.uprightSize, quality: recipe.quality)
-        let overlays = info.hasVideo
-            ? EditOverlayRasterizer.images(recipe: recipe, transcript: library.transcript(for: source.id), size: renderSize)
-            : []
-        let build = try await EditCompositionBuilder.build(recipe: recipe, source: info, editFolder: folder,
-                                                           cleanedAudio: cleaned,
-                                                           purpose: .export(quality: recipe.quality, overlays: overlays))
-        let preset = info.hasVideo ? AVAssetExportPresetHighestQuality : AVAssetExportPresetAppleM4A
-        guard let session = AVAssetExportSession(asset: build.composition, presetName: preset) else {
-            throw EditRenderError.exportUnavailable
+        let build: EditBuild
+        do {
+            build = try await EditCompositionBuilder.build(recipe: recipe, source: info, editFolder: folder,
+                                                           cleanedAudio: cleaned, originalSound: false)
+        } catch {
+            throw EditRenderError.failed
         }
-        try? FileManager.default.removeItem(at: url)
-        session.outputURL = url
-        session.outputFileType = info.hasVideo ? .mp4 : .m4a
-        session.audioMix = build.audioMix
-        session.videoComposition = build.videoComposition
-        session.audioTimePitchAlgorithm = .spectral
-        session.shouldOptimizeForNetworkUse = true
-
-        sessions[id] = session
-        var background = UIBackgroundTaskIdentifier.invalid
-        background = UIApplication.shared.beginBackgroundTask(withName: "Saving an edit") {
-            // Out of background time: the export fails and the save offers to try again.
-            session.cancelExport()
+        try check(job)
+        guard build.duration > .zero else { throw EditRenderError.failed }
+        let transcript = library.transcript(for: source.id)
+        let drawing = EditOverlayRasterizer(recipe: recipe, transcript: transcript, size: settings.size,
+                                            managed: info.isHDR)
+        let plan = EditExportPlan(id: id, recipe: recipe, source: info, build: build, settings: settings,
+                                  workFolder: Self.workFolder(id, in: folder), output: url,
+                                  overlays: { drawing.images(in: $0) },
+                                  overlayTimes: info.hasVideo ? drawing.times : [])
+        let exporter = EditExporter(plan: plan) { fraction in
+            Task { @MainActor in EditRenderer.shared.setProgress(id, 0.03 + fraction * 0.95, library: library) }
         }
-        let progress = Task { @MainActor [weak self] in
-            while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 250_000_000)
-                self?.setProgress(id, 0.05 + Double(session.progress) * 0.9, library: library)
-            }
-        }
-        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-            session.exportAsynchronously {
-                continuation.resume()
-            }
-        }
-        progress.cancel()
-        sessions[id] = nil
-        let wentToBackground = UIApplication.shared.applicationState == .background
-        if background != .invalid { UIApplication.shared.endBackgroundTask(background) }
-
-        switch session.status {
-        case .completed:
-            setProgress(id, 0.96, library: library)
-        case .cancelled:
-            try? FileManager.default.removeItem(at: url)
-            if wentToBackground { throw EditRenderError.interrupted }
+        job.exporter = exporter
+        if isInBackground { exporter.suspend() }
+        do {
+            try await exporter.run()
+        } catch EditExportFailure.cancelled {
             throw CancellationError()
-        default:
-            try? FileManager.default.removeItem(at: url)
-            if let error = session.error, DiskSpace.isOutOfSpace(error) { throw RecordingSaveError.noSpace }
-            throw wentToBackground ? EditRenderError.interrupted : EditRenderError.failed
+        } catch EditExportFailure.interrupted {
+            throw EditRenderError.interrupted
+        } catch EditExportFailure.failed(let underlying) {
+            if let underlying, DiskSpace.isOutOfSpace(underlying) { throw RecordingSaveError.noSpace }
+            throw isInBackground ? EditRenderError.interrupted : EditRenderError.failed
+        } catch {
+            if DiskSpace.isOutOfSpace(error) { throw RecordingSaveError.noSpace }
+            throw EditRenderError.failed
+        }
+        try check(job)
+        setProgress(id, 0.98, library: library)
+    }
+
+    private func check(_ job: Job) throws {
+        if job.isCancelled { throw CancellationError() }
+    }
+
+    // MARK: - Leaving and coming back
+
+    /// Drawing and encoding aren't allowed in the background, so a save stops as Snapreel leaves
+    /// the screen and carries on, from the last few seconds, as it comes back.
+    private func observe() {
+        guard observers.isEmpty else { return }
+        let center = NotificationCenter.default
+        observers.append(center.addObserver(forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main) { _ in
+            MainActor.assumeIsolated { EditRenderer.shared.setBackground(true) }
+        })
+        observers.append(center.addObserver(forName: UIApplication.willEnterForegroundNotification, object: nil, queue: .main) { _ in
+            MainActor.assumeIsolated { EditRenderer.shared.setBackground(false) }
+        })
+        isInBackground = UIApplication.shared.applicationState == .background
+    }
+
+    func setBackground(_ background: Bool) {
+        isInBackground = background
+        for job in jobs.values {
+            if background { job.exporter?.suspend() } else { job.exporter?.resume() }
+        }
+        isPaused = background && !jobs.isEmpty
+    }
+
+    /// The screen stays on while an edit saves, so the iPhone doesn't lock halfway.
+    private func keepAwake() {
+        if !jobs.isEmpty {
+            keptAwake = true
+            UIApplication.shared.isIdleTimerDisabled = true
+        } else if keptAwake {
+            keptAwake = false
+            // A recording in progress keeps the screen on for itself.
+            let router = AppEnvironment.shared.router
+            if router.recorder == nil, router.minimizedRecorder == nil { UIApplication.shared.isIdleTimerDisabled = false }
         }
     }
+
+    /// One save at a time: two encoders at once would take an older iPhone's memory, and finish no
+    /// sooner.
+    private func takeTurn() async {
+        if !isBusy {
+            isBusy = true
+            return
+        }
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in waiting.append(continuation) }
+    }
+
+    private func endTurn() {
+        if waiting.isEmpty { isBusy = false } else { waiting.removeFirst().resume() }
+    }
+
+    // MARK: - Afterwards
 
     /// After the new recording is ready: its transcript comes from the original's (re-timed, no
     /// second recognition), and the draft and recipe are no longer needed.
@@ -153,6 +246,7 @@ final class EditRenderer {
             library.deleteDraft(recipe.sourceID)
         }
         library.deleteEditOutput(id)
+        try? FileManager.default.removeItem(at: Self.workFolder(id, in: library.media.editFolder(recipe.sourceID)))
         library.removeEditFilesIfUnused(recipe.sourceID)
         return hasTranscript
     }
@@ -165,8 +259,43 @@ final class EditRenderer {
         return min(0.5, duration / 2)
     }
 
+    /// On the row, a percent at a time: each change is written to the database and redraws the
+    /// library.
     private func setProgress(_ id: UUID, _ value: Double, library: Library) {
-        guard let video = library.video(id), case .saving(let current) = video.state, value > current else { return }
+        guard let video = library.video(id), case .saving(let current) = video.state,
+              value >= current + 0.01 || value >= 0.98 && value > current else { return }
         library.update(id) { $0.state = .saving(progress: min(0.99, value)) }
     }
+}
+
+/// Asks iOS for a little more time when the app leaves the screen.
+@MainActor
+private final class BackgroundTime {
+    private var id = UIBackgroundTaskIdentifier.invalid
+
+    init(name: String) {
+        id = UIApplication.shared.beginBackgroundTask(withName: name) { [weak self] in
+            MainActor.assumeIsolated { self?.end() }
+        }
+    }
+
+    func end() {
+        guard id != .invalid else { return }
+        UIApplication.shared.endBackgroundTask(id)
+        id = .invalid
+    }
+}
+
+/// File size of an edit before it is made.
+enum EditEstimate {
+    static func bytes(recipe: EditRecipe, settings: EditExportSettings) -> Int64 {
+        Int64((settings.videoBitRate + EditExportSettings.audioBitRate) * max(0, recipe.outputDuration) / 8)
+    }
+
+    /// Room for the file and the pieces it is put together from, and 200 MB left over.
+    static func hasRoom(for bytes: Int64, available: Int64 = DiskSpace.available) -> Bool {
+        available - spaceNeeded(for: bytes) > 0
+    }
+
+    static func spaceNeeded(for bytes: Int64) -> Int64 { bytes * 2 + bytes / 4 + 200_000_000 }
 }

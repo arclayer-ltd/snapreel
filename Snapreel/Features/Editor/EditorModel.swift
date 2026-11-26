@@ -62,6 +62,15 @@ enum EditorSelection: Equatable {
     case voice(UUID)
 }
 
+extension EditorSelection {
+    var isPinchableOverlay: Bool {
+        switch self {
+        case .text, .sticker: return true
+        default: return false
+        }
+    }
+}
+
 enum EditorSheet: String, Identifiable {
     case transcript, speed, export, discard, captionWords, emoji
 
@@ -94,6 +103,8 @@ struct VoiceTake: Equatable {
     var fileName: String
     var start: Double
     var duration: Double
+    /// Seconds of the file before the video started moving.
+    var lead: Double = 0
 }
 
 enum NoisePhase: Equatable {
@@ -103,7 +114,11 @@ enum NoisePhase: Equatable {
     case failed
 }
 
-enum TrimEdge: Equatable { case start, end }
+enum TrimEdge: Equatable {
+    case start, end
+    /// The whole overlay moves in time, its length kept.
+    case whole
+}
 
 /// A handle being dragged on the timeline.
 struct TrimDrag: Equatable {
@@ -118,14 +133,6 @@ enum TrimTarget: Equatable {
     case text(UUID)
     case sticker(UUID)
     case blur(UUID)
-}
-
-/// One picture of the filmstrip.
-struct EditFilmFrame: Identifiable {
-    var id: Double { time }
-    /// Source seconds.
-    var time: Double
-    var image: UIImage
 }
 
 /// A filler word the transcript tool offers to cut.
@@ -151,12 +158,32 @@ final class EditorModel: ObservableObject {
     /// Debug screenshots: the poster stands in for the player, nothing plays or records.
     let isStatic: Bool
 
-    @Published private(set) var recipe: EditRecipe
+    @Published private(set) var recipe: EditRecipe {
+        didSet {
+            if oldValue.segments != recipe.segments || oldValue.captions != recipe.captions { captionCache = nil }
+            updateMoment()
+        }
+    }
     @Published private(set) var canUndo = false
     @Published private(set) var canRedo = false
 
-    @Published var playhead: Double = 0
+    /// The playhead. Views that move with it observe `clock` (or `clock.seconds`), never the model.
+    let clock = EditorClock()
+    /// What is on the picture at the playhead.
+    let moment = EditorMomentStore()
+    var playhead: Double {
+        get { clock.time }
+        set {
+            guard newValue != clock.time else { return }
+            clock.time = newValue
+            updateMoment()
+        }
+    }
     @Published private(set) var isPlaying = false
+    /// The recording is still being put together (a screen recording just made) or opened.
+    @Published private(set) var isPreparing = false
+    /// The recording can't be opened for editing.
+    @Published private(set) var loadFailed = false
     @Published var selection: EditorSelection?
     @Published private(set) var tool: EditorTool?
     @Published var sheet: EditorSheet?
@@ -164,7 +191,9 @@ final class EditorModel: ObservableObject {
     @Published var toast: ToastMessage?
 
     @Published private(set) var poster: UIImage?
-    @Published private(set) var filmFrames: [EditFilmFrame] = []
+    let filmstrip = EditorFilmstrip()
+    /// Sound levels by file name (the recording's under "source"), for drawing it.
+    @Published private(set) var levels: [String: [Float]] = [:]
     @Published private(set) var pictureSize: CGSize
     @Published var pointsPerSecond: CGFloat = 0
     @Published var trimDrag: TrimDrag?
@@ -184,23 +213,38 @@ final class EditorModel: ObservableObject {
     @Published var transcriptPhaseOverride: TranscriptPhase?
     var availableBytesOverride: Int64?
 
-    let player = AVPlayer()
+    let playback = EditorPlayback()
+    var player: AVPlayer { playback.player }
     private var sourceInfo: EditSource?
     private var undoStack: [EditRecipe] = []
     private var redoStack: [EditRecipe] = []
     private var liveStart: EditRecipe?
-    private var builtKey: String?
+    /// What the player in front plays, so a change rebuilds only the part it touches.
+    private var built: (structure: String, picture: String, sound: String)?
+    private var currentBuild: EditBuild?
     private var buildTask: Task<Void, Never>?
+    private var pictureTask: Task<Void, Never>?
     private var saveTask: Task<Void, Never>?
-    private var timeObserver: Any?
-    private var endObserver: NSObjectProtocol?
-    private var seekTarget: Double?
-    private var isSeeking = false
+    private var displayLink: CADisplayLink?
+    private var observers: [NSObjectProtocol] = []
+    private var lastSeek: (time: Double, at: CFTimeInterval)?
+    private var isScrubbing = false
+    /// The player shows the recording itself, so a trim handle can show the frame under it.
+    private var trimPreview: EditRecipe?
+    private var trimTimeValue = 0.0
+    private var trimPreviewIsShown = false
+    private var pinchStart: (scale: Double, rotation: Double)?
+    private var sessionIsActive = false
     private let recorder = VoiceOverRecorder()
     private var countdownTask: Task<Void, Never>?
     private var levelTask: Task<Void, Never>?
     private var takePlayer: AVAudioPlayer?
+    private var takeTask: Task<Void, Never>?
+    private var noiseTask: Task<Void, Never>?
     private var pendingDraft: EditDraft?
+    private var isClosed = false
+    private var captionCache: (stamp: String, lines: [EditCaptionLine], pieces: [EditCaptionLine])?
+    private var fillerCache: (stamp: String, all: [EditFiller])?
 
     static let trimCoachKey = "editor.trimCoachSeen"
 
@@ -219,7 +263,7 @@ final class EditorModel: ObservableObject {
             pendingDraft = draft
             phase = .restorePrompt
         }
-        player.actionAtItemEnd = .pause
+        playback.onPlayingChanged = { [weak self] playing in self?.playerChanged(playing) }
     }
 
     var hasPicture: Bool { !source.isAudioOnly }
@@ -227,6 +271,13 @@ final class EditorModel: ObservableObject {
     var tools: [EditorTool] { EditorTool.allCases.filter { hasPicture || $0.worksWithoutPicture } }
     var isDirty: Bool { !recipe.isUntouched }
     var draftDate: Date? { pendingDraft?.recipe.updatedAt }
+    /// While a voice-over counts down or records, nothing else may move the video or change it.
+    var isRecordingVoice: Bool {
+        switch voice {
+        case .countdown, .recording: return true
+        default: return false
+        }
+    }
     var cleanedSoundURL: URL { editFolder.appendingPathComponent("clean-sound.m4a") }
     /// The picture as shown: cropped and turned.
     var outputPictureSize: CGSize { recipe.outputPictureSize(source: pictureSize) }
@@ -234,27 +285,58 @@ final class EditorModel: ObservableObject {
     // MARK: - Loading
 
     func load() async {
+        guard sourceInfo == nil, !isClosed else { return }
         if pointsPerSecond == 0 { pointsPerSecond = Self.defaultPointsPerSecond(duration: duration) }
         if let url = library.thumbnailURL(for: source) {
             poster = await ThumbnailCache.shared.load(url)
         }
         if isStatic {
-            if let poster { filmFrames = Self.staticFilm(poster, duration: recipe.sourceDuration) }
+            filmstrip.still = poster?.cgImage
+            updateMoment()
             return
         }
-        observePlayer()
+        isPreparing = true
+        observe()
+        // A screen recording's two sound tracks become one shortly after it is recorded, which
+        // replaces its file; opening it before then would read a file that is about to change.
+        await RecordingSaver.shared.waitUntilFinished(source.id)
+        guard !isClosed else { return }
         do {
             let info = try await EditSource.load(sourceURL)
+            guard !isClosed else { return }
             sourceInfo = info
             if info.hasVideo { pictureSize = info.uprightSize }
-            if info.duration > 0, abs(info.duration - recipe.sourceDuration) > 0.05, !isDirty {
-                recipe = EditRecipe.original(sourceID: source.id, duration: info.duration)
+            if info.duration > 0, abs(info.duration - recipe.sourceDuration) > 0.05 {
+                recipe = isDirty ? repaired(recipe)
+                    : EditRecipe.original(sourceID: source.id, duration: info.duration)
+                playhead = min(playhead, max(0, duration - 0.01))
             }
-            rebuild(force: true)
-            if info.hasVideo { await makeFilmstrip(info) }
+            await rebuildNow()
+            isPreparing = false
+            if info.hasVideo { filmstrip.start(info) } else { loadLevels("source", url: sourceURL) }
         } catch {
-            toast = ToastMessage(text: "This recording can't be opened for editing.", systemImage: "exclamationmark.circle.fill")
+            isPreparing = false
+            loadFailed = true
         }
+    }
+
+    private func repaired(_ recipe: EditRecipe) -> EditRecipe {
+        let folder = editFolder
+        return recipe.repaired(duration: sourceInfo?.duration ?? recipe.sourceDuration) {
+            FileManager.default.fileExists(atPath: folder.appendingPathComponent($0).path)
+        }
+    }
+
+    private func loadLevels(_ name: String, url: URL) {
+        guard !isStatic, levels[name] == nil else { return }
+        Task { @MainActor [weak self] in
+            let values = await EditorLevels.load(url)
+            self?.levels[name] = values
+        }
+    }
+
+    private func loadVoiceLevels() {
+        for clip in recipe.voiceClips { loadLevels(clip.fileName, url: editFolder.appendingPathComponent(clip.fileName)) }
     }
 
     static func defaultPointsPerSecond(duration: Double) -> CGFloat {
@@ -263,48 +345,24 @@ final class EditorModel: ObservableObject {
         CGFloat(min(80, max(12, 700 / max(duration, 1))))
     }
 
-    private static func staticFilm(_ poster: UIImage, duration: Double) -> [EditFilmFrame] {
-        stride(from: 0.0, to: max(duration, 1), by: max(duration, 1) / 24).map { EditFilmFrame(time: $0, image: poster) }
-    }
-
-    private func makeFilmstrip(_ info: EditSource) async {
-        let count = Int(min(48, max(8, info.duration / 2)))
-        let step = info.duration / Double(count)
-        let times = (0..<count).map { CMTime(seconds: Double($0) * step + step / 2, preferredTimescale: 600) }
-        let generator = AVAssetImageGenerator(asset: info.asset)
-        generator.appliesPreferredTrackTransform = true
-        generator.maximumSize = CGSize(width: 160, height: 160)
-        generator.requestedTimeToleranceBefore = CMTime(seconds: step / 2, preferredTimescale: 600)
-        generator.requestedTimeToleranceAfter = CMTime(seconds: step / 2, preferredTimescale: 600)
-        var frames: [EditFilmFrame] = []
-        for await result in generator.images(for: times) {
-            guard let image = try? result.image else { continue }
-            frames.append(EditFilmFrame(time: result.requestedTime.seconds, image: UIImage(cgImage: image)))
-            if frames.count % 6 == 0 { filmFrames = frames.sorted { $0.time < $1.time } }
-        }
-        filmFrames = frames.sorted { $0.time < $1.time }
-    }
-
-    /// The filmstrip picture nearest to source time `t`.
-    func filmImage(atSource t: Double) -> UIImage? {
-        guard !filmFrames.isEmpty else { return poster }
-        var best = filmFrames[0]
-        for frame in filmFrames where abs(frame.time - t) < abs(best.time - t) { best = frame }
-        return best.image
+    /// Zoomed all the way out, the whole edit is about half a screen wide.
+    func zoomRange(width: CGFloat) -> ClosedRange<CGFloat> {
+        let least = max(0.2, width * 0.6 / CGFloat(max(duration, 0.5)))
+        return min(least, 240)...240
     }
 
     // MARK: - Still picture
 
     private var stillCache: (key: String, image: UIImage)?
-    private let stillContext = CIContext(options: [.cacheIntermediates: false])
-
     /// The poster with the recipe's crop, turn, flip and blur: what the preview shows before
     /// the player has a frame, and in debug screenshots.
     func stillImage(fullFrame: Bool) -> UIImage? {
         guard let poster, let cg = poster.cgImage else { return nil }
         // Blur boxes come and go with time; only screenshots need the still to follow them.
         let moment = isStatic && !recipe.blurs.isEmpty ? Int(playhead * 10) : 0
-        let key = "\(fullFrame)|\(recipe.crop.rect)|\(recipe.quarterTurns)|\(recipe.flipped)|\(recipe.blurs.map(\.rect))|\(moment)"
+        // The crop tool shows the whole picture, so dragging the crop must not draw it again.
+        let key = "\(fullFrame)|\(fullFrame ? .zero : recipe.crop.rect)|\(recipe.quarterTurns)|\(recipe.flipped)|"
+            + "\(fullFrame ? [] : recipe.blurs.map(\.rect))|\(moment)"
         if let stillCache, stillCache.key == key { return stillCache.image }
         var shown = recipe
         if fullFrame {
@@ -313,10 +371,14 @@ final class EditorModel: ObservableObject {
         }
         let upright = CGSize(width: cg.width, height: cg.height)
         let size = shown.renderSize(source: upright, quality: .original)
-        let pipeline = EditFramePipeline(recipe: shown, naturalSize: upright, orientation: .up, renderSize: size,
-                                         showsBlur: !fullFrame, overlays: [])
-        let frame = pipeline.render(CIImage(cgImage: cg), at: playhead)
-        guard let output = stillContext.createCGImage(frame, from: CGRect(origin: .zero, size: size)) else { return poster }
+        let untouched = shown.crop.isFullFrame && shown.quarterTurns % 4 == 0 && !shown.flipped && shown.blurs.isEmpty
+        if untouched {
+            stillCache = (key, poster)
+            return poster
+        }
+        let pipeline = EditFramePipeline(recipe: shown, upright: size, showsBlur: !fullFrame)
+        let frame = pipeline.draw(CIImage(cgImage: cg), at: playhead)
+        guard let output = EditGraphics.managedContext.createCGImage(frame, from: CGRect(origin: .zero, size: size)) else { return poster }
         let image = UIImage(cgImage: output)
         stillCache = (key, image)
         return image
@@ -326,11 +388,14 @@ final class EditorModel: ObservableObject {
 
     func continueDraft() {
         if let draft = pendingDraft {
-            recipe = draft.recipe
+            recipe = repaired(draft.recipe)
             undoStack = []
             redoStack = []
             updateHistoryFlags()
-            if draft.recipe.audio.reducesNoise, FileManager.default.fileExists(atPath: cleanedSoundURL.path) { noise = .ready }
+            if recipe.audio.reducesNoise {
+                if FileManager.default.fileExists(atPath: cleanedSoundURL.path) { noise = .ready } else { cleanSound() }
+            }
+            loadVoiceLevels()
             rebuild(force: true)
         }
         pendingDraft = nil
@@ -340,18 +405,30 @@ final class EditorModel: ObservableObject {
     func startOver() {
         pendingDraft = nil
         library.deleteDraft(source.id)
+        library.removeEditFilesIfUnused(source.id)
         phase = .editing
     }
 
     func keepDraft() {
         saveTask?.cancel()
+        saveTask = nil
         if isDirty { library.saveDraft(stamped(recipe)) } else { library.deleteDraft(source.id) }
     }
 
+    /// Leaving without the edits.
     func discardDraft() {
         saveTask?.cancel()
+        saveTask = nil
+        isClosed = true
         library.deleteDraft(source.id)
         library.removeEditFilesIfUnused(source.id)
+    }
+
+    /// The menu's "Discard draft": back to the recording, and nothing kept. Undo still brings the
+    /// edits back until the editor closes, so voice-over files stay until then.
+    func discardEdits() {
+        revertToOriginal()
+        keepDraft()
     }
 
     private func stamped(_ recipe: EditRecipe) -> EditRecipe {
@@ -366,8 +443,14 @@ final class EditorModel: ObservableObject {
         saveTask = Task { @MainActor [weak self] in
             try? await Task.sleep(nanoseconds: 700_000_000)
             guard let self, !Task.isCancelled else { return }
-            if self.isDirty { self.library.saveDraft(self.stamped(self.recipe)) } else { self.library.deleteDraft(self.source.id) }
+            self.keepDraft()
         }
+    }
+
+    /// Writes a change still waiting to be saved (the app is leaving the screen).
+    private func flushDraft() {
+        guard saveTask != nil else { return }
+        keepDraft()
     }
 
     // MARK: - Changes and history
@@ -377,11 +460,12 @@ final class EditorModel: ObservableObject {
         var next = recipe
         change(&next)
         guard next != recipe else { return }
+        let old = recipe
         undoStack.append(recipe)
         if undoStack.count > 200 { undoStack.removeFirst() }
         redoStack.removeAll()
         recipe = next
-        didChange()
+        didChange(from: old)
     }
 
     /// Start of a drag or pinch: the whole gesture becomes one undo step.
@@ -395,6 +479,7 @@ final class EditorModel: ObservableObject {
         change(&next)
         guard next != recipe else { return }
         recipe = next
+        refreshSoon()
     }
 
     func endLiveChange() {
@@ -402,24 +487,27 @@ final class EditorModel: ObservableObject {
         liveStart = nil
         guard start != recipe else { return }
         undoStack.append(start)
+        if undoStack.count > 200 { undoStack.removeFirst() }
         redoStack.removeAll()
-        didChange()
+        didChange(from: start)
     }
 
     func undo() {
-        guard let previous = undoStack.popLast() else { return }
+        guard !isRecordingVoice, let previous = undoStack.popLast() else { return }
+        let old = recipe
         redoStack.append(recipe)
         recipe = previous
         Haptics.tap()
-        didChange(keepsSelection: false)
+        didChange(from: old, keepsSelection: false)
     }
 
     func redo() {
-        guard let next = redoStack.popLast() else { return }
+        guard !isRecordingVoice, let next = redoStack.popLast() else { return }
+        let old = recipe
         undoStack.append(recipe)
         recipe = next
         Haptics.tap()
-        didChange(keepsSelection: false)
+        didChange(from: old, keepsSelection: false)
     }
 
     /// Back to the recording as it was. Undo brings the edit back.
@@ -434,10 +522,16 @@ final class EditorModel: ObservableObject {
         toast = ToastMessage(text: "Back to the original. Undo brings your edits back.", systemImage: "arrow.uturn.backward")
     }
 
-    private func didChange(keepsSelection: Bool = true) {
+    /// After any finished change. The playhead stays on the moment it was on when what comes
+    /// before it got shorter or longer.
+    private func didChange(from old: EditRecipe, keepsSelection: Bool = true) {
         updateHistoryFlags()
         if !keepsSelection || !selectionExists { selection = nil }
-        playhead = min(playhead, max(0, duration - 0.01))
+        if old.segments != recipe.segments {
+            playhead = recipe.nearestOutputTime(forSource: old.sourceTime(forOutput: playhead))
+        }
+        playhead = min(max(0, playhead), max(0, duration - 0.01))
+        if old.voiceClips != recipe.voiceClips { loadVoiceLevels() }
         scheduleDraftSave()
         rebuild()
     }
@@ -460,128 +554,330 @@ final class EditorModel: ObservableObject {
 
     // MARK: - Preview
 
-    /// Rebuilds the player's composition when something it plays changed.
+    /// Brings the player up to date with the recipe. Only what changed is touched: new levels and
+    /// a new picture go straight onto what is playing; only different sections, voice-overs or
+    /// sound make a new one, which comes forward when its picture is ready.
     func rebuild(force: Bool = false) {
-        guard !isStatic, let info = sourceInfo else { return }
-        let fullFrame = tool == .crop
-        let key = previewKey(fullFrame: fullFrame)
-        guard force || key != builtKey else { return }
-        builtKey = key
+        guard !isStatic, sourceInfo != nil, !isClosed else { return }
+        if trimPreview != nil { return }
+        let structure = structureKey
+        if force || built == nil || built?.structure != structure {
+            buildTask?.cancel()
+            buildTask = Task { @MainActor [weak self] in await self?.rebuildNow() }
+            return
+        }
+        refreshPlaying()
+    }
+
+    private func rebuildNow() async {
+        guard let info = sourceInfo, !isClosed else { return }
         let recipe = self.recipe
-        let folder = editFolder
-        let cleaned = cleanedSoundURL
-        let original = hearsOriginalSound
-        buildTask?.cancel()
-        buildTask = Task { @MainActor [weak self] in
-            guard let build = try? await EditCompositionBuilder.build(recipe: recipe, source: info, editFolder: folder,
-                                                                     cleanedAudio: cleaned,
-                                                                     purpose: .preview(fullFrame: fullFrame, originalSound: original)),
-                  let self, !Task.isCancelled else { return }
+        let structure = structureKey
+        let picture = pictureKey
+        let sound = soundKey
+        let fullFrame = tool == .crop
+        built = (structure, picture, sound)
+        do {
+            let build = try await EditCompositionBuilder.build(recipe: recipe, source: info, editFolder: editFolder,
+                                                               cleanedAudio: cleanedSoundURL, originalSound: hearsOriginalSound)
+            guard !Task.isCancelled, !isClosed else { return }
             let item = AVPlayerItem(asset: build.composition)
             item.audioMix = build.audioMix
-            item.videoComposition = build.videoComposition
+            item.videoComposition = EditCompositionBuilder.previewVideoComposition(recipe: recipe, source: info, build: build,
+                                                                                   fullFrame: fullFrame)
             item.audioTimePitchAlgorithm = .spectral
-            let wasPlaying = self.isPlaying
-            self.player.replaceCurrentItem(with: item)
-            self.seek(to: self.playhead, exact: true)
-            if wasPlaying { self.player.play() }
+            guard await playback.show(item, hasPicture: info.hasVideo, place: { [weak self] in self?.playhead ?? 0 }) else {
+                if item.status == .failed, !Task.isCancelled, !isClosed { playbackFailed() }
+                return
+            }
+            currentBuild = build
+            // What this item was made with; levels or the picture may have changed meanwhile.
+            built = (structure, picture, sound)
+            refreshPlaying()
+            if isPlaying { playback.play() }
+        } catch {
+            if !Task.isCancelled, !isClosed { playbackFailed() }
         }
     }
 
-    private func previewKey(fullFrame: Bool) -> String {
-        var parts: [String] = []
-        parts.append(recipe.segments.map { "\($0.start)-\($0.end)x\($0.speed)" }.joined(separator: ","))
-        parts.append(fullFrame ? "full" : "\(recipe.crop.rect)")
-        parts.append("\(recipe.quarterTurns)\(recipe.flipped)")
-        parts.append(fullFrame ? "" : recipe.blurs.map { "\($0.rect)\($0.start)\($0.end)" }.joined())
-        parts.append("\(recipe.audio)")
-        parts.append(recipe.voiceClips.map { "\($0.fileName)\($0.start)" }.joined())
-        parts.append("\(hearsOriginalSound)\(noise == .ready)")
-        return parts.joined(separator: "|")
+    private func playbackFailed() {
+        built = nil
+        isPlaying = false
+        stopDisplayLink()
+        toast = ToastMessage(text: "This change can't be played. Undo brings the last one back.",
+                             systemImage: "exclamationmark.circle.fill")
     }
 
-    private func observePlayer() {
-        guard timeObserver == nil else { return }
-        timeObserver = player.addPeriodicTimeObserver(forInterval: CMTime(value: 1, timescale: 30), queue: .main) { [weak self] time in
-            Task { @MainActor in
-                guard let self, self.isPlaying, !self.isSeeking else { return }
-                self.playhead = min(max(0, time.seconds), self.duration)
-            }
+    /// New levels and a new picture for what is playing.
+    private func refreshPlaying() {
+        guard let info = sourceInfo, let build = currentBuild, let item = player.currentItem, var built,
+              !playback.isShowing else { return }
+        let picture = pictureKey, sound = soundKey
+        if sound != built.sound {
+            built.sound = sound
+            item.audioMix = EditCompositionBuilder.audioMix(recipe: recipe, build: build)
         }
-        endObserver = NotificationCenter.default.addObserver(forName: .AVPlayerItemDidPlayToEndTime, object: nil,
-                                                             queue: .main) { [weak self] note in
-            Task { @MainActor in
-                guard let self, (note.object as? AVPlayerItem) === self.player.currentItem else { return }
-                self.isPlaying = false
-                self.playhead = self.duration
-                if case .recording = self.voice { self.stopRecording() }
-            }
+        if picture != built.picture {
+            built.picture = picture
+            item.videoComposition = EditCompositionBuilder.previewVideoComposition(recipe: recipe, source: info, build: build,
+                                                                                   fullFrame: tool == .crop)
+        }
+        self.built = built
+    }
+
+    /// During a drag: the blur or the level follows the finger, twenty times a second.
+    private func refreshSoon() {
+        guard !isStatic, pictureTask == nil, trimPreview == nil, built?.structure == structureKey else { return }
+        pictureTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 50_000_000)
+            guard let self else { return }
+            self.pictureTask = nil
+            if !self.isClosed, self.trimPreview == nil, self.built?.structure == self.structureKey { self.refreshPlaying() }
+        }
+    }
+
+    private var structureKey: String {
+        let sections = recipe.playedSegments.map { "\($0.start)-\($0.end)x\($0.speed)" }.joined(separator: ",")
+        let voices = recipe.voiceClips.map { "\($0.fileName)@\($0.start)" }.joined(separator: ",")
+        return "\(sections)|\(voices)|\(recipe.audio.reducesNoise && noise == .ready && !hearsOriginalSound)"
+    }
+
+    private var pictureKey: String {
+        let fullFrame = tool == .crop
+        let blurs = fullFrame ? "" : recipe.blurs.map { "\($0.rect)\($0.start)\($0.end)" }.joined()
+        return "\(fullFrame ? "full" : "\(recipe.crop.rect)")|\(recipe.quarterTurns)\(recipe.flipped)|\(blurs)"
+    }
+
+    private var soundKey: String {
+        let audio = recipe.audio
+        return "\(audio.volume)|\(audio.muted)|\(audio.fadeIn)|\(audio.fadeOut)|\(audio.voiceVolume)"
+    }
+
+    private func observe() {
+        guard observers.isEmpty else { return }
+        let center = NotificationCenter.default
+        func on(_ name: Notification.Name, _ body: @escaping @MainActor (EditorModel, Notification) -> Void) {
+            observers.append(center.addObserver(forName: name, object: nil, queue: .main) { [weak self] note in
+                MainActor.assumeIsolated {
+                    if let self { body(self, note) }
+                }
+            })
+        }
+        on(.AVPlayerItemDidPlayToEndTime) { model, note in
+            guard (note.object as? AVPlayerItem) === model.player.currentItem, model.trimPreview == nil else { return }
+            model.reachedEnd()
+        }
+        on(.AVPlayerItemFailedToPlayToEndTime) { model, note in
+            guard (note.object as? AVPlayerItem) === model.player.currentItem else { return }
+            model.pause()
+            model.rebuild(force: true)
+        }
+        // A call, an alarm, Siri: the video stops, and a voice-over take ends where it was.
+        on(AVAudioSession.interruptionNotification) { model, note in
+            let kind = (note.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt).flatMap(AVAudioSession.InterruptionType.init)
+            model.sessionIsActive = false
+            if kind == .began { model.stopEverything() }
+        }
+        // Headphones unplugged: never carry on out loud.
+        on(AVAudioSession.routeChangeNotification) { model, note in
+            let reason = (note.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt).flatMap(AVAudioSession.RouteChangeReason.init)
+            if reason == .oldDeviceUnavailable, !model.isRecordingVoice { model.pause() }
+        }
+        on(AVAudioSession.mediaServicesWereResetNotification) { model, _ in
+            model.sessionIsActive = false
+            model.stopEverything()
+            model.rebuild(force: true)
+        }
+        on(UIApplication.willResignActiveNotification) { model, _ in model.flushDraft() }
+        on(UIApplication.didEnterBackgroundNotification) { model, _ in model.stopEverything() }
+        on(UIApplication.didBecomeActiveNotification) { model, _ in
+            // Back from Settings with the microphone switched on.
+            if model.tool == .voice, model.voice == .denied || model.voice == .primer { model.voice = model.voicePhaseForPermission() }
+        }
+        on(UIApplication.didReceiveMemoryWarningNotification) { model, _ in model.filmstrip.trim() }
+    }
+
+    private func stopEverything() {
+        if case .countdown = voice { cancelCountdown() }
+        if case .recording = voice { stopRecording() }
+        pause()
+    }
+
+    private func reachedEnd() {
+        isPlaying = false
+        stopDisplayLink()
+        playhead = duration
+        if case .recording = voice { stopRecording() }
+        takePlayer?.stop()
+    }
+
+    /// The player stopped by itself (a call, headphones unplugged).
+    private func playerChanged(_ playing: Bool) {
+        guard !isStatic, !playing, isPlaying, !playback.isShowing else { return }
+        if abs(player.currentTime().seconds - duration) < 0.1 {
+            reachedEnd()
+        } else {
+            isPlaying = false
+            stopDisplayLink()
+            takePlayer?.stop()
+            if case .recording = voice { stopRecording() }
         }
     }
 
     func teardown() {
-        player.pause()
-        player.replaceCurrentItem(with: nil)
-        if let timeObserver { player.removeTimeObserver(timeObserver) }
-        timeObserver = nil
-        if let endObserver { NotificationCenter.default.removeObserver(endObserver) }
-        endObserver = nil
+        isClosed = true
+        saveTask?.cancel()
+        stopDisplayLink()
+        playback.stop()
+        observers.forEach(NotificationCenter.default.removeObserver)
+        observers = []
         countdownTask?.cancel()
         levelTask?.cancel()
+        takeTask?.cancel()
+        noiseTask?.cancel()
+        pictureTask?.cancel()
         takePlayer?.stop()
         recorder.cancel()
         buildTask?.cancel()
+        filmstrip.stop()
+        // Voice-over takes and cleaned sound nothing needs any more.
+        library.removeEditFilesIfUnused(source.id)
+        if sessionIsActive {
+            sessionIsActive = false
+            // Music that was playing before comes back. Not on the main thread: it can take a moment.
+            DispatchQueue.global(qos: .utility).async {
+                try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+            }
+        }
     }
 
     // MARK: - Playback
 
     func togglePlay() {
+        guard !isRecordingVoice else { return }
         isPlaying ? pause() : play()
     }
 
     func play() {
-        guard !isStatic else { return }
+        guard !isStatic, sourceInfo != nil else { return }
         if playhead >= duration - 0.05 { seek(to: 0, exact: true) }
+        activateSession()
+        isPlaying = true
+        filmstrip.isPaused = true
+        if !playback.isShowing { playback.play() }
+        startDisplayLink()
+    }
+
+    private func activateSession() {
+        guard !sessionIsActive else { return }
+        sessionIsActive = true
         try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback)
         try? AVAudioSession.sharedInstance().setActive(true)
-        player.play()
-        isPlaying = true
     }
 
     func pause() {
-        player.pause()
-        takePlayer?.stop()
+        let wasPlaying = isPlaying
         isPlaying = false
+        stopDisplayLink()
+        filmstrip.isPaused = false
+        takePlayer?.stop()
+        takeTask?.cancel()
+        guard !isStatic else { return }
+        playback.pause()
+        if wasPlaying, trimPreview == nil, !playback.isShowing { playhead = min(max(0, player.currentTime().seconds), duration) }
+    }
+
+    private func startDisplayLink() {
+        guard displayLink == nil else { return }
+        let link = CADisplayLink(target: DisplayLinkTarget { [weak self] in self?.tick() }, selector: #selector(DisplayLinkTarget.fire))
+        link.add(to: .main, forMode: .common)
+        displayLink = link
+    }
+
+    private func stopDisplayLink() {
+        displayLink?.invalidate()
+        displayLink = nil
+    }
+
+    private func tick() {
+        guard isPlaying, !playback.isSeeking, !playback.isShowing, trimPreview == nil else { return }
+        let time = player.currentTime().seconds
+        guard time.isFinite else { return }
+        playhead = min(max(0, time), duration)
     }
 
     /// Moves the playhead (and the picture) to output time `t`.
     func seek(to t: Double, exact: Bool = false) {
         let target = min(max(0, t), max(0, duration))
         playhead = target
-        guard !isStatic, player.currentItem != nil else { return }
-        seekTarget = target
-        guard !isSeeking else { return }
-        performSeek(exact: exact)
+        guard !isStatic, sourceInfo != nil, trimPreview == nil else { return }
+        playback.seek(to: target, tolerance: exact ? 0 : scrubTolerance(target))
     }
 
-    private func performSeek(exact: Bool) {
-        guard let target = seekTarget else { return }
-        seekTarget = nil
-        isSeeking = true
-        let tolerance = exact ? CMTime.zero : CMTime(value: 1, timescale: 30)
-        player.seek(to: CMTime(seconds: target, preferredTimescale: 600), toleranceBefore: tolerance,
-                    toleranceAfter: tolerance) { [weak self] _ in
-            Task { @MainActor in
-                guard let self else { return }
-                self.isSeeking = false
-                if self.seekTarget != nil { self.performSeek(exact: exact) }
-            }
+    /// A fast scrub shows the nearest frame that is quick to get; a slow one the exact frame.
+    private func scrubTolerance(_ target: Double) -> Double {
+        let now = CACurrentMediaTime()
+        defer { lastSeek = (target, now) }
+        guard let last = lastSeek, now - last.at < 0.3 else { return 1.0 / 60 }
+        return min(1, max(1.0 / 60, abs(target - last.time) * 0.8))
+    }
+
+    /// The timeline is being dragged.
+    func beginScrub() {
+        guard !isRecordingVoice else { return }
+        pause()
+        dismissTrimCoach()
+        isScrubbing = true
+        filmstrip.isPaused = true
+    }
+
+    func endScrub() {
+        guard isScrubbing else { return }
+        isScrubbing = false
+        filmstrip.isPaused = false
+        seek(to: playhead, exact: true)
+    }
+
+    // MARK: - What is on the picture now
+
+    private func updateMoment() {
+        let t = playhead
+        var next = EditorMoment()
+        for item in recipe.texts where t >= item.start && t <= item.end { next.overlays.insert(item.id) }
+        for item in recipe.stickers where t >= item.start && t <= item.end { next.overlays.insert(item.id) }
+        for item in recipe.blurs where t >= item.start && t <= item.end { next.overlays.insert(item.id) }
+        if recipe.captions != nil { next.caption = caption(at: t)?.text }
+        if next != moment.value { moment.value = next }
+    }
+
+    private func caption(at t: Double) -> EditCaptionLine? {
+        let pieces = captions().pieces
+        var low = 0, high = pieces.count
+        while low < high {
+            let middle = (low + high) / 2
+            if pieces[middle].start <= t { low = middle + 1 } else { high = middle }
         }
+        guard low > 0, t <= pieces[low - 1].end else { return nil }
+        return pieces[low - 1]
+    }
+
+    /// Caption lines and the pieces they are shown in, worked out once per change.
+    private func captions() -> (lines: [EditCaptionLine], pieces: [EditCaptionLine]) {
+        let transcript = self.transcript
+        let size = outputPictureSize
+        let stamp = "\(transcript?.createdAt.timeIntervalSince1970 ?? 0)|\(transcript?.segments.count ?? 0)|\(Int(size.width))x\(Int(size.height))"
+        if let captionCache, captionCache.stamp == stamp { return (captionCache.lines, captionCache.pieces) }
+        let lines = recipe.captionLines(from: transcript)
+        let limit = EditCaptionOverlayView.charactersPerCaption(size)
+        let pieces = lines.filter { !$0.isHidden }.flatMap { $0.pieces(limit: limit) }.sorted { $0.start < $1.start }
+        captionCache = (stamp, lines, pieces)
+        return (lines, pieces)
     }
 
     // MARK: - Tools
 
     func open(_ next: EditorTool) {
+        guard !isRecordingVoice else { return }
         let wasCrop = tool == .crop
         pause()
         dismissTrimCoachIfNeeded(for: next)
@@ -618,6 +914,7 @@ final class EditorModel: ObservableObject {
         if case .review(let take) = voice { discardTake(take) }
         if case .recording = voice { stopRecording() }
         countdownTask?.cancel()
+        recorder.cancel()
         voice = .ready
         if wasCrop { rebuild() }
     }
@@ -642,7 +939,16 @@ final class EditorModel: ObservableObject {
 
     /// Selects the section under output time `t`, or clears it when it was already selected.
     func toggleSegment(atOutput t: Double) {
+        guard !isRecordingVoice else { return }
         dismissTrimCoach()
+        // The whole video is one part: there is nothing to pick, so tapping it opens Trim (its ends).
+        if recipe.segments.count == 1 {
+            if tool != .trim {
+                selection = nil
+                open(.trim)
+            }
+            return
+        }
         guard let index = recipe.segmentIndex(atOutput: t) else { return }
         let id = recipe.segments[index].id
         if selection == .segment(id) {
@@ -667,10 +973,30 @@ final class EditorModel: ObservableObject {
         }
     }
 
+    /// Everything before the playhead goes, or everything after it: the quick way to trim a long
+    /// recording, without dragging a handle across minutes of it.
+    func cutToPlayhead(_ edge: TrimEdge) {
+        pause()
+        dismissTrimCoach()
+        var changed = false
+        let at = playhead
+        apply { changed = edge == .start ? $0.cut(beforeOutput: at) : $0.cut(afterOutput: at) }
+        if changed {
+            Haptics.success()
+            selection = nil
+            seek(to: edge == .start ? 0 : max(0, duration - 0.04), exact: true)
+        } else {
+            Haptics.warning()
+            toast = ToastMessage(text: edge == .start ? "Move the playhead to where the video should start."
+                                 : "Move the playhead to where the video should end.", systemImage: "scissors")
+        }
+    }
+
     func deleteSelectedSegment() {
         guard let segment = selectedSegment else { return }
         guard recipe.segments.count > 1 else {
-            toast = ToastMessage(text: "Keep at least one section. Trim it instead.", systemImage: "exclamationmark.circle.fill")
+            toast = ToastMessage(text: "This is the whole video. Split it first, or drag its ends to trim.",
+                                 systemImage: "exclamationmark.circle.fill")
             confirmsSectionDelete = false
             return
         }
@@ -678,7 +1004,7 @@ final class EditorModel: ObservableObject {
         apply { $0.removeSegment(segment.id) }
         confirmsSectionDelete = false
         selection = nil
-        seek(to: min(start, duration))
+        seek(to: min(start, max(0, duration - 0.04)), exact: true)
         Haptics.success()
         toast = ToastMessage(text: "Section deleted", systemImage: "trash.fill")
     }
@@ -693,10 +1019,46 @@ final class EditorModel: ObservableObject {
     // MARK: - Trim handles
 
     func beginTrim(_ target: TrimTarget, edge: TrimEdge) {
+        guard !isRecordingVoice else { return }
         pause()
         beginLiveChange()
         trimDrag = TrimDrag(target: target, edge: edge, offset: 0)
         dismissTrimCoach()
+        if case .segment(let id) = target, let segment = recipe.segments.first(where: { $0.id == id }) {
+            showTrimPreview(at: edge == .start ? segment.start : segment.end - 0.03)
+        }
+    }
+
+    /// While a section's handle is dragged the player shows the recording itself at the handle,
+    /// also outside what is kept so far.
+    private func showTrimPreview(at sourceTime: Double) {
+        guard !isStatic, let info = sourceInfo, info.hasVideo else { return }
+        var whole = recipe
+        whole.segments = [EditSegment(start: 0, end: max(0.1, info.duration))]
+        whole.voiceClips = []
+        whole.blurs = []
+        trimPreview = whole
+        trimPreviewIsShown = false
+        trimTime = sourceTime
+        buildTask?.cancel()
+        buildTask = Task { @MainActor [weak self] in
+            guard let self,
+                  let build = try? await EditCompositionBuilder.build(recipe: whole, source: info, editFolder: self.editFolder,
+                                                                      cleanedAudio: nil, originalSound: true),
+                  !Task.isCancelled, self.trimPreview != nil else { return }
+            let item = AVPlayerItem(asset: build.composition)
+            item.videoComposition = EditCompositionBuilder.previewVideoComposition(recipe: whole, source: info, build: build,
+                                                                                   fullFrame: false)
+            self.trimPreviewIsShown = await self.playback.show(item, hasPicture: true, place: { [weak self] in self?.trimTime ?? 0 })
+        }
+    }
+
+    private var trimTime: Double {
+        get { trimTimeValue }
+        set {
+            trimTimeValue = newValue
+            if trimPreview != nil, trimPreviewIsShown { playback.seek(to: max(0, newValue), tolerance: 1.0 / 30) }
+        }
     }
 
     func updateTrim(offset: Double) {
@@ -713,6 +1075,9 @@ final class EditorModel: ObservableObject {
                 next.trim(id, start: segment.start + sourceDelta)
             } else {
                 next.trim(id, end: segment.end + sourceDelta)
+            }
+            if let moved = next.segments.first(where: { $0.id == id }) {
+                trimTime = drag.edge == .start ? moved.start : moved.end - 0.03
             }
         case .text(let id):
             guard let index = start.texts.firstIndex(where: { $0.id == id }) else { return }
@@ -738,6 +1103,11 @@ final class EditorModel: ObservableObject {
 
     /// An overlay's start and end with one end moved, kept inside the video and 0.3 s long at least.
     private func adjusted(edge: TrimEdge, offset: Double, from original: (Double, Double), total: Double) -> (Double, Double) {
+        if edge == .whole {
+            let length = original.1 - original.0
+            let start = min(max(0, original.0 + offset), max(0, total - length))
+            return (start, min(total, start + length))
+        }
         if edge == .start {
             return (min(max(0, original.0 + offset), original.1 - 0.3), original.1)
         }
@@ -753,9 +1123,29 @@ final class EditorModel: ObservableObject {
     }
 
     func endTrim() {
+        guard let drag = trimDrag else { return }
         trimDrag = nil
+        let previewed = trimPreview != nil
+        trimPreview = nil
+        let changed = liveStart.map { $0 != recipe } ?? false
         endLiveChange()
-        rebuild()
+        if changed, case .segment(let id) = drag.target, let span = outputSpan(of: id) {
+            // The playhead goes to the edge that was set.
+            playhead = drag.edge == .start ? span.lowerBound : max(span.lowerBound, span.upperBound - 0.04)
+        }
+        rebuild(force: previewed)
+    }
+
+    /// One step of a handle without dragging it (VoiceOver).
+    func nudge(_ target: TrimTarget, edge: TrimEdge, by seconds: Double) {
+        beginTrim(target, edge: edge)
+        updateTrim(offset: seconds)
+        endTrim()
+    }
+
+    var isTrimmingSection: Bool {
+        if case .segment? = trimDrag?.target { return true }
+        return false
     }
 
     /// Source time under a trim handle while it is dragged, for its time bubble.
@@ -767,13 +1157,13 @@ final class EditorModel: ObservableObject {
             return EditorText.precise(drag.edge == .start ? segment.start : segment.end)
         case .text(let id):
             guard let item = recipe.texts.first(where: { $0.id == id }) else { return nil }
-            return EditorText.precise(drag.edge == .start ? item.start : item.end)
+            return EditorText.precise(drag.edge == .end ? item.end : item.start)
         case .sticker(let id):
             guard let item = recipe.stickers.first(where: { $0.id == id }) else { return nil }
-            return EditorText.precise(drag.edge == .start ? item.start : item.end)
+            return EditorText.precise(drag.edge == .end ? item.end : item.start)
         case .blur(let id):
             guard let item = recipe.blurs.first(where: { $0.id == id }) else { return nil }
-            return EditorText.precise(drag.edge == .start ? item.start : item.end)
+            return EditorText.precise(drag.edge == .end ? item.end : item.start)
         }
     }
 
@@ -829,7 +1219,9 @@ final class EditorModel: ObservableObject {
     /// Filler words still in the edit.
     var fillers: [EditFiller] {
         guard let transcript else { return [] }
-        return EditFillerFinder.find(in: transcript).filter { filler in
+        let stamp = "\(transcript.createdAt.timeIntervalSince1970)|\(transcript.segments.count)"
+        if fillerCache?.stamp != stamp { fillerCache = (stamp, EditFillerFinder.find(in: transcript)) }
+        return (fillerCache?.all ?? []).filter { filler in
             recipe.keptFraction(ofSource: filler.start...filler.end) >= 0.5
         }
     }
@@ -926,6 +1318,7 @@ final class EditorModel: ObservableObject {
 
     /// Opens the keyboard for a new text at the playhead.
     func addText() {
+        guard !isRecordingVoice else { return }
         pause()
         let start = min(playhead, max(0, duration - 0.5))
         textEntry = EditText(text: "", start: start, end: min(duration, start + 3))
@@ -936,11 +1329,21 @@ final class EditorModel: ObservableObject {
         textEntry = item
     }
 
-    func commitTextEntry() {
+    /// Done with nothing typed asks for words, instead of closing with nothing to show for it; tapping
+    /// beside the text then closes it.
+    @Published var textEntryNeedsWords = false
+
+    func commitTextEntry(leaving: Bool = false) {
         guard let entry = textEntry else { return }
-        textEntry = nil
         let trimmed = entry.text.trimmingCharacters(in: .whitespacesAndNewlines)
         let exists = recipe.texts.contains { $0.id == entry.id }
+        if trimmed.isEmpty, !exists, !leaving {
+            textEntryNeedsWords = true
+            Haptics.warning()
+            return
+        }
+        textEntry = nil
+        textEntryNeedsWords = false
         if trimmed.isEmpty {
             if exists { deleteText(entry.id) }
             return
@@ -1049,8 +1452,41 @@ final class EditorModel: ObservableObject {
         }
     }
 
+    /// Two fingers on the picture: size and turn of the selected text or shape, one undo step.
+    func pinch(scale: Double?, degrees: Double?) {
+        guard let selection, selection.isPinchableOverlay else { return }
+        if pinchStart == nil {
+            switch selection {
+            case .text(let id):
+                guard let item = recipe.texts.first(where: { $0.id == id }) else { return }
+                pinchStart = (item.scale, 0)
+            case .sticker(let id):
+                guard let item = recipe.stickers.first(where: { $0.id == id }) else { return }
+                pinchStart = (item.scale, item.rotation)
+            default:
+                return
+            }
+        }
+        guard let start = pinchStart else { return }
+        var turns: Double?
+        if case .sticker(let id) = selection, let degrees,
+           recipe.stickers.first(where: { $0.id == id })?.kind != .circle {
+            turns = start.rotation + degrees
+        }
+        liveMove(selection, scale: scale.map { start.scale * $0 }, rotation: turns)
+    }
+
+    func endPinch() {
+        guard pinchStart != nil else { return }
+        pinchStart = nil
+        endLiveChange()
+    }
+
     /// Selects an overlay and moves the playhead into its time when it is out of view.
     func selectOverlay(_ next: EditorSelection) {
+        guard !isRecordingVoice else { return }
+        let wasCrop = tool == .crop
+        defer { if wasCrop { rebuild() } }
         pause()
         selection = next
         let span: (Double, Double)?
@@ -1076,7 +1512,7 @@ final class EditorModel: ObservableObject {
 
     // MARK: - Captions
 
-    var captionLines: [EditCaptionLine] { recipe.captionLines(from: transcript) }
+    var captionLines: [EditCaptionLine] { captions().lines }
 
     func addCaptions() {
         apply { $0.captions = EditCaptions() }
@@ -1095,7 +1531,11 @@ final class EditorModel: ObservableObject {
         apply { recipe in
             let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
             let original = transcript?.segments.first { $0.id.uuidString == id }
-            if let original, trimmed == recipe.keptText(of: original) {
+            if trimmed.isEmpty {
+                // Nothing left to show: hidden, so it can be brought back with its words.
+                recipe.captions?.edits[id] = nil
+                recipe.captions?.hidden.insert(id)
+            } else if let original, trimmed == recipe.keptText(of: original) {
                 recipe.captions?.edits[id] = nil
             } else {
                 recipe.captions?.edits[id] = trimmed
@@ -1144,11 +1584,22 @@ final class EditorModel: ObservableObject {
         }
         pause()
         countdownTask?.cancel()
+        let fileName = "voice-\(UUID().uuidString).m4a"
+        let url = editFolder.appendingPathComponent(fileName)
         countdownTask = Task { @MainActor [weak self] in
             for count in stride(from: 3, through: 1, by: -1) {
                 guard let self, !Task.isCancelled else { return }
                 self.voice = .countdown(count)
                 Haptics.tap()
+                // The microphone gets ready during the count, so recording starts on time.
+                if count == 2 {
+                    do {
+                        try self.recorder.prepare(url: url)
+                    } catch {
+                        self.microphoneFailed()
+                        return
+                    }
+                }
                 try? await Task.sleep(nanoseconds: 1_000_000_000)
             }
             guard let self, !Task.isCancelled else { return }
@@ -1156,26 +1607,32 @@ final class EditorModel: ObservableObject {
         }
     }
 
+    private func microphoneFailed() {
+        recorder.cancel()
+        sessionIsActive = false
+        voice = .ready
+        toast = ToastMessage(text: "The microphone couldn't start. End any call and try again.", systemImage: "mic.slash.fill")
+    }
+
     func cancelCountdown() {
         countdownTask?.cancel()
+        recorder.cancel()
+        sessionIsActive = false
         voice = .ready
     }
 
     private func beginRecording() {
-        let fileName = "voice-\(UUID().uuidString).m4a"
-        let url = editFolder.appendingPathComponent(fileName)
-        do {
-            try recorder.start(url: url)
-        } catch {
-            voice = .ready
-            toast = ToastMessage(text: "The microphone couldn't start. Try again.", systemImage: "mic.slash.fill")
+        guard recorder.record() else {
+            microphoneFailed()
             return
         }
+        sessionIsActive = true
         let start = playhead
         voice = .recording(start: start)
-        player.isMuted = true
-        player.play()
+        playback.isMuted = true
+        playback.play()
         isPlaying = true
+        startDisplayLink()
         Haptics.firm()
         levelTask?.cancel()
         levelTask = Task { @MainActor [weak self] in
@@ -1191,38 +1648,62 @@ final class EditorModel: ObservableObject {
         return max(0, playhead - start)
     }
 
+    /// Ends a countdown or a take.
+    func stopVoice() {
+        if case .countdown = voice { cancelCountdown() } else { stopRecording() }
+    }
+
     func stopRecording() {
         guard case .recording(let start) = voice else { return }
         levelTask?.cancel()
         voiceLevel = 0
-        player.pause()
+        let played = max(0, player.currentTime().seconds - start)
         isPlaying = false
-        player.isMuted = false
+        stopDisplayLink()
+        playback.pause()
+        playback.isMuted = false
+        sessionIsActive = false
         guard let take = recorder.stop(), take.duration > 0.3 else {
             voice = .ready
             toast = ToastMessage(text: "That take was too short.", systemImage: "mic.fill")
             return
         }
+        playhead = min(max(0, player.currentTime().seconds), duration)
+        // The microphone starts a moment before the video moves; that moment isn't part of the take.
+        let lead = played > 0.3 ? min(0.8, max(0, take.duration - played)) : 0
         Haptics.success()
-        voice = .review(VoiceTake(fileName: take.fileName, start: start, duration: min(take.duration, duration - start)))
+        voice = .review(VoiceTake(fileName: take.fileName, start: start,
+                                  duration: min(take.duration - lead, duration - start), lead: lead))
     }
 
     /// Plays the take with the video from where it starts.
     func playTake(_ take: VoiceTake) {
         guard !isStatic else { return }
+        if isPlaying {
+            pause()
+            return
+        }
         takePlayer?.stop()
         takePlayer = try? AVAudioPlayer(contentsOf: editFolder.appendingPathComponent(take.fileName))
+        takePlayer?.currentTime = take.lead
         seek(to: take.start, exact: true)
-        try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback)
-        player.play()
+        activateSession()
         isPlaying = true
+        startDisplayLink()
+        playback.play()
         takePlayer?.play()
+        takeTask?.cancel()
+        takeTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(max(0.2, take.duration + 0.15) * 1_000_000_000))
+            guard let self, !Task.isCancelled, case .review = self.voice else { return }
+            self.pause()
+        }
     }
 
     func keepTake(_ take: VoiceTake) {
         takePlayer?.stop()
         pause()
-        let clip = EditVoiceClip(fileName: take.fileName, start: take.start, duration: take.duration)
+        let clip = EditVoiceClip(fileName: take.fileName, start: take.start, duration: take.duration, lead: take.lead)
         apply { $0.voiceClips.append(clip) }
         voice = .ready
         selection = .voice(clip.id)
@@ -1265,25 +1746,39 @@ final class EditorModel: ObservableObject {
         apply { $0.audio.reducesNoise = on }
         hearsOriginalSound = false
         guard on, !isStatic else { return }
+        cleanSound()
+    }
+
+    private func cleanSound() {
+        if case .working = noise { return }
         if FileManager.default.fileExists(atPath: cleanedSoundURL.path) {
             noise = .ready
             rebuild()
             return
         }
+        guard EditEstimate.hasRoom(for: Int64(recipe.sourceDuration * 96_000 / 8)) else {
+            noise = .idle
+            apply { $0.audio.reducesNoise = false }
+            toast = ToastMessage(text: "Not enough space to clean up the sound. Free up some and try again.",
+                                 systemImage: "exclamationmark.circle.fill")
+            return
+        }
         noise = .working(0)
         let source = sourceURL
         let destination = cleanedSoundURL
-        Task { @MainActor [weak self] in
+        noiseTask = Task { @MainActor [weak self] in
             do {
                 try await NoiseReducer.clean(source: source, to: destination) { fraction in
                     guard let self else { return }
-                    if case .working = self.noise { self.noise = .working(fraction) }
+                    if case .working(let shown) = self.noise, fraction > shown + 0.01 { self.noise = .working(fraction) }
                 }
-                self?.noise = .ready
-                self?.rebuild()
+                guard let self, !Task.isCancelled else { return }
+                self.noise = .ready
+                self.rebuild()
             } catch {
-                self?.noise = .failed
-                self?.apply { $0.audio.reducesNoise = false }
+                guard let self, !Task.isCancelled else { return }
+                self.noise = .failed
+                self.apply { $0.audio.reducesNoise = false }
             }
         }
     }
@@ -1304,24 +1799,35 @@ final class EditorModel: ObservableObject {
     // MARK: - Export
 
     func estimatedBytes(_ quality: ExportQuality) -> Int64 {
-        EditEstimate.bytes(recipe: recipe, picture: hasPicture ? pictureSize : nil, quality: quality)
+        EditEstimate.bytes(recipe: recipe, settings: exportSettings(quality))
+    }
+
+    func exportSettings(_ quality: ExportQuality) -> EditExportSettings {
+        let video = library.video(source.id) ?? source
+        let known = video.duration > 1 ? Double(video.fileSize) * 8 / video.duration : 0
+        return EditExportSettings(recipe: recipe, picture: hasPicture ? pictureSize : nil,
+                                  sourceBitRate: sourceInfo?.videoBitRate ?? known,
+                                  frameRate: Double(sourceInfo?.frameRate ?? 30), quality: quality)
     }
 
     var availableBytes: Int64 { availableBytesOverride ?? DiskSpace.available }
 
     func hasRoom(for quality: ExportQuality) -> Bool {
-        availableBytes - estimatedBytes(quality) > 200_000_000
+        EditEstimate.hasRoom(for: estimatedBytes(quality), available: availableBytes)
     }
 
     func setQuality(_ quality: ExportQuality) {
         guard quality != recipe.quality else { return }
-        apply { $0.quality = quality }
+        // A choice about the file, not an edit: undo doesn't bring it back.
+        recipe.quality = quality
+        scheduleDraftSave()
         Haptics.selection()
     }
 
     func startExport() {
         pause()
         sheet = nil
+        // Kept until the new recording is ready, whatever happens to the save.
         keepDraft()
         let id = EditRenderer.shared.begin(recipe: stamped(recipe), source: source, library: library)
         phase = .rendering(id)
@@ -1362,17 +1868,15 @@ enum EditorText {
     }
 }
 
-/// File size of an edit before it is made: the encoder's usual rate for the picture size, plus sound.
-enum EditEstimate {
-    static func bytes(recipe: EditRecipe, picture: CGSize?, quality: ExportQuality) -> Int64 {
-        let seconds = recipe.outputDuration
-        var bitsPerSecond = 128_000.0
-        if let picture {
-            let size = recipe.renderSize(source: picture, quality: quality)
-            bitsPerSecond += Double(size.width * size.height) * 30 * 0.13
-        }
-        return Int64(bitsPerSecond * seconds / 8)
+/// Calls a closure from a display link (which would keep its target alive).
+final class DisplayLinkTarget: NSObject {
+    private let body: @MainActor () -> Void
+
+    init(_ body: @escaping @MainActor () -> Void) {
+        self.body = body
     }
+
+    @objc func fire() { MainActor.assumeIsolated { body() } }
 }
 
 /// Finds filler words in a transcript: hesitation sounds always, and verbal fillers ("like,",

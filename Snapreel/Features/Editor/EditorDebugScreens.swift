@@ -7,6 +7,7 @@ extension DebugCatalog {
     /// nothing plays, records or asks for the microphone.
     static var editorScreens: [DebugScreen] {
         entryScreens + homeScreens + cutScreens + pictureScreens + overlayScreens + soundScreens + saveScreens
+            + editorLiveScreens
     }
 
     private typealias IDs = FixtureStorage.IDs

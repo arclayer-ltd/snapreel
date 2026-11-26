@@ -14,6 +14,10 @@ import SwiftUI
 // - output seconds: a moment in the edited video (text, shapes, blur, voice-over, thumbnail).
 // Sections never overlap and stay in source order, so the edit is always a subsequence of the
 // recording; that keeps every mapping between the clocks simple and exact.
+//
+// Overlays stay on the moment they were placed on: cutting, trimming or changing the speed of
+// what comes before them moves them along (`followContent`), so a blur stays on the password it
+// hides and an arrow on what it points at.
 
 /// One kept section of the source, played at `speed`.
 struct EditSegment: Codable, Hashable, Identifiable {
@@ -206,6 +210,8 @@ struct EditVoiceClip: Codable, Hashable, Identifiable {
     var fileName: String
     var start: Double
     var duration: Double
+    /// Seconds of the file before the video started moving under it (nil in older drafts).
+    var lead: Double?
 }
 
 /// The recording's own sound and the narration's level.
@@ -281,17 +287,48 @@ struct EditRecipe: Codable, Equatable {
                    segments: [EditSegment(start: 0, end: max(duration, 0.1))])
     }
 
-    /// Same edit, ignoring when it was last touched.
+    /// Same edit, ignoring when it was last touched and the random ids of its sections.
     func sameEdit(as other: EditRecipe) -> Bool {
+        guard segments.count == other.segments.count,
+              zip(segments, other.segments).allSatisfy({ $0.start == $1.start && $0.end == $1.end && $0.speed == $1.speed })
+        else { return false }
         var a = self, b = other
+        a.segments = []
+        b.segments = []
         a.updatedAt = .distantPast
         b.updatedAt = .distantPast
         return a == b
     }
 
-    /// True when nothing about the recording would change.
+    /// True when nothing about the recording would change. The export quality is a choice about
+    /// the file, not an edit.
     var isUntouched: Bool {
-        sameEdit(as: EditRecipe.original(sourceID: sourceID, duration: sourceDuration))
+        var original = EditRecipe.original(sourceID: sourceID, duration: sourceDuration)
+        original.quality = quality
+        return sameEdit(as: original)
+    }
+
+    /// A draft brought back for a recording whose length or files may have changed since: sections
+    /// inside the recording, in order, and no voice-over whose file is gone.
+    func repaired(duration: Double, hasVoiceFile: (String) -> Bool) -> EditRecipe {
+        var copy = self
+        if duration > 0 {
+            copy.sourceDuration = duration
+            var cursor = 0.0
+            copy.segments = copy.segments.sorted { $0.start < $1.start }.compactMap { segment in
+                var kept = segment
+                kept.start = max(cursor, min(duration, segment.start))
+                kept.end = min(duration, segment.end)
+                kept.speed = min(4, max(0.25, segment.speed.isFinite ? segment.speed : 1))
+                guard kept.end - kept.start >= 0.02 else { return nil }
+                cursor = kept.end
+                return kept
+            }
+            if copy.segments.isEmpty { copy.segments = [EditSegment(start: 0, end: max(duration, 0.1))] }
+        }
+        copy.voiceClips.removeAll { !hasVoiceFile($0.fileName) }
+        copy.clampToDuration()
+        return copy
     }
 }
 
@@ -378,10 +415,39 @@ extension EditRecipe {
     func keptFraction(ofSource range: ClosedRange<Double>) -> Double {
         let length = range.upperBound - range.lowerBound
         guard length > 0 else { return 0 }
-        let kept = segments.reduce(0.0) { total, segment in
-            total + max(0, min(range.upperBound, segment.end) - max(range.lowerBound, segment.start))
+        var kept = 0.0
+        var index = firstSegment(endingAfter: range.lowerBound)
+        while index < segments.count, segments[index].start < range.upperBound {
+            kept += max(0, min(range.upperBound, segments[index].end) - max(range.lowerBound, segments[index].start))
+            index += 1
         }
         return min(1, kept / length)
+    }
+
+    /// Index of the first section that ends after source time `t` (sections are in order), or the
+    /// number of sections.
+    private func firstSegment(endingAfter t: Double) -> Int {
+        var low = 0, high = segments.count
+        while low < high {
+            let middle = (low + high) / 2
+            if segments[middle].end > t { high = middle } else { low = middle + 1 }
+        }
+        return low
+    }
+
+    /// The sections as they are played: neighbours that touch at the same speed (a split that cut
+    /// nothing) are one, so playing over the split never stutters.
+    var playedSegments: [EditSegment] {
+        var result: [EditSegment] = []
+        for segment in segments {
+            if var last = result.last, abs(last.end - segment.start) < 0.0005, last.speed == segment.speed {
+                last.end = segment.end
+                result[result.count - 1] = last
+            } else {
+                result.append(segment)
+            }
+        }
+        return result
     }
 }
 
@@ -410,12 +476,14 @@ extension EditRecipe {
     /// Removes a whole section; what follows moves up to close the gap.
     mutating func removeSegment(_ id: UUID) {
         guard segments.count > 1 else { return }
+        let old = self
         segments.removeAll { $0.id == id }
-        clampToDuration()
+        followContent(from: old)
     }
 
     /// Cuts a source range out of every section it touches.
     mutating func remove(source range: ClosedRange<Double>) {
+        let old = self
         var result: [EditSegment] = []
         for segment in segments {
             if segment.end <= range.lowerBound || segment.start >= range.upperBound {
@@ -437,11 +505,12 @@ extension EditRecipe {
         // Never cut everything: keep the recipe playable.
         guard !result.isEmpty else { return }
         segments = result
-        clampToDuration()
+        followContent(from: old)
     }
 
-    /// Puts a source range back where it was cut (at normal speed).
+    /// Puts a source range back where it was cut, at the speed of what it joins.
     mutating func keep(source range: ClosedRange<Double>) {
+        let old = self
         let lower = max(0, range.lowerBound)
         let upper = min(sourceDuration, range.upperBound)
         guard upper > lower else { return }
@@ -453,22 +522,27 @@ extension EditRecipe {
         }
         if cursor < upper { gaps.append(cursor...upper) }
         for gap in gaps where gap.upperBound - gap.lowerBound >= 0.02 {
-            // Touching neighbours at speed 1 grow instead of adding a new section.
-            if let index = segments.firstIndex(where: { abs($0.end - gap.lowerBound) < 0.001 && $0.speed == 1 }) {
+            // Touching neighbours grow instead of adding a new section.
+            if let index = segments.firstIndex(where: { abs($0.end - gap.lowerBound) < 0.001 }) {
                 segments[index].end = gap.upperBound
-            } else if let index = segments.firstIndex(where: { abs($0.start - gap.upperBound) < 0.001 && $0.speed == 1 }) {
+            } else if let index = segments.firstIndex(where: { abs($0.start - gap.upperBound) < 0.001 }) {
                 segments[index].start = gap.lowerBound
             } else {
-                segments.append(EditSegment(start: gap.lowerBound, end: gap.upperBound))
+                let speeds = Set(segments.map(\.speed))
+                let speed = speeds.count == 1 ? (speeds.first ?? 1) : 1
+                segments.append(EditSegment(start: gap.lowerBound, end: gap.upperBound, speed: speed))
+                segments.sort { $0.start < $1.start }
             }
         }
         segments.sort { $0.start < $1.start }
         mergeTouchingFragments()
+        followContent(from: old)
     }
 
     /// New in or out point for a section, kept between its neighbours.
     mutating func trim(_ id: UUID, start newStart: Double? = nil, end newEnd: Double? = nil) {
         guard let index = segmentIndex(id) else { return }
+        let old = self
         let previousEnd = index > 0 ? segments[index - 1].end : 0
         let nextStart = index + 1 < segments.count ? segments[index + 1].start : sourceDuration
         var segment = segments[index]
@@ -479,12 +553,74 @@ extension EditRecipe {
             segment.end = max(min(nextStart, newEnd), segment.start + 0.2)
         }
         segments[index] = segment
-        clampToDuration()
+        followContent(from: old)
+    }
+
+    /// Everything before output time `t` goes ("Start here"). False when there is nothing to cut
+    /// or too little would be left.
+    @discardableResult
+    mutating func cut(beforeOutput t: Double) -> Bool {
+        guard t > 0.05, outputDuration - t >= 0.2 else { return false }
+        remove(source: 0...sourceTime(forOutput: t))
+        return true
+    }
+
+    /// Everything after output time `t` goes ("End here").
+    @discardableResult
+    mutating func cut(afterOutput t: Double) -> Bool {
+        guard t >= 0.2, outputDuration - t > 0.05 else { return false }
+        remove(source: sourceTime(forOutput: t)...max(sourceDuration, segments.last?.end ?? 0))
+        return true
     }
 
     mutating func setSpeed(_ speed: Double, segment id: UUID? = nil) {
+        let old = self
         for index in segments.indices where id == nil || segments[index].id == id {
             segments[index].speed = speed
+        }
+        followContent(from: old)
+    }
+
+    /// Moves overlays, voice-overs and the thumbnail with the moment they were on after the
+    /// sections changed. A blur whose moment was cut goes with it; text and shapes whose moment
+    /// was cut stay, at the cut, so nothing the person wrote disappears.
+    mutating func followContent(from old: EditRecipe) {
+        guard segments != old.segments else { return }
+        let total = outputDuration
+        func moved(_ start: Double, _ end: Double) -> (Double, Double)? {
+            let from = old.sourceTime(forOutput: start)
+            let to = old.sourceTime(forOutput: max(start, end - 0.001))
+            let pieces = outputRanges(forSource: min(from, to)...max(from, to))
+            guard let first = pieces.first, let last = pieces.last,
+                  last.upperBound - first.lowerBound > 0.04 else { return nil }
+            return (first.lowerBound, last.upperBound + 0.001)
+        }
+        func kept(_ start: Double, _ end: Double) -> (Double, Double) {
+            let length = end - start
+            if let span = moved(start, end) {
+                // A sliver left of a title isn't readable: keep it up for up to a second.
+                return (span.0, max(span.1, min(span.0 + min(length, 1), total)))
+            }
+            let at = nearestOutputTime(forSource: old.sourceTime(forOutput: start))
+            return (at, at + min(length, 3))
+        }
+        for index in texts.indices {
+            (texts[index].start, texts[index].end) = kept(texts[index].start, texts[index].end)
+        }
+        for index in stickers.indices {
+            (stickers[index].start, stickers[index].end) = kept(stickers[index].start, stickers[index].end)
+        }
+        blurs = blurs.compactMap { blur in
+            guard let span = moved(blur.start, blur.end) else { return nil }
+            var copy = blur
+            (copy.start, copy.end) = span
+            return copy
+        }
+        for index in voiceClips.indices {
+            voiceClips[index].start = nearestOutputTime(forSource: old.sourceTime(forOutput: voiceClips[index].start))
+        }
+        if let time = thumbnailTime {
+            thumbnailTime = nearestOutputTime(forSource: old.sourceTime(forOutput: time))
         }
         clampToDuration()
     }
@@ -515,12 +651,12 @@ extension EditRecipe {
         if let time = thumbnailTime, time > total { thumbnailTime = max(0, total - 0.1) }
     }
 
-    /// Two touching pieces of the same section at speed 1, left behind by keep/remove pairs.
+    /// Two touching pieces of the same section at one speed, left behind by keep/remove pairs.
     private mutating func mergeTouchingFragments() {
         var merged: [EditSegment] = []
         for segment in segments {
             if var last = merged.last, abs(last.end - segment.start) < 0.001, last.speed == segment.speed,
-               last.speed == 1, segment.end - segment.start < 0.5 || last.end - last.start < 0.5 {
+               segment.end - segment.start < 0.5 || last.end - last.start < 0.5 {
                 last.end = segment.end
                 merged[merged.count - 1] = last
             } else {
@@ -565,6 +701,37 @@ struct EditCaptionLine: Identifiable, Hashable {
     var isHidden: Bool
 }
 
+extension EditCaptionLine {
+    /// The line as it is shown: a long sentence in pieces of at most about `limit` characters, one
+    /// after another, so no words are cut off with "…". Time is shared out by length.
+    func pieces(limit: Int) -> [EditCaptionLine] {
+        let words = text.split(whereSeparator: { $0 == " " || $0 == "\n" }).map(String.init)
+        guard text.count > limit, words.count > 1 else { return [self] }
+        let count = max(2, Int((Double(text.count) / Double(limit)).rounded(.up)))
+        let target = Double(text.count) / Double(count)
+        var groups: [String] = []
+        var current = ""
+        for word in words {
+            let joined = current.isEmpty ? word : current + " " + word
+            if !current.isEmpty, joined.count > limit || (Double(joined.count) > target * 1.15 && groups.count < count - 1) {
+                groups.append(current)
+                current = word
+            } else {
+                current = joined
+            }
+        }
+        if !current.isEmpty { groups.append(current) }
+        let total = Double(max(1, groups.reduce(0) { $0 + $1.count }))
+        var cursor = start
+        return groups.enumerated().map { index, group in
+            let length = (end - start) * Double(group.count) / total
+            defer { cursor += length }
+            return EditCaptionLine(id: "\(id)-\(index)", text: group, start: cursor,
+                                   end: index == groups.count - 1 ? end : cursor + length, isHidden: isHidden)
+        }
+    }
+}
+
 extension EditRecipe {
     /// Caption lines for the kept speech, with the person's corrections.
     func captionLines(from transcript: Transcript?) -> [EditCaptionLine] {
@@ -575,10 +742,13 @@ extension EditRecipe {
             guard let first = pieces.first, let last = pieces.last,
                   keptFraction(ofSource: range) >= 0.35 else { return nil }
             let key = segment.id.uuidString
-            let text = captions.edits[key] ?? keptText(of: segment)
-            guard !text.trimmingCharacters(in: .whitespaces).isEmpty else { return nil }
-            return EditCaptionLine(id: key, text: text, start: first.lowerBound, end: last.upperBound,
-                                   isHidden: captions.hidden.contains(key))
+            let kept = keptText(of: segment)
+            guard !kept.trimmingCharacters(in: .whitespaces).isEmpty else { return nil }
+            // A line whose words were all deleted by hand is a hidden line, so it can come back.
+            let edited = captions.edits[key]?.trimmingCharacters(in: .whitespaces)
+            let emptied = edited?.isEmpty == true
+            return EditCaptionLine(id: key, text: emptied ? kept : (edited ?? kept), start: first.lowerBound, end: last.upperBound,
+                                   isHidden: emptied || captions.hidden.contains(key))
         }
     }
 
@@ -600,7 +770,8 @@ extension EditRecipe {
             guard keptFraction(ofSource: range) >= 0.35 else { continue }
             let pieces = outputRanges(forSource: range)
             guard let first = pieces.first, let last = pieces.last else { continue }
-            let text = captions?.edits[line.id.uuidString] ?? keptText(of: line)
+            let edited = captions?.edits[line.id.uuidString]?.trimmingCharacters(in: .whitespaces)
+            let text = edited.flatMap { $0.isEmpty ? nil : $0 } ?? keptText(of: line)
             let words = line.words?.compactMap { word -> TranscriptWord? in
                 guard let start = outputTime(forSource: word.start) else { return nil }
                 let speed = keptSegment(atSource: word.start)?.speed ?? 1
