@@ -248,7 +248,7 @@ final class EditorUITests: XCTestCase {
         XCTAssertEqual(moved.midX - was.midX, 25, accuracy: 14)
         shot("arrow-moved")
         // The white corner makes it larger.
-        let corner = app.buttons["Resize and turn"].firstMatch
+        let corner = app.descendants(matching: .any)["Resize and turn"].firstMatch
         XCTAssertTrue(corner.waitForExistence(timeout: 3), "a corner to resize with")
         let size = moved.width
         let grab = app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: corner.frame.midX, dy: corner.frame.midY))

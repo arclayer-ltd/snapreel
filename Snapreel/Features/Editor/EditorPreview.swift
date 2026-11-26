@@ -352,8 +352,18 @@ struct EditorMovable<Content: View>: View {
                     }
                     .onEnded { _ in finishResize() }
             )
+            .accessibilityElement()
             .accessibilityLabel(turns ? "Resize and turn" : "Resize")
-            .accessibilityHint("Drag away from the middle to make it larger")
+            .accessibilityAddTraits(.isButton)
+            .accessibilityHint("Drag away from the middle to make it larger. With VoiceOver, swipe up or down.")
+            .accessibilityAdjustableAction { direction in
+                switch direction {
+                case .increment: onResize?(1.15, nil)
+                case .decrement: onResize?(1 / 1.15, nil)
+                @unknown default: return
+                }
+                onResizeEnd?()
+            }
     }
 
     private func finishResize() {
