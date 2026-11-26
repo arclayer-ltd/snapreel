@@ -154,7 +154,22 @@ jobs:
         run: |
           trap 'kill $TAIL 2>/dev/null || true' EXIT
           tail -n +1 -F "$W"/agent-*.log & TAIL=$!
-          while pgrep -f ui-rig/agent.py > /dev/null; do sleep 3; done
+          # An agent that starts its own side again (after being stuck) is not listed for a moment: three misses in a row.
+          MISSED=0
+          while [ "$MISSED" -lt 3 ]; do
+            if pgrep -f ui-rig/agent.py > /dev/null; then MISSED=0; else MISSED=$((MISSED + 1)); fi
+            sleep 3
+          done
+          i=0
+          for SID in $(cat "$W/sids.txt"); do
+            if [ ! -f "$W/phone-$i/ended" ]; then
+              echo "$SID: the rig stopped without a word" >> "$W/failed.txt"
+              echo '{"say_state": "failed"}' > "$W/say.json"
+              python3 rig/scripts/ui-rig/agent.py --sid "$SID" --options "$W/say.json" --work "$W" \
+                --say "the rig on the Mac stopped unexpectedly; its log is in the run's results" || true
+            fi
+            i=$((i + 1))
+          done
           sleep 2
           if [ -f "$W/failed.txt" ]; then cat "$W/failed.txt"; exit 1; fi
 
@@ -302,7 +317,11 @@ jobs:
       - name: Session
         run: |
           tail -n +1 -F w/agent-*.log & TAIL=$!
-          while pgrep -f ui-rig/agent.py > /dev/null; do sleep 3; done
+          MISSED=0
+          while [ "$MISSED" -lt 3 ]; do
+            if pgrep -f ui-rig/agent.py > /dev/null; then MISSED=0; else MISSED=$((MISSED + 1)); fi
+            sleep 3
+          done
           kill $TAIL
       - uses: actions/upload-artifact@v4
         if: always()

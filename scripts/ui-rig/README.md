@@ -66,7 +66,10 @@ and then `launch`. `[the screen did not change]` (with `do --each`) hints at a d
 The list can still name something that lies **behind** a sheet (the tab bar); the picture decides. Videos in the Photos
 picker have no usable names: tap them by point. **The Mac is slow and shared**: a few seconds' delay, or "the Mac was slow",
 is not the app's fault; `hangcheck` tells you whether the app itself was busy. If you read "stuck ... the rig started its
-own side again", just `look`.
+own side again", just `look`. A slow answer says how loaded the Mac was ("load 40 on 3 cores, 5% of its memory free");
+if every step is slow from the start, `stop` and start another session (another Mac). `open https://snapreel.video/v/...`
+opens a link as iOS does (in Snapreel when the app claims it, otherwise Safari) and says which app is in front; if the
+phone has not finished after 20 s it says so and carries on: look at the screen.
 Pictures, a `history.txt` of every step, crash and hang files stay in `%TEMP%\snapreel-rig\NAME`.
 
 Without a person: `rig batch steps.txt` runs a file of steps (one per line, `#` comments)
