@@ -38,6 +38,16 @@
                ReferencedContainer = "container:Snapreel.xcodeproj">
             </BuildableReference>
          </TestableReference>
+         <TestableReference
+            skipped = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "6A0000000000000000000F01"
+               BuildableName = "SnapreelUITests.xctest"
+               BlueprintName = "SnapreelUITests"
+               ReferencedContainer = "container:Snapreel.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
       </Testables>
    </TestAction>
    <LaunchAction

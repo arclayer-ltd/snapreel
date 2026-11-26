@@ -5,8 +5,10 @@ import XCTest
 final class EditorUITests: XCTestCase {
     private var app: XCUIApplication!
 
-    override func setUp() {
-        super.setUp()
+    override func setUpWithError() throws {
+        try super.setUpWithError()
+        try XCTSkipUnless(ProcessInfo.processInfo.environment["SNAPREEL_EDITOR_LONG"] == "1",
+                          "Touches the live editor for minutes: run by the editor-tests job (ios.yml editor_tests)")
         continueAfterFailure = true
         app = XCUIApplication()
         app.launchArguments = ["-screen", "edit.live", "-uiTests"]
@@ -16,8 +18,10 @@ final class EditorUITests: XCTestCase {
     }
 
     override func tearDown() {
-        shot("end")
-        app.terminate()
+        if let app {
+            shot("end")
+            app.terminate()
+        }
         super.tearDown()
     }
 

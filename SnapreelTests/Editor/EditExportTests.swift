@@ -5,6 +5,11 @@ import XCTest
 /// Saving: what the file holds, and what happens when saving is stopped, interrupted or repeated.
 @MainActor
 final class EditExportTests: XCTestCase {
+    override func setUpWithError() throws {
+        try XCTSkipUnless(ProcessInfo.processInfo.environment["SNAPREEL_EDITOR_LONG"] == "1",
+                          "Saves real files for minutes: run by the editor-tests job (ios.yml editor_tests)")
+    }
+
     private func clip(_ name: String, duration: Double = 10, _ change: (inout TestMedia.Spec) -> Void = { _ in }) async throws
         -> (url: URL, times: [CMTime], library: Library, id: UUID) {
         var spec = TestMedia.Spec()

@@ -9,6 +9,11 @@ import XCTest
 /// runs, because a CI Mac is not an iPhone X.
 @MainActor
 final class EditorPerfTests: XCTestCase {
+    override func setUpWithError() throws {
+        try XCTSkipUnless(ProcessInfo.processInfo.environment["SNAPREEL_EDITOR_LONG"] == "1",
+                          "Saves real files for minutes: run by the editor-tests job (ios.yml editor_tests)")
+    }
+
     func testOneMinute() async throws { try await run(minutes: 1, audioShortBy: 0) }
     func testNineMinutes() async throws { try await run(minutes: 9, audioShortBy: 93) }
     func testThirtyMinutes() async throws { try await run(minutes: 30, audioShortBy: 93) }

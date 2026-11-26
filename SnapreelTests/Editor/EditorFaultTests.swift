@@ -5,6 +5,11 @@ import XCTest
 /// The faults found in the 25 Nov 2026 audit, each as a test that fails on the build 47 editor.
 @MainActor
 final class EditorFaultTests: XCTestCase {
+    override func setUpWithError() throws {
+        try XCTSkipUnless(ProcessInfo.processInfo.environment["SNAPREEL_EDITOR_LONG"] == "1",
+                          "Saves real files for minutes: run by the editor-tests job (ios.yml editor_tests)")
+    }
+
     func testUntouchedRecordingIsNotDirty() {
         let recipe = EditRecipe.original(sourceID: UUID(), duration: 60)
         XCTAssertTrue(recipe.isUntouched, "a recording nobody touched counts as edited")
