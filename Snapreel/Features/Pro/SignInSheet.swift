@@ -74,6 +74,7 @@ struct SignInSheet: View {
     var body: some View {
         ZStack(alignment: .topTrailing) {
             Color.srCanvas.ignoresSafeArea()
+            ScrollViewReader { scroller in
             ScrollView {
                 VStack(spacing: Space.xl) {
                     header
@@ -90,14 +91,8 @@ struct SignInSheet: View {
                                 .transition(.opacity.combined(with: .move(edge: .trailing)))
                         }
                     }
-                    if let error {
-                        Label(error, systemImage: "exclamationmark.circle.fill")
-                            .font(.srSubheadline)
-                            .foregroundStyle(Color.srRedText)
-                            .fixedSize(horizontal: false, vertical: true)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .transition(.opacity)
-                    }
+                    // On the email step it sits under the field (`startContent`).
+                    if !showsEmailStep { errorLabel }
                     footer
                 }
                 .padding(.horizontal, Space.gutter)
@@ -108,6 +103,15 @@ struct SignInSheet: View {
                 .animation(Motion.standard, value: age)
             }
             .scrollDismissesKeyboard(.interactively)
+            // Above the keyboard, where it can be read.
+            .onChange(of: error) { error in
+                guard error != nil else { return }
+                Task { @MainActor in
+                    try? await Task.sleep(nanoseconds: 150_000_000)
+                    withAnimation(Motion.standard) { scroller.scrollTo(Self.errorID, anchor: .bottom) }
+                }
+            }
+            }
             CircleIconButton(systemName: "xmark", label: "Close", tone: .light, size: 32) { onDone(false) }
                 .padding(Space.m)
         }
@@ -128,6 +132,22 @@ struct SignInSheet: View {
                     }
             }
             .tint(Color.srRed)
+        }
+    }
+
+    private static let errorID = "signin.error"
+
+    private var showsEmailStep: Bool { step == .start && (age == nil || age == .allowed) }
+
+    @ViewBuilder private var errorLabel: some View {
+        if let error {
+            Label(error, systemImage: "exclamationmark.circle.fill")
+                .font(.srSubheadline)
+                .foregroundStyle(Color.srRedText)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .transition(.opacity)
+                .id(Self.errorID)
         }
     }
 
@@ -221,6 +241,8 @@ struct SignInSheet: View {
                 .background(RoundedRectangle(cornerRadius: Radius.m, style: .continuous).fill(Color.srSurface))
                 .overlay(RoundedRectangle(cornerRadius: Radius.m, style: .continuous)
                     .strokeBorder(focus == .email ? Color.srRed : Color.srLine, lineWidth: focus == .email ? 1.5 : 1))
+
+                errorLabel
 
                 Button {
                     sendCode()

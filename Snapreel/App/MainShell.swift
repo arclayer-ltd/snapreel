@@ -95,10 +95,10 @@ struct MainShell: View {
                 .navigationDestination(for: Route.self) { RouteDestination(route: $0) }
         }
         .opacity(selected ? 1 : 0)
-        .allowsHitTesting(selected)
         .accessibilityHidden(!selected)
-        // The shown tab on top. After a sheet closes (Settings), iOS 16 can hand touches to the navigation bar of a
-        // hidden tab above it again, and the gear seemed dead until the tab was switched.
+        // The shown tab on top, where it takes every touch. Not `allowsHitTesting(false)` on the hidden ones: after a
+        // sheet closed (Settings), iOS 16 applied it to the shown tab's toolbar too, and the Home gear stopped
+        // working until the tab was switched (tester t26, 4 of 4; seen on the rig as the gear losing its button trait).
         .zIndex(selected ? 1 : 0)
     }
 }
