@@ -409,13 +409,14 @@ struct LibraryActionsSheet: View {
     }
 
     /// When it was made and its size; while it is still being written, how far that is instead.
+    /// The state goes first, so at the largest text a cut line loses the date and not the reason.
     static func dateLine(_ video: Video) -> String {
         let date = Format.dateTime(video.createdAt)
         switch video.state {
         case .saving(let progress):
-            return "\(date) · Saving \(Int((min(1, max(0, progress)) * 100).rounded(.down)))%"
+            return "Saving \(Int((min(1, max(0, progress)) * 100).rounded(.down)))% · \(date)"
         case .failed:
-            return "\(date) · Not saved"
+            return "Not saved · \(date)"
         case .ready:
             return video.fileSize > 0 ? "\(date) · \(Format.bytes(video.fileSize))" : date
         }

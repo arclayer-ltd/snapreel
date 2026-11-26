@@ -16,7 +16,7 @@ final class ShareSurfaceTests: SharingTestCase {
     @MainActor func testStillSavingSaysHowFarInsteadOfZeroBytes() {
         let saving = video(state: .saving(progress: 0.126), bytes: 0, width: 0)
         let line = LibraryActionsSheet.dateLine(saving)
-        XCTAssertTrue(line.hasSuffix("Saving 12%"), line)
+        XCTAssertTrue(line.hasPrefix("Saving 12% · "), line)
         XCTAssertFalse(line.contains("KB"), line)
         XCTAssertNotNil(LibraryActionsSheet.waitNote(saving))
         // Not taken for a sound recording while it has no picture size yet.
@@ -33,7 +33,7 @@ final class ShareSurfaceTests: SharingTestCase {
 
     @MainActor func testFailedRecordingSaysWhyItCantBeShared() {
         let failed = video(state: .failed(reason: "Stopped", outOfSpace: false), bytes: 0)
-        XCTAssertTrue(LibraryActionsSheet.dateLine(failed).hasSuffix("Not saved"))
+        XCTAssertTrue(LibraryActionsSheet.dateLine(failed).hasPrefix("Not saved · "))
         XCTAssertNotNil(LibraryActionsSheet.waitNote(failed))
     }
 
