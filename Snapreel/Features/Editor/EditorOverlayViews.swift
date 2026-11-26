@@ -42,7 +42,9 @@ struct EditTextOverlayView: View {
         let label = Text(item.text.isEmpty ? " " : item.text)
             .font(.system(size: fontSize, weight: .bold))
             .multilineTextAlignment(.center)
-            .lineLimit(6)
+            .lineLimit(8)
+            // A long text gets smaller to fit, never cut off with "…" (testers, 26 Nov).
+            .minimumScaleFactor(0.35)
 
         switch item.style {
         case .plain:

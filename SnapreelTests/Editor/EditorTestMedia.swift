@@ -454,7 +454,9 @@ enum TestMedia {
                 await RecordingSaver.shared.waitUntilFinished(id)
                 return (library.video(id) ?? video, library.fileURL(for: video))
             case .failed(let reason, _):
-                throw NSError(domain: "Export", code: 1, userInfo: [NSLocalizedDescriptionKey: reason])
+                let why = EditRenderer.shared.lastFailure ?? "no detail"
+                print("NOTE|save failed: \(reason) | \(why)")
+                throw NSError(domain: "Export", code: 1, userInfo: [NSLocalizedDescriptionKey: reason + " | " + why])
             case .saving:
                 continue
             }

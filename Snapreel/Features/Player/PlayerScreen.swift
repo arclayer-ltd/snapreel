@@ -46,6 +46,7 @@ struct PlayerScreen: View {
 
     init(presentation: PlayerPresentation) {
         var initial = PlayerInitialState()
+        if presentation.startsPaused { initial.autoplay = false }
         if presentation.opensTranscript {
             // From a "transcript ready" notification: land on what it announced.
             initial.panel = .transcript

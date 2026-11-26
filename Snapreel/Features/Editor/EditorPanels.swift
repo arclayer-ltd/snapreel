@@ -174,9 +174,13 @@ struct EditorTrimPanel: View {
     var body: some View {
         VStack(spacing: Space.s) {
             HStack(spacing: Space.s) {
-                fact("Start", EditorText.precise(model.recipe.segments.first?.start ?? 0))
-                fact("End", EditorText.precise(model.recipe.segments.last?.end ?? 0))
-                fact("Length", EditorText.precise(model.duration))
+                let start = model.recipe.segments.first?.start ?? 0
+                let end = model.recipe.segments.last?.end ?? 0
+                fact("Start", EditorText.precise(start))
+                fact("End", EditorText.precise(end))
+                // One part at normal speed: exactly End minus Start as shown, never a tenth apart.
+                let plain = model.recipe.segments.count == 1 && model.recipe.segments.first?.speed == 1
+                fact("Length", EditorText.precise(plain ? EditorText.tenths(end) - EditorText.tenths(start) : model.duration))
             }
             .padding(.horizontal, Space.gutter)
             // The quick way on a long recording: no handle to drag across minutes of it.
@@ -411,7 +415,7 @@ struct EditorCaptionsPanel: View {
         switch model.transcriptPhase {
         case .notStarted:
             message(icon: "captions.bubble", title: "Captions come from the transcript",
-                    detail: "Snapreel makes it on this iPhone. Nothing is uploaded.") {
+                    detail: "Apple's speech recognition makes it on this iPhone; the recording isn't uploaded.") {
                 EditorPanelButton(title: "Make a transcript", systemImage: "text.alignleft", prominent: true) {
                     model.requestTranscript()
                 }
@@ -423,11 +427,23 @@ struct EditorCaptionsPanel: View {
                     .tint(Color.srRed)
                     .frame(maxWidth: 220)
             }
+        case .unavailable(.permissionDenied):
+            message(icon: "mic.slash", title: "Speech recognition is off for Snapreel",
+                    detail: "Captions come from a transcript. Turn on Speech Recognition for Snapreel in Settings, then come back.") {
+                EditorPanelButton(title: "Open Settings", systemImage: "gearshape", prominent: true) { Permissions.openSettings() }
+            }
         case .unavailable(let reason):
             message(icon: "speaker.slash", title: reason == .noSpeech ? "No speech found" : "No transcript for this one",
                     detail: reason == .noSpeech
                         ? "Captions need someone talking. You can still add text."
-                        : "Captions need a transcript, and this recording couldn't get one.") {
+                        : reason == .languageUnsupported
+                            ? "This iPhone can't make transcripts in its language on the device. You can still add text."
+                            : "Making the transcript stopped before it was done.") {
+                if reason == .failed {
+                    EditorPanelButton(title: "Try again", systemImage: "arrow.clockwise", prominent: true) {
+                        model.requestTranscript()
+                    }
+                }
                 EditorPanelButton(title: "Add text instead", systemImage: "textformat") {
                     model.open(.text)
                 }

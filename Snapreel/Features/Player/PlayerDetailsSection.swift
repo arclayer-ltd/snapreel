@@ -295,6 +295,14 @@ struct PlayerFactsCard: View {
     }
 
     private var kindValue: String {
+        if video.editedFrom != nil {
+            switch video.kind {
+            case .camera: return "Edit of a camera recording"
+            case .screen: return "Edit of a screen recording"
+            case .audio: return "Edit of an audio recording"
+            case .imported: return "Edit of a video from Photos"
+            }
+        }
         switch video.kind {
         case .camera: return "Camera recording"
         case .screen: return "Screen recording"

@@ -160,9 +160,10 @@ struct EditorTimelineState: Equatable {
 
         // Handles: of the selected section or overlay, or of the clip's two ends in Trim.
         let bubble = model.trimDrag.map { ($0, model.trimBubble) }
-        func handle(_ target: TrimTarget, _ edge: TrimEdge, _ time: Double, row: EditorTimelineRow? = nil) -> Handle {
+        func handle(_ target: TrimTarget, _ edge: TrimEdge, _ time: Double, row: EditorTimelineRow? = nil,
+                    value: Double? = nil) -> Handle {
             let text: String? = bubble.flatMap { $0.0.target == target && $0.0.edge == edge ? $0.1 : nil }
-            return Handle(target: target, edge: edge, time: time, row: row, bubble: text, value: EditorText.precise(time))
+            return Handle(target: target, edge: edge, time: time, row: row, bubble: text, value: EditorText.precise(value ?? time))
         }
         /// The bar between an overlay's two handles: dragging it moves the overlay in time.
         func overlay(_ target: TrimTarget, _ start: Double, _ end: Double, row: EditorTimelineRow) -> [Handle] {
@@ -174,8 +175,9 @@ struct EditorTimelineState: Equatable {
             let segment = segments[index]
             let from = recipe.outputStart(ofSegment: index) + (index >= shiftIndex ? shift : 0)
             var result: [Handle] = []
-            if start { result.append(handle(.segment(segment.id), .start, from)) }
-            if end { result.append(handle(.segment(segment.id), .end, from + segment.outputLength)) }
+            // Read out on the recording's clock, like Start and End in the Trim panel.
+            if start { result.append(handle(.segment(segment.id), .start, from, value: segment.start)) }
+            if end { result.append(handle(.segment(segment.id), .end, from + segment.outputLength, value: segment.end)) }
             return result
         }
         if !isLocked {
@@ -899,6 +901,14 @@ private final class EditorScrubElement: UIView {
 }
 
 /// Seconds along the top, spaced so labels never crowd.
+/// Timeline text grows with the text size, up to what its fixed rows hold.
+enum EditorTimelineFont {
+    static func make(_ size: CGFloat, weight: UIFont.Weight, largest: CGFloat, digits: Bool = false) -> UIFont {
+        let base = digits ? UIFont.monospacedDigitSystemFont(ofSize: size, weight: weight) : UIFont.systemFont(ofSize: size, weight: weight)
+        return UIFontMetrics(forTextStyle: .caption2).scaledFont(for: base, maximumPointSize: largest)
+    }
+}
+
 final class EditorRulerView: UIView {
     private var labels: [UILabel] = []
     private var dots: [UIView] = []
@@ -944,7 +954,8 @@ final class EditorRulerView: UIView {
     private func label(_ index: Int) -> UILabel {
         while labels.count <= index {
             let label = UILabel()
-            label.font = .monospacedDigitSystemFont(ofSize: 10, weight: .medium)
+            label.font = EditorTimelineFont.make(10, weight: .medium, largest: 13, digits: true)
+            label.adjustsFontForContentSizeCategory = true
             label.textColor = UIColor(Color.srStageTextTertiary)
             addSubview(label)
             labels.append(label)
@@ -1220,7 +1231,8 @@ final class EditorChipView: UIView {
         backgroundColor = UIColor(Color.srStageControl)
         icon.contentMode = .scaleAspectFit
         icon.tintColor = UIColor(Color.srStageText)
-        label.font = .systemFont(ofSize: 11, weight: .semibold)
+        label.font = EditorTimelineFont.make(11, weight: .semibold, largest: 15)
+        label.adjustsFontForContentSizeCategory = true
         addSubview(wave)
         addSubview(icon)
         addSubview(label)
@@ -1301,7 +1313,8 @@ final class EditorAddRowButton: UIControl {
         icon.tintColor = UIColor(Color.srStageTextSecondary)
         icon.contentMode = .center
         icon.isHidden = systemImage == nil
-        label.font = .systemFont(ofSize: 12, weight: .semibold)
+        label.font = EditorTimelineFont.make(12, weight: .semibold, largest: 16)
+        label.adjustsFontForContentSizeCategory = true
         label.textColor = UIColor(Color.srStageTextSecondary)
         addSubview(icon)
         addSubview(label)

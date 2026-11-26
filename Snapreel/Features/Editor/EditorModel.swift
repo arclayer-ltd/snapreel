@@ -191,6 +191,9 @@ final class EditorModel: ObservableObject {
     @Published var toast: ToastMessage?
 
     @Published private(set) var poster: UIImage?
+    /// The edit's own first picture (or its chosen frame), cropped and turned, for the saving
+    /// screen: the recording's poster may be a moment that was cut away.
+    @Published private(set) var savingStill: UIImage?
     let filmstrip = EditorFilmstrip()
     /// Sound levels by file name (the recording's under "source"), for drawing it.
     @Published private(set) var levels: [String: [Float]] = [:]
@@ -693,6 +696,8 @@ final class EditorModel: ObservableObject {
         on(UIApplication.didBecomeActiveNotification) { model, _ in
             // Back from Settings with the microphone switched on.
             if model.tool == .voice, model.voice == .denied || model.voice == .primer { model.voice = model.voicePhaseForPermission() }
+            // Speech recognition may have been switched on meanwhile.
+            model.objectWillChange.send()
         }
         on(UIApplication.didReceiveMemoryWarningNotification) { model, _ in model.filmstrip.trim() }
     }
@@ -711,9 +716,19 @@ final class EditorModel: ObservableObject {
         takePlayer?.stop()
     }
 
-    /// The player stopped by itself (a call, headphones unplugged).
+    /// The player stopped by itself (a call, headphones unplugged). Its notice can arrive late, from
+    /// just before a play (seen on a busy iOS 16 simulator): it counts only if the player is still
+    /// stopped a moment later.
     private func playerChanged(_ playing: Bool) {
         guard !isStatic, !playing, isPlaying, !playback.isShowing else { return }
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 250_000_000)
+            guard let self, self.isPlaying, !self.playback.isShowing, self.player.rate == 0 else { return }
+            self.playerStopped()
+        }
+    }
+
+    private func playerStopped() {
         if abs(player.currentTime().seconds - duration) < 0.1 {
             reachedEnd()
         } else {
@@ -876,8 +891,12 @@ final class EditorModel: ObservableObject {
 
     // MARK: - Tools
 
+    /// The tool opened last, so the tool row comes back scrolled to it.
+    private(set) var lastTool: EditorTool?
+
     func open(_ next: EditorTool) {
         guard !isRecordingVoice else { return }
+        lastTool = next
         let wasCrop = tool == .crop
         pause()
         dismissTrimCoachIfNeeded(for: next)
@@ -1187,7 +1206,10 @@ final class EditorModel: ObservableObject {
         switch video.transcriptStatus {
         case .inProgress: return .working
         case .unavailable: return .unavailable(TranscriptService.shared.unavailableReason(for: source.id))
-        case .ready, .notStarted: return .notStarted
+        case .ready, .notStarted:
+            // Switched off before it was ever asked for (or turned off in Settings): say so, don't
+            // offer a button that does nothing.
+            return Permissions.currentState(.speech) == .denied ? .unavailable(.permissionDenied) : .notStarted
         }
     }
 
@@ -1296,8 +1318,14 @@ final class EditorModel: ObservableObject {
         Haptics.selection()
     }
 
+    /// Mirrors the picture left to right as it is shown. The recipe mirrors the recording before
+    /// turning it, so on a picture turned a quarter that is a mirror top to bottom of the
+    /// recording: the same as mirroring it left to right and turning it a half more.
     func flip() {
-        apply { $0.flipped.toggle() }
+        apply { recipe in
+            recipe.flipped.toggle()
+            if recipe.quarterTurns % 2 != 0 { recipe.quarterTurns = (recipe.quarterTurns + 2) % 4 }
+        }
         Haptics.selection()
     }
 
@@ -1320,7 +1348,7 @@ final class EditorModel: ObservableObject {
     func addText() {
         guard !isRecordingVoice else { return }
         pause()
-        let start = min(playhead, max(0, duration - 0.5))
+        let start = max(0, min(playhead, duration - 3))
         textEntry = EditText(text: "", start: start, end: min(duration, start + 3))
     }
 
@@ -1382,8 +1410,11 @@ final class EditorModel: ObservableObject {
 
     func addSticker(_ kind: EditStickerKind, emoji: String? = nil) {
         pause()
-        let start = min(playhead, max(0, duration - 0.5))
+        // Three seconds like a text, starting earlier when the playhead is near the end.
+        let start = max(0, min(playhead, duration - 3))
         var item = EditSticker(kind: kind, emoji: emoji, start: start, end: min(duration, start + 3))
+        // Big enough to see at once (about a third of the picture's short side).
+        item.scale = kind == .emoji ? 1.6 : 1.3
         switch kind {
         case .arrow: item.rotation = -35
         case .highlight: item.color = .yellow
@@ -1436,13 +1467,19 @@ final class EditorModel: ObservableObject {
             switch selection {
             case .text(let id):
                 guard let index = recipe.texts.firstIndex(where: { $0.id == id }) else { return }
-                if let center { recipe.texts[index].center = center.clampedUnit }
+                // The middle of a text stays on the picture, clear of its edges.
+                if let center { recipe.texts[index].center = CGPoint(x: min(max(0.05, center.x), 0.95), y: min(max(0.05, center.y), 0.95)) }
                 if let scale { recipe.texts[index].scale = min(4, max(0.4, scale)) }
             case .sticker(let id):
                 guard let index = recipe.stickers.firstIndex(where: { $0.id == id }) else { return }
-                if let center { recipe.stickers[index].center = center.clampedUnit }
-                if let scale { recipe.stickers[index].scale = min(5, max(0.3, scale)) }
-                if let rotation { recipe.stickers[index].rotation = rotation }
+                // A shape stays inside the picture: never larger than it, never pushed off it (it
+                // used to grow over the editor's own buttons).
+                var item = recipe.stickers[index]
+                if let scale { item.scale = min(Self.largestScale(item.kind), max(0.3, scale)) }
+                if let rotation { item.rotation = rotation }
+                if let center { item.center = center }
+                item.center = Self.keptInside(item, picture: outputPictureSize)
+                recipe.stickers[index] = item
             case .blur(let id):
                 guard let index = recipe.blurs.firstIndex(where: { $0.id == id }), let rect else { return }
                 recipe.blurs[index].rect = rect.clampedUnit
@@ -1450,6 +1487,43 @@ final class EditorModel: ObservableObject {
                 break
             }
         }
+    }
+
+    /// The largest a shape gets: as long as the picture's short side.
+    nonisolated static func largestScale(_ kind: EditStickerKind) -> Double {
+        switch kind {
+        case .arrow, .circle: return 3.8
+        case .box: return 2.9
+        case .highlight: return 2.6
+        case .emoji: return 5
+        }
+    }
+
+    /// The nearest middle that keeps the whole shape (turned or not) on the picture.
+    nonisolated static func keptInside(_ item: EditSticker, picture: CGSize) -> CGPoint {
+        guard picture.width > 0, picture.height > 0 else { return item.center.clampedUnit }
+        let unit = min(picture.width, picture.height) / 100
+        let base: CGSize
+        switch item.kind {
+        case .arrow: base = CGSize(width: 26, height: 11)
+        case .circle: base = CGSize(width: 26, height: 26)
+        case .box: base = CGSize(width: 34, height: 22)
+        case .highlight: base = CGSize(width: 38, height: 9)
+        case .emoji: base = CGSize(width: 16, height: 16)
+        }
+        let angle: Double = item.rotation * Double.pi / 180
+        let c: Double = abs(cos(angle))
+        let n: Double = abs(sin(angle))
+        let w: Double = Double(base.width) * item.scale * Double(unit)
+        let h: Double = Double(base.height) * item.scale * Double(unit)
+        let spanX: Double = w * c + h * n
+        let spanY: Double = w * n + h * c
+        let halfWidth = CGFloat(spanX / 2 / Double(picture.width))
+        let halfHeight = CGFloat(spanY / 2 / Double(picture.height))
+        func kept(_ value: CGFloat, _ half: CGFloat) -> CGFloat {
+            half >= 0.5 ? 0.5 : min(max(half, value), 1 - half)
+        }
+        return CGPoint(x: kept(item.center.x, halfWidth), y: kept(item.center.y, halfHeight))
     }
 
     /// Two fingers on the picture: size and turn of the selected text or shape, one undo step.
@@ -1824,13 +1898,51 @@ final class EditorModel: ObservableObject {
         Haptics.selection()
     }
 
+    /// Too short for the library to take as a recording.
+    var isTooShortToSave: Bool { duration < EditRecipe.minimumSave }
+
     func startExport() {
+        guard !isTooShortToSave else { return }
         pause()
         sheet = nil
         // Kept until the new recording is ready, whatever happens to the save.
         keepDraft()
         let id = EditRenderer.shared.begin(recipe: stamped(recipe), source: source, library: library)
+        makeSavingStill()
         phase = .rendering(id)
+    }
+
+    private func makeSavingStill() {
+        savingStill = nil
+        guard hasPicture else { return }
+        let shown = recipe
+        let output = min(max(0, shown.thumbnailTime ?? 0), max(0, duration - 0.05))
+        let at = shown.sourceTime(forOutput: output + 0.01)
+        let asset = AVURLAsset(url: sourceURL)
+        Task { [weak self] in
+            let generator = AVAssetImageGenerator(asset: asset)
+            generator.appliesPreferredTrackTransform = true
+            generator.maximumSize = CGSize(width: 900, height: 900)
+            generator.requestedTimeToleranceBefore = .zero
+            generator.requestedTimeToleranceAfter = CMTime(value: 1, timescale: 30)
+            guard let (image, _) = try? await generator.image(at: CMTime(seconds: at, preferredTimescale: 600)) else { return }
+            guard let self, !self.isClosed else { return }
+            self.savingStill = Self.styled(image, recipe: shown, at: output)
+        }
+    }
+
+    /// `image` as the edit shows it at output time `time`: cropped, turned, flipped and blurred.
+    private static func styled(_ image: CGImage, recipe: EditRecipe, at time: Double) -> UIImage {
+        let upright = CGSize(width: image.width, height: image.height)
+        let untouched = recipe.crop.isFullFrame && recipe.quarterTurns % 4 == 0 && !recipe.flipped && recipe.blurs.isEmpty
+        guard !untouched else { return UIImage(cgImage: image) }
+        let size = recipe.renderSize(source: upright, quality: .original)
+        let pipeline = EditFramePipeline(recipe: recipe, upright: size, showsBlur: true)
+        let frame = pipeline.draw(CIImage(cgImage: image), at: time)
+        guard let output = EditGraphics.managedContext.createCGImage(frame, from: CGRect(origin: .zero, size: size)) else {
+            return UIImage(cgImage: image)
+        }
+        return UIImage(cgImage: output)
     }
 
     func cancelExport(_ id: UUID) {
@@ -1850,17 +1962,19 @@ final class EditorModel: ObservableObject {
 
 /// Text helpers for the editor.
 enum EditorText {
-    /// "0:04.2"
+    /// "0:04.2", to the nearest tenth (so start, end and length agree with each other).
     static func precise(_ seconds: Double) -> String {
-        let value = max(0, seconds)
-        let whole = Int(value)
-        let tenths = Int(((value - Double(whole)) * 10).rounded(.down))
-        return String(format: "%d:%02d.%d", whole / 60, whole % 60, tenths)
+        let tenths = Int((max(0, seconds) * 10).rounded())
+        let whole = tenths / 10
+        return String(format: "%d:%02d.%d", whole / 60, whole % 60, tenths % 10)
     }
+
+    /// Seconds rounded the way `precise` shows them.
+    static func tenths(_ seconds: Double) -> Double { (max(0, seconds) * 10).rounded() / 10 }
 
     /// "12.4s"
     static func length(_ seconds: Double) -> String {
-        seconds >= 60 ? Format.clock(seconds) : String(format: "%.1fs", max(0, seconds))
+        seconds >= 60 ? Format.clock(seconds) : String(format: "%.1fs", tenths(seconds))
     }
 
     static func speed(_ value: Double) -> String {
