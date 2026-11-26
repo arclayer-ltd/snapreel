@@ -72,7 +72,9 @@ struct PlayerActionsSheet: View {
                         onChoose(.saveToPhotos)
                     }
                     ActionRow(systemImage: "square.and.arrow.up", title: "Share",
-                              subtitle: "Send the file with AirDrop, Messages, Mail or any app") {
+                              subtitle: SmallerCopyPlan.make(for: video) == nil
+                                  ? "Send the file with AirDrop, Messages, Mail or any app"
+                                  : "Send the file, or a smaller copy of it, with any app") {
                         onChoose(.share)
                     }
                     ActionRow(systemImage: "link", title: "Copy link",

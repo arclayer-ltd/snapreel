@@ -294,6 +294,7 @@ enum PendingImports {
         let manifests = ((try? fm.contentsOfDirectory(at: inbox, includingPropertiesForKeys: nil)) ?? [])
             .filter { $0.pathExtension == "json" }
         var imported: [InboxRecording] = []
+        var arrived: [(item: InboxRecording, manifest: URL?)] = []
 
         for manifestURL in manifests {
             guard let data = try? Data(contentsOf: manifestURL),
@@ -301,30 +302,40 @@ enum PendingImports {
                 try? fm.removeItem(at: manifestURL)
                 continue
             }
+            arrived.append((item, manifestURL))
+        }
+        // A phone with no space left can keep the movie but not write its manifest.
+        arrived += moviesWithoutManifest(in: inbox, known: Set(arrived.map(\.item.movieFileName))).map { ($0, nil) }
+
+        for (item, manifestURL) in arrived {
             let movie = inbox.appendingPathComponent(item.movieFileName)
+            func forgetManifest() { if let manifestURL { try? fm.removeItem(at: manifestURL) } }
             if library.video(item.id) != nil {
-                try? fm.removeItem(at: manifestURL)
-                continue
-            }
-            guard fm.fileExists(atPath: movie.path) else {
-                try? fm.removeItem(at: manifestURL)
+                forgetManifest()
                 continue
             }
             let ext = movie.pathExtension.isEmpty ? "mov" : movie.pathExtension.lowercased()
             let fileName = "\(item.id.uuidString).\(ext)"
             let staged = library.media.staging.appendingPathComponent(fileName)
-            try? fm.removeItem(at: staged)
-            do {
-                try fm.moveItem(at: movie, to: staged)
-            } catch {
+            if fm.fileExists(atPath: movie.path) {
+                try? fm.removeItem(at: staged)
+                do {
+                    try fm.moveItem(at: movie, to: staged)
+                } catch {
+                    continue
+                }
+            } else if !fm.fileExists(atPath: staged.path) {
+                // Neither here nor moved by an import that was cut short.
+                forgetManifest()
                 continue
             }
-            try? fm.removeItem(at: manifestURL)
             ReviewTiming.mark(item.id, "stop", at: item.finishedAt)
             ReviewTiming.mark(item.id, "imported")
             RecordingSaver.shared.begin(RecordingSaveRequest(id: item.id, kind: .screen,
                                                              createdAt: item.createdAt, fileName: fileName),
                                         library: library)
+            // Only once the library has it: closed before this, the next launch finds both again.
+            forgetManifest()
             // Its "Screen recording finished" notification stays until review is shown
             // (`ReviewCoordinator.reviewShown`): if this hand-off is skipped, it's the way back.
             imported.append(item)
@@ -387,6 +398,23 @@ enum PendingImports {
     }
 
     // MARK: - Private
+
+    /// Movies the extension delivered whose manifest is missing for half a minute.
+    static func moviesWithoutManifest(in inbox: URL, known: Set<String>, now: Date = Date()) -> [InboxRecording] {
+        let fm = FileManager.default
+        let keys: [URLResourceKey] = [.contentModificationDateKey, .creationDateKey]
+        return ((try? fm.contentsOfDirectory(at: inbox, includingPropertiesForKeys: keys)) ?? []).compactMap { movie in
+            guard ["mov", "mp4"].contains(movie.pathExtension.lowercased()),
+                  !known.contains(movie.lastPathComponent),
+                  let id = UUID(uuidString: movie.deletingPathExtension().lastPathComponent),
+                  MediaInspector.fileSize(movie) > 100_000,
+                  let values = try? movie.resourceValues(forKeys: Set(keys)),
+                  let finished = values.contentModificationDate, now.timeIntervalSince(finished) > 30 else { return nil }
+            return InboxRecording(id: id, movieFileName: movie.lastPathComponent,
+                                  createdAt: values.creationDate ?? finished, finishedAt: finished,
+                                  microphoneEnabled: false)
+        }
+    }
 
     /// True while anything records or mirrors the screen (a live broadcast included).
     private static var isScreenCaptured: Bool {
