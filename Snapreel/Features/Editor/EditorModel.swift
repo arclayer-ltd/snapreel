@@ -696,6 +696,8 @@ final class EditorModel: ObservableObject {
         on(UIApplication.didBecomeActiveNotification) { model, _ in
             // Back from Settings with the microphone switched on.
             if model.tool == .voice, model.voice == .denied || model.voice == .primer { model.voice = model.voicePhaseForPermission() }
+            // Speech recognition may have been switched on meanwhile.
+            model.objectWillChange.send()
         }
         on(UIApplication.didReceiveMemoryWarningNotification) { model, _ in model.filmstrip.trim() }
     }
@@ -889,8 +891,12 @@ final class EditorModel: ObservableObject {
 
     // MARK: - Tools
 
+    /// The tool opened last, so the tool row comes back scrolled to it.
+    private(set) var lastTool: EditorTool?
+
     func open(_ next: EditorTool) {
         guard !isRecordingVoice else { return }
+        lastTool = next
         let wasCrop = tool == .crop
         pause()
         dismissTrimCoachIfNeeded(for: next)
@@ -1200,7 +1206,10 @@ final class EditorModel: ObservableObject {
         switch video.transcriptStatus {
         case .inProgress: return .working
         case .unavailable: return .unavailable(TranscriptService.shared.unavailableReason(for: source.id))
-        case .ready, .notStarted: return .notStarted
+        case .ready, .notStarted:
+            // Switched off before it was ever asked for (or turned off in Settings): say so, don't
+            // offer a button that does nothing.
+            return Permissions.currentState(.speech) == .denied ? .unavailable(.permissionDenied) : .notStarted
         }
     }
 
@@ -1339,7 +1348,7 @@ final class EditorModel: ObservableObject {
     func addText() {
         guard !isRecordingVoice else { return }
         pause()
-        let start = min(playhead, max(0, duration - 0.5))
+        let start = max(0, min(playhead, duration - 3))
         textEntry = EditText(text: "", start: start, end: min(duration, start + 3))
     }
 
@@ -1401,8 +1410,11 @@ final class EditorModel: ObservableObject {
 
     func addSticker(_ kind: EditStickerKind, emoji: String? = nil) {
         pause()
-        let start = min(playhead, max(0, duration - 0.5))
+        // Three seconds like a text, starting earlier when the playhead is near the end.
+        let start = max(0, min(playhead, duration - 3))
         var item = EditSticker(kind: kind, emoji: emoji, start: start, end: min(duration, start + 3))
+        // Big enough to see at once (about a third of the picture's short side).
+        item.scale = kind == .emoji ? 1.6 : 1.3
         switch kind {
         case .arrow: item.rotation = -35
         case .highlight: item.color = .yellow
@@ -1455,13 +1467,19 @@ final class EditorModel: ObservableObject {
             switch selection {
             case .text(let id):
                 guard let index = recipe.texts.firstIndex(where: { $0.id == id }) else { return }
-                if let center { recipe.texts[index].center = center.clampedUnit }
+                // The middle of a text stays on the picture, clear of its edges.
+                if let center { recipe.texts[index].center = CGPoint(x: min(max(0.05, center.x), 0.95), y: min(max(0.05, center.y), 0.95)) }
                 if let scale { recipe.texts[index].scale = min(4, max(0.4, scale)) }
             case .sticker(let id):
                 guard let index = recipe.stickers.firstIndex(where: { $0.id == id }) else { return }
-                if let center { recipe.stickers[index].center = center.clampedUnit }
-                if let scale { recipe.stickers[index].scale = min(5, max(0.3, scale)) }
-                if let rotation { recipe.stickers[index].rotation = rotation }
+                // A shape stays inside the picture: never larger than it, never pushed off it (it
+                // used to grow over the editor's own buttons).
+                var item = recipe.stickers[index]
+                if let scale { item.scale = min(Self.largestScale(item.kind), max(0.3, scale)) }
+                if let rotation { item.rotation = rotation }
+                if let center { item.center = center }
+                item.center = Self.keptInside(item, picture: outputPictureSize)
+                recipe.stickers[index] = item
             case .blur(let id):
                 guard let index = recipe.blurs.firstIndex(where: { $0.id == id }), let rect else { return }
                 recipe.blurs[index].rect = rect.clampedUnit
@@ -1469,6 +1487,38 @@ final class EditorModel: ObservableObject {
                 break
             }
         }
+    }
+
+    /// The largest a shape gets: as long as the picture's short side.
+    nonisolated static func largestScale(_ kind: EditStickerKind) -> Double {
+        switch kind {
+        case .arrow, .circle: return 3.8
+        case .box: return 2.9
+        case .highlight: return 2.6
+        case .emoji: return 5
+        }
+    }
+
+    /// The nearest middle that keeps the whole shape (turned or not) on the picture.
+    nonisolated static func keptInside(_ item: EditSticker, picture: CGSize) -> CGPoint {
+        guard picture.width > 0, picture.height > 0 else { return item.center.clampedUnit }
+        let unit = min(picture.width, picture.height) / 100
+        let base: CGSize
+        switch item.kind {
+        case .arrow: base = CGSize(width: 26, height: 11)
+        case .circle: base = CGSize(width: 26, height: 26)
+        case .box: base = CGSize(width: 34, height: 22)
+        case .highlight: base = CGSize(width: 38, height: 9)
+        case .emoji: base = CGSize(width: 16, height: 16)
+        }
+        let angle = item.rotation * .pi / 180
+        let w = base.width * item.scale * unit, h = base.height * item.scale * unit
+        let halfWidth = (abs(w * cos(angle)) + abs(h * sin(angle))) / 2 / picture.width
+        let halfHeight = (abs(w * sin(angle)) + abs(h * cos(angle))) / 2 / picture.height
+        func kept(_ value: CGFloat, _ half: CGFloat) -> CGFloat {
+            half >= 0.5 ? 0.5 : min(max(half, value), 1 - half)
+        }
+        return CGPoint(x: kept(item.center.x, halfWidth), y: kept(item.center.y, halfHeight))
     }
 
     /// Two fingers on the picture: size and turn of the selected text or shape, one undo step.

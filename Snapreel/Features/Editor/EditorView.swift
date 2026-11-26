@@ -376,15 +376,22 @@ struct EditorToolBar: View {
     @ObservedObject var model: EditorModel
 
     var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 2) {
-                ForEach(model.tools) { tool in
-                    EditorToolButton(title: tool.title, systemImage: tool.systemImage) {
-                        model.open(tool)
+        ScrollViewReader { proxy in
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 2) {
+                    ForEach(model.tools) { tool in
+                        EditorToolButton(title: tool.title, systemImage: tool.systemImage) {
+                            model.open(tool)
+                        }
+                        .id(tool)
                     }
                 }
+                .padding(.horizontal, Space.xs)
             }
-            .padding(.horizontal, Space.xs)
+            // Back from a tool, the row shows that tool again instead of jumping back to Trim.
+            .onAppear {
+                if let last = model.lastTool, model.tools.contains(last) { proxy.scrollTo(last, anchor: .center) }
+            }
         }
         .frame(height: 76)
     }

@@ -320,6 +320,24 @@ final class EditRecipeTests: XCTestCase {
         }
     }
 
+    /// Testers, 26 Nov: an arrow could be grown and dragged off the picture, over the editor's buttons.
+    func testShapesStayOnThePicture() {
+        let picture = CGSize(width: 886, height: 1918)
+        // Longest side of each shape at scale 1, in hundredths of the picture's short side.
+        let longest: [EditStickerKind: Double] = [.arrow: 26, .circle: 26, .box: 34, .highlight: 38, .emoji: 16]
+        for kind in EditStickerKind.allCases {
+            XCTAssertLessThanOrEqual(EditorModel.largestScale(kind) * (longest[kind] ?? 0), 100, "never larger than the picture")
+            var item = EditSticker(kind: kind, start: 0, end: 3)
+            item.scale = EditorModel.largestScale(kind)
+            item.rotation = 30
+            for wanted in [CGPoint(x: -0.4, y: -0.3), CGPoint(x: 1.3, y: 1.2), CGPoint(x: 0.5, y: 0.5)] {
+                item.center = wanted
+                let center = EditorModel.keptInside(item, picture: picture)
+                XCTAssertTrue((0...1).contains(center.x) && (0...1).contains(center.y), "\(kind)")
+            }
+        }
+    }
+
     /// Testers, 26 Nov: Trim went down to 0.2 s and the save then failed with "Nothing was recorded".
     func testTrimKeepsHalfASecond() {
         var r = recipe()

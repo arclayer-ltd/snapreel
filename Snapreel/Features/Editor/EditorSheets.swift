@@ -62,6 +62,9 @@ struct EditorTranscriptSheet: View {
                     if reason == .permissionDenied {
                         Button("Open Settings") { Permissions.openSettings() }
                             .buttonStyle(.srSecondary)
+                    } else if reason == .failed {
+                        Button("Try again") { model.requestTranscript() }
+                            .buttonStyle(.srSecondary)
                     }
                 }
             }
