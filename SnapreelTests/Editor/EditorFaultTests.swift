@@ -217,6 +217,36 @@ final class EditorFaultTests: XCTestCase {
         XCTAssertEqual(video.duration, recipe.outputDuration, accuracy: 0.08)
     }
 
+    /// Testers, 26 Nov: a 9-minute video split at 2:00 and 4:17 with the middle part deleted never
+    /// saved, at any size. Uses the test rig's own sample when the job fetched it (RIG_MEDIA).
+    func testNineMinutesWithTheMiddleDeleted() async throws {
+        executionTimeAllowance = 3_600
+        var url: URL
+        if let folder = ProcessInfo.processInfo.environment["RIG_MEDIA"],
+           FileManager.default.fileExists(atPath: folder + "/9min.mp4") {
+            url = URL(fileURLWithPath: folder + "/9min.mp4")
+            print("NOTE|9 min middle deleted: the rig's sample")
+        } else {
+            url = try await TestMedia.long(minutes: 9, audioShortBy: 0)
+            print("NOTE|9 min middle deleted: a made sample")
+        }
+        let (library, id) = try await TestMedia.library(with: url)
+        guard let source = library.video(id) else { return XCTFail("no recording") }
+        var recipe = EditRecipe.original(sourceID: id, duration: source.duration)
+        XCTAssertTrue(recipe.split(atOutput: 120))
+        XCTAssertTrue(recipe.split(atOutput: 257))
+        let middle = try XCTUnwrap(recipe.segments.first { abs($0.start - 120) < 0.01 })
+        recipe.removeSegment(middle.id)
+        recipe.quality = .hd720
+        print("NOTE|9 min middle deleted: \(recipe.segments.map { "\($0.start)-\($0.end)" }) = \(recipe.outputDuration) s")
+        let started = CACurrentMediaTime()
+        let (video, file) = try await TestMedia.export(recipe, library: library, timeout: 3_000)
+        perf("9 min middle deleted", "export time", CACurrentMediaTime() - started, "s")
+        perf("9 min middle deleted", "export file", Double(TestMedia.fileSize(file)) / 1_000_000, "MB")
+        perf("9 min middle deleted", "length error", video.duration - recipe.outputDuration, "s")
+        XCTAssertEqual(video.duration, recipe.outputDuration, accuracy: 0.1)
+    }
+
     /// The picture ends before the sound: no black picture at the end.
     func testPictureShorterThanSound() async throws {
         var spec = TestMedia.Spec()

@@ -42,6 +42,8 @@ final class EditRenderer: ObservableObject {
     private var waiting: [CheckedContinuation<Void, Never>] = []
     /// Edits whose save waits because Snapreel isn't on screen.
     @Published private(set) var isPaused = false
+    /// What the last failed save was doing and why it failed (for tests and the log).
+    private(set) var lastFailure: String?
 
     /// Adds the new recording's row and starts saving. Returns its id.
     func begin(recipe: EditRecipe, source: Video, library: Library) -> UUID {
@@ -162,9 +164,11 @@ final class EditRenderer: ObservableObject {
         } catch EditExportFailure.interrupted {
             throw EditRenderError.interrupted
         } catch EditExportFailure.failed(let underlying) {
+            lastFailure = exporter.failureNote
             if let underlying, DiskSpace.isOutOfSpace(underlying) { throw RecordingSaveError.noSpace }
             throw isInBackground ? EditRenderError.interrupted : EditRenderError.failed
         } catch {
+            lastFailure = exporter.failureNote ?? String(describing: error)
             if DiskSpace.isOutOfSpace(error) { throw RecordingSaveError.noSpace }
             throw EditRenderError.failed
         }

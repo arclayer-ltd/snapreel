@@ -148,6 +148,12 @@ final class EditExporter: @unchecked Sendable {
     private var isWorking = false
     private var exportSession: AVAssetExportSession?
     private let report: (Double) -> Void
+    /// What the save was doing, for the log when it fails.
+    private var stage = "starting"
+    /// While joining: where the join is, worked out only when it is needed.
+    private var joinStage: (() -> String)?
+    /// Why the last attempt failed, for tests and the log.
+    private(set) var failureNote: String?
 
     init(plan: EditExportPlan, report: @escaping (Double) -> Void) {
         self.plan = plan
@@ -254,6 +260,8 @@ final class EditExporter: @unchecked Sendable {
         while true {
             do {
                 try waitUntilRunning()
+                stage = "starting"
+                joinStage = nil
                 let pieces = plan.build.videoTrackID == nil ? [] : try encodePieces()
                 try join(pieces)
                 return
@@ -262,12 +270,25 @@ final class EditExporter: @unchecked Sendable {
             } catch {
                 // Away from the app, or iOS took the encoder: carry on from the last whole piece.
                 if shouldStop { continue }
+                note(error, attempt: attempts + 1)
                 if Self.isOutOfSpace(error) { throw error }
                 attempts += 1
                 guard attempts < 4 else { throw EditExportFailure.failed(error) }
                 Thread.sleep(forTimeInterval: 0.6 * Double(attempts))
             }
         }
+    }
+
+    private func note(_ error: Error, attempt: Int) {
+        var underlying: Error? = error
+        if case EditExportFailure.failed(let inner) = error { underlying = inner }
+        let detail = underlying.map { error -> String in
+            let ns = error as NSError
+            let inner = (ns.userInfo[NSUnderlyingErrorKey] as? NSError).map { " < \($0.domain) \($0.code)" } ?? ""
+            return "\(ns.domain) \(ns.code)\(inner) \(ns.localizedDescription)"
+        } ?? "no error"
+        failureNote = "\(joinStage?() ?? stage): \(detail)"
+        NSLog("Snapreel edit save, attempt %d failed while %@", attempt, failureNote ?? "")
     }
 
     private static func isOutOfSpace(_ error: Error) -> Bool {
@@ -384,6 +405,7 @@ final class EditExporter: @unchecked Sendable {
                 pieceIndex += 1
             }
             if writer == nil {
+                stage = "encoding piece \(pieceIndex + 1) of \(pieces.count)"
                 writer = try PieceWriter(piece: pieces[pieceIndex].url, start: pieces[pieceIndex].start,
                                          end: pieces[pieceIndex].end, plan: plan)
                 let range = pieces[pieceIndex].start.seconds...pieces[pieceIndex].end.seconds
@@ -513,6 +535,13 @@ final class EditExporter: @unchecked Sendable {
         var audioDone = audioIn == nil
         var idle = 0
         var lastReport = Date.distantPast
+        var pictureAt = 0.0
+        var soundAt = 0.0
+        func where_() -> String {
+            "joining \(pieces.count) pieces, picture at \(String(format: "%.2f", pictureAt)) s\(videoDone ? " (done)" : ""), "
+                + "sound at \(String(format: "%.2f", soundAt)) s\(audioDone ? " (done)" : "") of \(String(format: "%.2f", total.seconds)) s"
+        }
+        joinStage = where_
         while !(videoDone && audioDone) {
             try checkStop()
             if writer.status == .failed { throw EditExportFailure.failed(writer.error) }
@@ -520,7 +549,11 @@ final class EditExporter: @unchecked Sendable {
             if !videoDone, let videoIn, videoIn.isReadyForMoreMediaData {
                 try autoreleasepool {
                     if let sample = try feed.next() {
-                        guard videoIn.append(sample) else { throw EditExportFailure.failed(writer.error) }
+                        pictureAt = CMSampleBufferGetPresentationTimeStamp(sample).seconds
+                        guard videoIn.append(sample) else {
+                            joinStage = { where_() + ", picture refused" }
+                            throw EditExportFailure.failed(writer.error)
+                        }
                         if Date().timeIntervalSince(lastReport) > 0.2 {
                             lastReport = Date()
                             let time = CMSampleBufferGetPresentationTimeStamp(sample).seconds
@@ -536,7 +569,11 @@ final class EditExporter: @unchecked Sendable {
             if !audioDone, let audioIn, let sound, audioIn.isReadyForMoreMediaData {
                 try autoreleasepool {
                     if let sample = try sound.next() {
-                        guard audioIn.append(sample) else { throw EditExportFailure.failed(writer.error) }
+                        soundAt = CMSampleBufferGetPresentationTimeStamp(sample).seconds
+                        guard audioIn.append(sample) else {
+                            joinStage = { where_() + ", sound refused" }
+                            throw EditExportFailure.failed(writer.error)
+                        }
                         if videoIn == nil, Date().timeIntervalSince(lastReport) > 0.2 {
                             lastReport = Date()
                             report(min(0.99, CMSampleBufferGetPresentationTimeStamp(sample).seconds / max(0.1, total.seconds)))
@@ -552,10 +589,14 @@ final class EditExporter: @unchecked Sendable {
                 idle = 0
             } else {
                 idle += 1
-                if idle > 15_000 { throw EditExportFailure.failed(writer.error) }
+                if idle > 15_000 {
+                    joinStage = { where_() + ", stalled" }
+                    throw EditExportFailure.failed(writer.error)
+                }
                 usleep(1_000)
             }
         }
+        joinStage = { "finishing the file, " + where_() }
         writer.endSession(atSourceTime: total)
         let done = DispatchSemaphore(value: 0)
         writer.finishWriting { done.signal() }

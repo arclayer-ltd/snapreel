@@ -336,6 +336,9 @@ jobs:
     if: ${{ inputs.editor_tests }}
     runs-on: ${{ inputs.runner || 'xcode-27' }}
     timeout-minutes: 240
+    permissions:
+      contents: read
+      actions: read
     steps:
       - uses: actions/checkout@v4
 
@@ -391,6 +394,15 @@ jobs:
           nohup node scripts/h2-probe-server.mjs "$PEM/key.pem" "$PEM/cert.pem" 8443 > ci-out/probe-server.log 2>&1 &
           echo "TEST_RUNNER_PROBE_URL=https://localhost:8443/" >> "$GITHUB_ENV"
           echo "TEST_RUNNER_RUN_BENCHMARKS=1" >> "$GITHUB_ENV"
+
+      # The test rig's sample videos, for tests that repeat what testers did with them (RIG_MEDIA).
+      - name: Rig samples
+        if: ${{ contains(inputs.test_only, 'NineMinutes') }}
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          bash scripts/ui-rig/get_media.sh small "$RUNNER_TEMP/rig-media" && ls -la "$RUNNER_TEMP/rig-media"             && echo "TEST_RUNNER_RIG_MEDIA=$RUNNER_TEMP/rig-media" >> "$GITHUB_ENV"
 
       # Optimised (like the App Store build) but testable, so the times mean something. Signed to run
       # locally: iOS 16 simulators don't install an unsigned test runner. The editor's long tests (saving
