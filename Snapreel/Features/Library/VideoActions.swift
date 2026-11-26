@@ -329,6 +329,7 @@ struct LibraryActionsSheet: View {
     let onAction: @MainActor (LibraryVideoAction) -> Void
 
     @EnvironmentObject private var library: Library
+    @Environment(\.dynamicTypeSize) private var typeSize
     @State private var confirmsDelete = false
 
     var body: some View {
@@ -395,7 +396,7 @@ struct LibraryActionsSheet: View {
                 Text(verbatim: "\(video.kind.label) · \(Format.duration(video.duration))")
                     .font(.srFootnote)
                     .foregroundStyle(Color.srTextSecondary)
-                Text(verbatim: "\(Format.dateTime(video.createdAt)) · \(Format.bytes(video.fileSize))")
+                Text(verbatim: Self.dateLine(video))
                     .font(.srFootnote)
                     .foregroundStyle(Color.srTextTertiary)
                     .lineLimit(1)
@@ -406,23 +407,69 @@ struct LibraryActionsSheet: View {
         .accessibilityElement(children: .combine)
     }
 
+    /// When it was made and its size; while it is still being written, how far that is instead.
+    static func dateLine(_ video: Video) -> String {
+        let date = Format.dateTime(video.createdAt)
+        switch video.state {
+        case .saving(let progress):
+            return "\(date) · Saving \(Int((min(1, max(0, progress)) * 100).rounded(.down)))%"
+        case .failed:
+            return "\(date) · Not saved"
+        case .ready:
+            return video.fileSize > 0 ? "\(date) · \(Format.bytes(video.fileSize))" : date
+        }
+    }
+
+    /// Why the quick actions are greyed out, when they are.
+    static func waitNote(_ video: Video) -> String? {
+        switch video.state {
+        case .ready: return nil
+        case .saving:
+            return "Share, Copy link and Save to Photos work as soon as this recording is saved."
+        case .failed:
+            return "This recording isn't saved, so it can't be shared yet."
+        }
+    }
+
     private func quickActions(_ video: Video) -> some View {
         let ready = video.state.isReady
-        return HStack(spacing: Space.s) {
-            ActionTile(title: "Share", systemImage: "square.and.arrow.up", enabled: ready) {
-                onAction(.share)
+        let share = ActionTile(title: "Share", systemImage: "square.and.arrow.up", enabled: ready) {
+            onAction(.share)
+        }
+        let link = ActionTile(title: "Copy link",
+                              systemImage: "link", isOn: library.link(for: video.id) != nil, enabled: ready) {
+            onAction(.copyLink)
+        }
+        let photos = ActionTile(title: "Save to Photos", systemImage: "square.and.arrow.down", enabled: ready) {
+            onAction(.saveToPhotos)
+        }
+        let later = ActionTile(title: video.isInWatchLater ? "In Watch later" : "Watch later",
+                               systemImage: video.isInWatchLater ? "bookmark.fill" : "bookmark",
+                               isOn: video.isInWatchLater, enabled: ready) {
+            onAction(.watchLater)
+        }
+        return VStack(alignment: .leading, spacing: Space.s) {
+            if typeSize.isAccessibilitySize {
+                // Two to a row, so the largest text keeps whole words.
+                Grid(horizontalSpacing: Space.s, verticalSpacing: Space.s) {
+                    GridRow { share; link }
+                    GridRow { photos; later }
+                }
+                .fixedSize(horizontal: false, vertical: true)
+            } else {
+                // All four as tall as the tallest, so a two-line title doesn't make one stand out.
+                HStack(alignment: .top, spacing: Space.s) { share; link; photos; later }
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            ActionTile(title: "Copy link",
-                       systemImage: "link", isOn: library.link(for: video.id) != nil, enabled: ready) {
-                onAction(.copyLink)
-            }
-            ActionTile(title: "Save to Photos", systemImage: "square.and.arrow.down", enabled: ready) {
-                onAction(.saveToPhotos)
-            }
-            ActionTile(title: video.isInWatchLater ? "In Watch later" : "Watch later",
-                       systemImage: video.isInWatchLater ? "bookmark.fill" : "bookmark",
-                       isOn: video.isInWatchLater, enabled: ready) {
-                onAction(.watchLater)
+            if let note = Self.waitNote(video) {
+                Label {
+                    Text(note)
+                } icon: {
+                    Image(systemName: "clock")
+                }
+                .font(.srFootnote)
+                .foregroundStyle(Color.srTextSecondary)
+                .fixedSize(horizontal: false, vertical: true)
             }
         }
     }
@@ -501,20 +548,22 @@ private struct ActionTile: View {
                     .foregroundStyle(isOn ? Color.white : Color.srRed)
                     .frame(width: 44, height: 44)
                     .background(Circle().fill(isOn ? Color.srRed : Color.srRedSoft))
+                // The same size in every tile: a longer title takes a second line instead of shrinking.
                 Text(title)
                     .font(.srCaption)
                     .foregroundStyle(Color.srText)
                     .multilineTextAlignment(.center)
-                    .lineLimit(2)
-                    .minimumScaleFactor(0.85)
+                    .lineLimit(3)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            .frame(maxWidth: .infinity)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             .padding(.vertical, Space.s)
             .padding(.horizontal, Space.xxs)
             .background(RoundedRectangle(cornerRadius: Radius.l, style: .continuous).fill(Color.srSurface))
             .overlay(RoundedRectangle(cornerRadius: Radius.l, style: .continuous).strokeBorder(Color.srLine, lineWidth: 0.5))
         }
         .buttonStyle(PressScaleStyle(scale: 0.96))
+        .frame(maxHeight: .infinity)
         .disabled(!enabled)
         .opacity(enabled ? 1 : 0.4)
         .accessibilityAddTraits(isOn ? .isSelected : [])

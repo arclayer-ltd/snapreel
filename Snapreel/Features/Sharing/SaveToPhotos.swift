@@ -113,7 +113,7 @@ struct SaveToPhotosModifier: ViewModifier {
         begin(current)
     }
 
-    private func begin(_ video: Video) {
+    private func begin(_ video: Video, again: Bool = false) {
         if video.isAudioOnly {
             Haptics.warning()
             showQuestion(.audioOnly)
@@ -122,6 +122,11 @@ struct SaveToPhotosModifier: ViewModifier {
         if case .failed = video.state {
             Haptics.error()
             showQuestion(.failed(.other("This recording isn't saved yet, so there's nothing to add to Photos.")))
+            return
+        }
+        // Photos can't tell Snapreel what it already has (add-only access), so Snapreel remembers.
+        if !again, video.photosSaveCount > 0 {
+            showQuestion(.alreadySaved(video.photosSaveCount))
             return
         }
         switch Permissions.currentState(.photosAdd) {
@@ -137,6 +142,8 @@ struct SaveToPhotosModifier: ViewModifier {
         switch current {
         case .permission:
             requestAccess(for: target)
+        case .alreadySaved:
+            retry(target, again: true)
         case .denied:
             close()
             Permissions.openSettings()
@@ -170,7 +177,7 @@ struct SaveToPhotosModifier: ViewModifier {
         }
     }
 
-    private func retry(_ video: Video) {
+    private func retry(_ video: Video, again: Bool = false) {
         isAsking = true
         stage = nil
         let mine = token
@@ -179,7 +186,7 @@ struct SaveToPhotosModifier: ViewModifier {
             try? await Task.sleep(nanoseconds: 400_000_000)
             isAsking = false
             guard token == mine else { return }
-            begin(library.video(video.id) ?? video)
+            begin(library.video(video.id) ?? video, again: again)
         }
     }
 
@@ -290,7 +297,8 @@ struct SaveToPhotosModifier: ViewModifier {
         show(.saved)
         let shown = UUID()
         savedToken = shown
-        let seconds: UInt64 = UIAccessibility.isVoiceOverRunning ? 8 : 4
+        // Long enough to read it and reach Open Photos.
+        let seconds: UInt64 = UIAccessibility.isVoiceOverRunning ? 12 : 7
         Task { @MainActor in
             try? await Task.sleep(nanoseconds: seconds * 1_000_000_000)
             if stage == .saved, savedToken == shown, !isFrozen { close() }

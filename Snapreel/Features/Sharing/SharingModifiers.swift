@@ -48,6 +48,8 @@ extension View {
 enum PhotosSaveStage: Equatable {
     /// Explanation shown before the system's add-only Photos prompt.
     case permission
+    /// The recording was saved to Photos before (this many times): saving again adds another copy.
+    case alreadySaved(Int)
     /// Photos access was turned off; only the Settings app can change it.
     case denied
     /// The file is being finished first (its sounds mixed, or a cut-off recording repaired).
@@ -65,7 +67,7 @@ enum PhotosSaveStage: Equatable {
     /// Stages that ask the person something, shown in a sheet. The others are a status card.
     var asksQuestion: Bool {
         switch self {
-        case .permission, .denied, .audioOnly, .failed: return true
+        case .permission, .alreadySaved, .denied, .audioOnly, .failed: return true
         case .preparing, .saving, .saved: return false
         }
     }

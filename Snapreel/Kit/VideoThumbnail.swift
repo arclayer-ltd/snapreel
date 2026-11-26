@@ -82,7 +82,8 @@ struct VideoThumbnail: View {
                 }
                 .frame(width: proxy.size.width, height: proxy.size.height)
             }
-        } else if video.isAudioOnly {
+        } else if video.kind == .audio || (video.isAudioOnly && video.state.isReady) {
+            // A video still being written has no picture size yet: that isn't a sound recording.
             AudioArtwork(seed: video.id.hashValue)
         } else {
             Image(systemName: video.kind.systemImage)
@@ -103,6 +104,8 @@ struct VideoThumbnail: View {
         .padding(.horizontal, 6)
         .padding(.vertical, 3)
         .background(Capsule().fill(Color.black.opacity(0.62)))
+        // Hidden from VoiceOver with the picture; at the largest text it would cover the thumbnail.
+        .dynamicTypeSize(...DynamicTypeSize.xxLarge)
     }
 
     @ViewBuilder private var stateOverlay: some View {
@@ -116,6 +119,7 @@ struct VideoThumbnail: View {
                     SpinningRing(lineWidth: 3)
                         .frame(width: 30, height: 30)
                     Text("Saving").font(.srCaption).foregroundStyle(.white)
+                        .dynamicTypeSize(...DynamicTypeSize.xxLarge)
                 }
             }
         case .failed:
@@ -126,6 +130,7 @@ struct VideoThumbnail: View {
                         .font(.system(size: 18, weight: .semibold))
                         .foregroundStyle(Color.srRedGlow)
                     Text("Not saved").font(.srCaption).foregroundStyle(.white)
+                        .dynamicTypeSize(...DynamicTypeSize.xxLarge)
                 }
             }
         }

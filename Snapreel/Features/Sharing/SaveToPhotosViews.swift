@@ -122,6 +122,13 @@ struct PhotosQuestionSheet: View {
                         note: "Snapreel can only add what you choose. It can't see or change anything already in your library.",
                         primary: "Continue",
                         secondary: "Not now")
+        case .alreadySaved(let times):
+            let before = times == 1 ? "before" : "\(times) times before"
+            return Copy(systemImage: "photo.on.rectangle.angled",
+                        title: "Already in Photos",
+                        message: "You've saved \(quotedTitle) to Photos \(before). Saving again adds another copy there.",
+                        primary: "Save another copy",
+                        secondary: "Cancel")
         case .denied:
             return Copy(systemImage: "hand.raised.fill",
                         title: "Photos access is off",
@@ -162,8 +169,10 @@ struct PhotosVideoChip: View {
 
     var body: some View {
         HStack(spacing: Space.s) {
-            VideoThumbnail(video: video, cornerRadius: Radius.s, showsDuration: false)
-                .frame(width: 64)
+            // A portrait recording gets a portrait box, so it isn't a thin strip in a wide one.
+            VideoThumbnail(video: video, cornerRadius: Radius.s, showsDuration: false,
+                           aspectRatio: video.isPortrait ? 3 / 4 : 16 / 9)
+                .frame(width: video.isPortrait ? 42 : 64)
             VStack(alignment: .leading, spacing: 2) {
                 Text(video.title)
                     .font(.srSubheadlineStrong)
@@ -200,6 +209,8 @@ struct SharingStatusCard: View {
     var actionHint: String?
     var action: (@MainActor () -> Void)?
 
+    @Environment(\.dynamicTypeSize) private var typeSize
+
     static func detail(progress: Double?, of video: Video) -> String {
         guard let progress else { return video.title }
         return "\(Int((min(1, max(0, progress)) * 100).rounded(.down)))% \u{00B7} \(video.title)"
@@ -209,26 +220,15 @@ struct SharingStatusCard: View {
         VStack(spacing: Space.s) {
             HStack(spacing: Space.s) {
                 thumbnail
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(title)
-                        .font(.srSubheadlineStrong)
-                        .foregroundStyle(Color.srText)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.8)
-                    Text(detail)
-                        .font(.srFootnote.monospacedDigit())
-                        .foregroundStyle(Color.srTextSecondary)
-                        .lineLimit(1)
-                }
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel(title)
-                .accessibilityValue(detail)
-                // All the width the button leaves, so the title only shrinks when it has to.
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .layoutPriority(1)
-                if let actionTitle, let action {
+                words
+                // At the largest text sizes the button goes under the words, which then keep the width.
+                if !isLarge, let actionTitle, let action {
                     actionButton(actionTitle, action)
                 }
+            }
+            if isLarge, let actionTitle, let action {
+                actionButton(actionTitle, action)
+                    .frame(maxWidth: .infinity, alignment: .trailing)
             }
             if showsBar { SharingProgressBar(progress: progress) }
         }
@@ -240,6 +240,28 @@ struct SharingStatusCard: View {
         .overlay(RoundedRectangle(cornerRadius: Radius.l, style: .continuous)
             .strokeBorder(Color.srLine, lineWidth: 1))
         .shadow(color: Color.black.opacity(0.22), radius: 18, x: 0, y: 8)
+    }
+
+    private var isLarge: Bool { typeSize.isAccessibilitySize }
+
+    private var words: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title)
+                .font(.srSubheadlineStrong)
+                .foregroundStyle(Color.srText)
+                .lineLimit(isLarge ? 3 : 1)
+                .minimumScaleFactor(isLarge ? 1 : 0.8)
+            Text(detail)
+                .font(.srFootnote.monospacedDigit())
+                .foregroundStyle(Color.srTextSecondary)
+                .lineLimit(isLarge ? 2 : 1)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(title)
+        .accessibilityValue(detail)
+        // All the width the button leaves, so the title only shrinks when it has to.
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .layoutPriority(1)
     }
 
     private var thumbnail: some View {
@@ -308,22 +330,45 @@ struct SharingProgressBar: View {
     }
 }
 
-/// Slides a status card up from the bottom edge of a screen.
+/// Slides a status card up from the bottom edge of a screen, or down from the top on a screen
+/// whose main buttons sit along the bottom (`sharingCardsAtTop()`).
 struct SharingCardOverlay<Card: View>: View {
     let isPresented: Bool
     let bottomInset: CGFloat
     @ViewBuilder let card: () -> Card
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.sharingCardsAtTop) private var atTop
 
     var body: some View {
-        ZStack(alignment: .bottom) {
+        ZStack(alignment: atTop ? .top : .bottom) {
             if isPresented {
                 card()
                     .padding(.horizontal, Space.gutter)
-                    .padding(.bottom, bottomInset)
-                    .transition(reduceMotion ? .opacity : .move(edge: .bottom).combined(with: .opacity))
+                    .padding(atTop ? .top : .bottom, atTop ? Space.s : bottomInset)
+                    .transition(reduceMotion ? .opacity : .move(edge: atTop ? .top : .bottom).combined(with: .opacity))
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: atTop ? .top : .bottom)
         .animation(reduceMotion ? nil : Motion.standard, value: isPresented)
+    }
+}
+
+private struct SharingCardsAtTopKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
+extension EnvironmentValues {
+    /// Sharing and Save to Photos cards come down from the top instead of up from the bottom.
+    var sharingCardsAtTop: Bool {
+        get { self[SharingCardsAtTopKey.self] }
+        set { self[SharingCardsAtTopKey.self] = newValue }
+    }
+}
+
+extension View {
+    /// Shows the cards of `.shareVideo` and `.saveToPhotos` applied inside this view along the top
+    /// edge, so they don't cover buttons along the bottom (the recorder review's Edit and Done).
+    func sharingCardsAtTop() -> some View {
+        environment(\.sharingCardsAtTop, true)
     }
 }

@@ -34,6 +34,18 @@ extension DebugCatalog {
                 InboxSettingsDebugHost { StorageView(initialErase: .done) }
             },
 
+            // An edit still being written: why Share and Save to Photos wait.
+            .shell("share.actions.saving", "Video actions sheet [still saving]", tab: .library, configure: { _, library in
+                library.update(FixtureStorage.IDs.checkout) {
+                    $0.state = .saving(progress: 0.12)
+                    $0.fileSize = 0
+                    $0.pixelWidth = 0
+                    $0.pixelHeight = 0
+                    $0.thumbnailFileName = nil
+                }
+                BrowseIntent.shared.libraryTab = .videos
+                BrowseIntent.shared.librarySheet = .video(.actions(FixtureStorage.IDs.checkout))
+            }),
             DebugScreen("share.sheet", "Share sheet over the library", wait: 5) {
                 SharingDebugHost(action: .share)
             },
@@ -54,6 +66,9 @@ extension DebugCatalog {
             },
             DebugScreen("photos.permission", "Save to Photos [permission]", wait: 4) {
                 SharingDebugHost(action: .photos(.permission))
+            },
+            DebugScreen("photos.again", "Save to Photos [already saved]", wait: 4) {
+                SharingDebugHost(action: .photos(.alreadySaved(1)))
             },
             DebugScreen("photos.progress", "Save to Photos [saving]") {
                 SharingDebugHost(action: .photos(.saving))
