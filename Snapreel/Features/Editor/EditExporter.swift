@@ -271,7 +271,9 @@ final class EditExporter: @unchecked Sendable {
                 stage = "starting"
                 joinStage = nil
                 let pieces = plan.build.videoTrackID == nil ? [] : try encodePieces()
-                try join(pieces)
+                // A retry writes the file without moving its index to the front: one less step that
+                // can fail (iOS 16 failed some saves there with -16364).
+                try join(pieces, fastStart: attempts == 0)
                 return
             } catch EditExportFailure.cancelled {
                 throw EditExportFailure.cancelled
@@ -497,11 +499,11 @@ final class EditExporter: @unchecked Sendable {
     // MARK: - Join
 
     /// The pieces, one after another without encoding them again, with the sound.
-    private func join(_ pieces: [Piece]) throws {
+    private func join(_ pieces: [Piece], fastStart: Bool = true) throws {
         try working {}
         try? FileManager.default.removeItem(at: plan.output)
         let writer = try AVAssetWriter(outputURL: plan.output, fileType: pieces.isEmpty ? .m4a : .mp4)
-        writer.shouldOptimizeForNetworkUse = true
+        writer.shouldOptimizeForNetworkUse = fastStart
         let total = plan.build.duration
 
         var videoIn: AVAssetWriterInput?
@@ -546,8 +548,9 @@ final class EditExporter: @unchecked Sendable {
         var pictureAt = 0.0
         var soundAt = 0.0
         func where_() -> String {
-            "joining \(pieces.count) pieces, picture at \(String(format: "%.2f", pictureAt)) s\(videoDone ? " (done)" : ""), "
-                + "sound at \(String(format: "%.2f", soundAt)) s\(audioDone ? " (done)" : "") of \(String(format: "%.2f", total.seconds)) s"
+            "joining \(pieces.count) pieces\(fastStart ? "" : " (index at the end)"), picture at \(String(format: "%.2f", pictureAt)) s\(videoDone ? " (done)" : ""), "
+                + "sound at \(String(format: "%.2f", soundAt)) s\(audioDone ? " (done)" : "") of \(String(format: "%.2f", total.seconds)) s, "
+                + feed.timingNote
         }
         joinStage = where_
         while !(videoDone && audioDone) {
@@ -611,6 +614,7 @@ final class EditExporter: @unchecked Sendable {
         done.wait()
         finished = true
         guard writer.status == .completed else { throw EditExportFailure.failed(writer.error) }
+        NSLog("Snapreel edit save done: %@", where_())
         try? FileManager.default.removeItem(at: plan.workFolder)
     }
 }
@@ -880,6 +884,18 @@ private final class PieceFeed {
     private var asset: AVAsset?
     /// How far the piece's own clock is from the edit's: its first frame is at its start.
     private var shift: CMTime?
+    /// The last frame time handed out. Frames are kept at least `gap` apart: a repeat placed right
+    /// before a frame at a piece's edge would otherwise last a tick, which iOS 16's file writer
+    /// refuses when it finishes the file.
+    private var lastTime: CMTime?
+    private static let gap = CMTime(value: 150, timescale: 90_000)
+    private var moved = 0
+    private var closest = Double.infinity
+    private var backwards = 0
+
+    var timingNote: String {
+        "frames moved \(moved), back in time \(backwards), closest \(closest.isFinite ? String(format: "%.4f", closest) : "-") s"
+    }
 
     init(pieces: [(url: URL, start: CMTime, end: CMTime)]) {
         self.pieces = pieces
@@ -919,14 +935,14 @@ private final class PieceFeed {
                     guard count > 0, CMSampleBufferGetDataBuffer(sample) != nil else { continue }
                     let shift = self.shift ?? pieces[index].start - CMSampleBufferGetPresentationTimeStamp(sample)
                     self.shift = shift
-                    if count == 1 { return try shifted(sample, by: shift) }
+                    if count == 1 { return try spaced(try shifted(sample, by: shift)) }
                     for position in 0..<count {
                         var one: CMSampleBuffer?
                         CMSampleBufferCopySampleBufferForRange(allocator: nil, sampleBuffer: sample,
                                                                sampleRange: CFRange(location: position, length: 1),
                                                                sampleBufferOut: &one)
                         guard let one else { throw EditExportFailure.failed(nil) }
-                        queued.append(try shifted(one, by: shift))
+                        queued.append(try spaced(try shifted(one, by: shift)))
                     }
                     continue
                 }
@@ -949,6 +965,25 @@ private final class PieceFeed {
             self.reader = reader
             self.output = output
         }
+    }
+
+    /// At least `gap` after the frame before it.
+    private func spaced(_ sample: CMSampleBuffer) throws -> CMSampleBuffer {
+        let time = CMSampleBufferGetPresentationTimeStamp(sample)
+        guard let last = lastTime else {
+            lastTime = time
+            return sample
+        }
+        let distance = (time - last).seconds
+        closest = min(closest, distance)
+        if distance <= 0 { backwards += 1 }
+        guard time < last + Self.gap else {
+            lastTime = time
+            return sample
+        }
+        moved += 1
+        lastTime = last + Self.gap
+        return try copy(sample, at: last + Self.gap, duration: CMSampleBufferGetDuration(sample))
     }
 
     private func shifted(_ sample: CMSampleBuffer, by offset: CMTime) throws -> CMSampleBuffer {

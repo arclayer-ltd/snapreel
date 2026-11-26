@@ -247,6 +247,25 @@ final class EditorFaultTests: XCTestCase {
         XCTAssertEqual(video.duration, recipe.outputDuration, accuracy: 0.1)
     }
 
+    /// Testers, 26 Nov: on iOS 16 every edit with a text or an arrow failed when the file was
+    /// finished (-11800 / -16364), with sound and without.
+    func testTextAndArrowSave() async throws {
+        for sound in [true, false] {
+            var spec = TestMedia.Spec()
+            spec.name = sound ? "overlay-sound" : "overlay-silent"
+            spec.duration = 12
+            spec.audioDuration = sound ? 12 : nil
+            spec.variableFrameRate = false
+            let (url, _) = try await TestMedia.make(spec)
+            let (library, id) = try await TestMedia.library(with: url)
+            var recipe = EditRecipe.original(sourceID: id, duration: 12)
+            recipe.texts = [EditText(text: "Hi", start: 0, end: 3)]
+            recipe.stickers = [EditSticker(kind: .arrow, center: CGPoint(x: 0.4, y: 0.3), rotation: 30, start: 1.5, end: 4.5)]
+            let (video, _) = try await TestMedia.export(recipe, library: library)
+            XCTAssertEqual(video.duration, 12, accuracy: 0.1, sound ? "with sound" : "without sound")
+        }
+    }
+
     /// The picture ends before the sound: no black picture at the end.
     func testPictureShorterThanSound() async throws {
         var spec = TestMedia.Spec()
