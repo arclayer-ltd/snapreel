@@ -297,12 +297,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Select newest Xcode that runs iOS 16 simulators
+      # The newest Xcode on this image, not Xcode 16: the app weak-links FoundationModels, which Xcode 16's
+      # SDK lacks ("framework not found"). Newer Xcodes still download and run the iOS 16.4 simulator.
+      - name: Select newest Xcode
         run: |
-          XCODE=$(for app in /Applications/Xcode_16*.app /Applications/Xcode*.app; do
+          XCODE=$(for app in /Applications/Xcode*.app; do
               if echo "$app" | grep -qiE 'beta|_rc'; then continue; fi
               v=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app/Contents/Info.plist" 2>/dev/null) || continue
-              if echo "$v" | grep -q '^16\.'; then echo "$v $app"; fi
+              echo "$v $app"
             done | sort -t. -k1,1n -k2,2n -k3,3n | tail -1 | cut -d' ' -f2-)
           [ -n "$XCODE" ] && sudo xcode-select -s "$XCODE"
           xcodebuild -version
