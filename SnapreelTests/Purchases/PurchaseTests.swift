@@ -297,7 +297,7 @@ final class PurchaseTests: PurchaseTestCase {
         XCTAssertEqual(ending, .purchased)
         XCTAssertEqual(service.standing, .confirming)
         XCTAssertTrue(service.hasLocalEntitlement, "Pro on this iPhone meanwhile")
-        let kept = await unfinished()
+        let kept = self.kept()
         XCTAssertEqual(kept, 1, "not finished before the server has it")
 
         await assertEventually("sent again by itself") { self.backend.sent.count >= 3 }
@@ -344,7 +344,7 @@ final class PurchaseTests: PurchaseTestCase {
         backend.failure = .refused("signature")
         await service.purchase(yearly)
         XCTAssertEqual(service.standing, .refused("signature"))
-        let kept = await unfinished()
+        let kept = self.kept()
         XCTAssertEqual(kept, 1)
         let asked = backend.sent.count
         await service.refreshEntitlements()
@@ -369,7 +369,7 @@ final class PurchaseTests: PurchaseTestCase {
         backend.failure = .signedOut
         await service.purchase(yearly)
         XCTAssertEqual(service.standing, .signInNeeded)
-        let kept = await unfinished()
+        let kept = self.kept()
         XCTAssertEqual(kept, 1)
         backend.failure = nil
         await service.confirmNow()
@@ -525,7 +525,7 @@ final class PurchaseTests: PurchaseTestCase {
         try session.forceRenewalOfSubscription(productIdentifier: monthly)
         await assertEventually("renewal sent") { self.backend.sent.count > before }
         XCTAssertEqual(service.standing, .subscribed)
-        await assertEventually("and finished") { await self.unfinishedNotAccepted().isEmpty }
+        await assertEventually("and finished") { await self.unfinished() == 0 }
     }
 
     func testARefundTurnsProOff() async throws {

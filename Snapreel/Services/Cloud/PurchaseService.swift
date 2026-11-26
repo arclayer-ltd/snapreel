@@ -152,6 +152,9 @@ final class PurchaseService: ObservableObject {
         return try await product.purchase(options: options)
     }
     var syncAppStore: () async throws -> Void = { try await AppStore.sync() }
+    /// Tells StoreKit the transaction is dealt with; only ever after the server has it, or when it's over and not
+    /// this account's to send. The tests record each one (StoreKit's own list can lag behind on iOS 16).
+    var finishTransaction: @MainActor (Transaction) async -> Void = { await $0.finish() }
     /// US app-store age laws (see `AgeGate`): nil to go ahead, or why not.
     var ageCheck: @MainActor () async -> String? = {
         let age = await AgeGate.check(.purchase)
@@ -820,7 +823,7 @@ final class PurchaseService: ObservableObject {
         if !move {
             if let running = delivering[transaction.id] { return await running.value }
             if acceptedTransactions.contains(transaction.id), transaction.revocationDate == nil, backend.serverIsPro {
-                await transaction.finish()
+                await finishTransaction(transaction)
                 return .accepted
             }
         }
@@ -844,7 +847,7 @@ final class PurchaseService: ObservableObject {
                 guard backend.userID == user else { return .signedOut }
                 setAcceptedOwner(user, of: transaction.originalID)
                 acceptedTransactions.insert(transaction.id)
-                await transaction.finish()
+                await finishTransaction(transaction)
                 backend.apply(plan)
                 answer = plan.tier == .pro || !running ? .accepted : .later
             } catch let error as PurchaseServerError {
@@ -867,7 +870,7 @@ final class PurchaseService: ObservableObject {
             if case .alreadyPro = answer {} else { answers[transaction.originalID] = answer }
         } else if answer != .accepted, answer != .later {
             // Over and done with, and not this account's to send: Apple tells the server itself.
-            await transaction.finish()
+            await finishTransaction(transaction)
         }
         switch answer {
         case .accepted: retryCount = 0
