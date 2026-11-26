@@ -151,11 +151,12 @@ enum CloudServices {
     static func becameActive() {
         guard AuthService.shared.isSignedIn else { return }
         Uploader.shared.resumeAll()
+        // The plan every time: it may have changed while Snapreel was away (bought or cancelled elsewhere).
+        Task { await AuthService.shared.refreshMe() }
         if let lastActive, Date().timeIntervalSince(lastActive) < 30 { return }
         lastActive = Date()
         Task {
             await PushService.shared.importDelivered()
-            await AuthService.shared.refreshMe()
             await ShareLinks.shared.refresh()
         }
     }

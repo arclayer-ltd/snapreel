@@ -97,6 +97,9 @@ struct MainShell: View {
         .opacity(selected ? 1 : 0)
         .allowsHitTesting(selected)
         .accessibilityHidden(!selected)
+        // The shown tab on top. After a sheet closes (Settings), iOS 16 can hand touches to the navigation bar of a
+        // hidden tab above it again, and the gear seemed dead until the tab was switched.
+        .zIndex(selected ? 1 : 0)
     }
 }
 

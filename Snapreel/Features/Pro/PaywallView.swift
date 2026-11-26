@@ -130,7 +130,7 @@ struct PaywallView: View {
             switch ending {
             case .purchased, .restored, .alreadyYours: Haptics.success()
             case .failed: Haptics.error()
-            case .none, .pending, .cancelled, .restoredNothing: break
+            case .none, .pending, .cancelled, .restoredNothing, .restoreCancelled: break
             }
         }
         .confirmationDialog("Move Snapreel Pro to this account?", isPresented: $asksAboutMoving, titleVisibility: .visible) {
@@ -316,6 +316,9 @@ struct PaywallView: View {
                  systemImage: "hourglass")
         } else if ending == .cancelled {
             note("Not subscribed, and you haven't been charged. If Apple asked for your password, finish that step on Apple's sheet. Tap the button to try again.",
+                 systemImage: "info.circle.fill")
+        } else if ending == .restoreCancelled {
+            note("Restore was cancelled, so nothing changed. Tap Restore Purchases to try again.",
                  systemImage: "info.circle.fill")
         } else if ending == .restoredNothing {
             note("No Snapreel Pro subscription was found for this Apple Account. If you bought it with another Apple Account, sign in to Snapreel with the account you used then.",
@@ -590,7 +593,7 @@ struct PaywallView: View {
                 .padding(.bottom, Space.xs)
             VStack(spacing: 0) {
                 FeatureRow(systemImage: "link", title: "Unlimited share links", detail: "Free has \(CloudConfig.freeLinkLimit) at a time")
-                FeatureRow(systemImage: "clock.fill", title: "Videos up to 2 hours", detail: "Free links take up to 5 minutes")
+                FeatureRow(systemImage: "clock.fill", title: "Videos up to 2 hours", detail: "Free links hold up to 5 minutes")
                 FeatureRow(systemImage: "sparkles.tv.fill", title: "1080p on the web", detail: "Free plays at 720p")
                 FeatureRow(systemImage: "chart.bar.xaxis", title: "Who watched and how far", detail: "Viewers, drop-off chart and countries")
                 FeatureRow(systemImage: "lock.fill", title: "Passwords, expiry and downloads", detail: "Decide who watches, and for how long")
@@ -628,18 +631,21 @@ struct PaywallView: View {
                     Text("Restore Purchases")
                 }
             }
-            .frame(maxWidth: .infinity)
+            .frame(maxWidth: .infinity, minHeight: 44)
+            .contentShape(Rectangle())
             .disabled(isBusy)
             divider
             NavigationLink(value: LegalDocument.terms) {
                 Text("Terms of Use (EULA)")
+                    .frame(maxWidth: .infinity, minHeight: 44)
+                    .contentShape(Rectangle())
             }
-            .frame(maxWidth: .infinity)
             divider
             NavigationLink(value: LegalDocument.privacy) {
                 Text("Privacy Policy")
+                    .frame(maxWidth: .infinity, minHeight: 44)
+                    .contentShape(Rectangle())
             }
-            .frame(maxWidth: .infinity)
         }
         .font(.srFootnote.weight(.semibold))
         .foregroundStyle(Color.srRedText)
@@ -698,49 +704,64 @@ private struct PlanCard: View {
     let hasPrice: Bool
     let action: @MainActor () -> Void
 
+    @Environment(\.dynamicTypeSize) private var typeSize
+
     var body: some View {
         Button {
             action()
         } label: {
-            HStack(alignment: .center, spacing: Space.s) {
-                ZStack {
-                    Circle().strokeBorder(isSelected ? Color.srRed : Color.srLine, lineWidth: 2)
-                    if isSelected {
-                        Circle().fill(Color.srRed).padding(5)
-                    }
-                }
-                .frame(width: 24, height: 24)
-                VStack(alignment: .leading, spacing: 3) {
-                    HStack(spacing: Space.xs) {
-                        Text(plan.title)
-                            .font(.srHeadline)
-                            .foregroundStyle(Color.srText)
-                        if let saving {
-                            Text("Save \(saving)%")
-                                .font(.srCaption)
-                                .foregroundStyle(Color.white)
-                                .padding(.horizontal, 7)
-                                .padding(.vertical, 2)
-                                .background(Capsule().fill(Color.srRed))
+            Group {
+                if typeSize.isAccessibilitySize {
+                    // One thing under another, so no word or price is broken in two.
+                    VStack(alignment: .leading, spacing: Space.xs) {
+                        HStack(spacing: Space.s) {
+                            radio
+                            Text(plan.title)
+                                .font(.srHeadline)
+                                .foregroundStyle(Color.srText)
                         }
+                        savingBadge
+                        Text(subtitle)
+                            .font(.srFootnote)
+                            .foregroundStyle(Color.srTextSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .redacted(reason: hasPrice ? [] : .placeholder)
+                        (Text(plan.displayPrice).font(.srTitle3.monospacedDigit()).foregroundColor(.srText)
+                            + Text(" " + plan.periodText).font(.srFootnote).foregroundColor(.srTextTertiary))
+                            .fixedSize(horizontal: false, vertical: true)
+                            .redacted(reason: hasPrice ? [] : .placeholder)
+                            .accessibilityHidden(!hasPrice)
                     }
-                    Text(subtitle)
-                        .font(.srFootnote)
-                        .foregroundStyle(Color.srTextSecondary)
-                        .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                } else {
+                    HStack(alignment: .center, spacing: Space.s) {
+                        radio
+                        VStack(alignment: .leading, spacing: 3) {
+                            HStack(spacing: Space.xs) {
+                                Text(plan.title)
+                                    .font(.srHeadline)
+                                    .foregroundStyle(Color.srText)
+                                savingBadge
+                            }
+                            Text(subtitle)
+                                .font(.srFootnote)
+                                .foregroundStyle(Color.srTextSecondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .redacted(reason: hasPrice ? [] : .placeholder)
+                        }
+                        Spacer(minLength: Space.xs)
+                        VStack(alignment: .trailing, spacing: 1) {
+                            Text(plan.displayPrice)
+                                .font(.srTitle3.monospacedDigit())
+                                .foregroundStyle(Color.srText)
+                            Text(plan.periodText)
+                                .font(.srFootnote)
+                                .foregroundStyle(Color.srTextTertiary)
+                        }
                         .redacted(reason: hasPrice ? [] : .placeholder)
+                        .accessibilityHidden(!hasPrice)
+                    }
                 }
-                Spacer(minLength: Space.xs)
-                VStack(alignment: .trailing, spacing: 1) {
-                    Text(plan.displayPrice)
-                        .font(.srTitle3.monospacedDigit())
-                        .foregroundStyle(Color.srText)
-                    Text(plan.periodText)
-                        .font(.srFootnote)
-                        .foregroundStyle(Color.srTextTertiary)
-                }
-                .redacted(reason: hasPrice ? [] : .placeholder)
-                .accessibilityHidden(!hasPrice)
             }
             .padding(Space.m)
             .background(RoundedRectangle(cornerRadius: Radius.l, style: .continuous).fill(Color.srSurface))
@@ -751,6 +772,28 @@ private struct PlanCard: View {
         .buttonStyle(PressScaleStyle(scale: 0.98))
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+
+    private var radio: some View {
+        ZStack {
+            Circle().strokeBorder(isSelected ? Color.srRed : Color.srLine, lineWidth: 2)
+            if isSelected {
+                Circle().fill(Color.srRed).padding(5)
+            }
+        }
+        .frame(width: 24, height: 24)
+    }
+
+    @ViewBuilder private var savingBadge: some View {
+        if let saving {
+            Text("Save \(saving)%")
+                .font(.srCaption)
+                .foregroundStyle(Color.white)
+                .padding(.horizontal, 7)
+                .padding(.vertical, 2)
+                .background(Capsule().fill(Color.srRed))
+                .fixedSize()
+        }
     }
 
     private var subtitle: String {
@@ -808,11 +851,12 @@ struct ProHeroBackground: View {
                            center: UnitPoint(x: 0.2, y: 0.35), startRadius: 0, endRadius: 200)
             GridPattern()
                 .stroke(Color.white.opacity(0.06), lineWidth: 1)
-            // Kept in the band above the text, clear of the close button.
-            sparkle(size: 24, x: 0.66, y: 0.15)
-            sparkle(size: 11, x: 0.53, y: 0.08)
-            sparkle(size: 14, x: 0.78, y: 0.27)
-            sparkle(size: 9, x: 0.42, y: 0.2)
+            // Kept in the band above the text (it starts 84 pt down), clear of the close button, however large the
+            // text makes the hero.
+            sparkle(size: 24, x: 0.66, y: 40)
+            sparkle(size: 11, x: 0.53, y: 22)
+            sparkle(size: 14, x: 0.78, y: 68)
+            sparkle(size: 9, x: 0.42, y: 52)
         }
         .clipped()
         .accessibilityHidden(true)
@@ -823,7 +867,7 @@ struct ProHeroBackground: View {
             Image(systemName: "sparkle")
                 .font(.system(size: size, weight: .bold))
                 .foregroundStyle(Color.white.opacity(0.92))
-                .position(x: proxy.size.width * x, y: proxy.size.height * y)
+                .position(x: proxy.size.width * x, y: y)
         }
     }
 }

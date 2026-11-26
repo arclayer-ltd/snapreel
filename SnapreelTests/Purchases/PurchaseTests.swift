@@ -78,6 +78,23 @@ final class PurchaseTests: PurchaseTestCase {
         XCTAssertEqual(sheets, 0)
     }
 
+    func testProSwitchedOnElsewhereIsntSoldAgain() async throws {
+        // Tester t26: the account went Pro on the server while Settings still said Free; Apple's sheet came up.
+        backend.serverIsPro = false
+        backend.planOnServer = true
+        let ending = await service.purchase(yearly)
+        XCTAssertEqual(ending, .alreadyYours)
+        XCTAssertEqual(sheets, 0, "Apple isn't asked")
+        XCTAssertGreaterThan(backend.refreshes, 0)
+    }
+
+    func testOpeningThePaywallReadsThePlanAgain() async throws {
+        backend.planOnServer = true
+        service.paywallOpened()
+        await assertEventually("the plan is read again") { self.backend.refreshes > 0 && self.backend.serverIsPro }
+        service.paywallClosed()
+    }
+
     func testAStaleProPlanDoesntStopBuying() async throws {
         try needsTestStore()
         backend.serverIsPro = true
@@ -480,7 +497,7 @@ final class PurchaseTests: PurchaseTestCase {
     func testRestoreCancelledOrOffline() async throws {
         service.syncAppStore = { throw StoreKitError.userCancelled }
         await service.restoreForPaywall()
-        XCTAssertEqual(service.ending, .none)
+        XCTAssertEqual(service.ending, .restoreCancelled)
         service.syncAppStore = { throw StoreKitError.networkError(URLError(.notConnectedToInternet)) }
         await service.restoreForPaywall()
         guard case .failed = service.ending else { return XCTFail("\(service.ending)") }

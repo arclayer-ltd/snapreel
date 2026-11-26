@@ -133,6 +133,9 @@ struct ProUpsellCard: View {
 struct LinkProgressBar: View {
     let fraction: Double
     var onStage = false
+    var label = "Upload progress"
+    /// Read out instead of a percentage ("3 of 25").
+    var valueText: String? = nil
 
     var body: some View {
         GeometryReader { proxy in
@@ -145,8 +148,8 @@ struct LinkProgressBar: View {
         .frame(height: 6)
         .animation(Motion.standard, value: fraction)
         .accessibilityElement()
-        .accessibilityLabel("Upload progress")
-        .accessibilityValue("\(Int((fraction * 100).rounded())) percent")
+        .accessibilityLabel(label)
+        .accessibilityValue(valueText ?? "\(Int((fraction * 100).rounded())) percent")
     }
 }
 

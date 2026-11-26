@@ -85,6 +85,8 @@ struct SettingsView: View {
             .background(Color.srCanvas.ignoresSafeArea())
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
+            // The plan may have changed since it was last read (on the web, on another iPhone).
+            .task { await auth.refreshMe() }
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("Done") { dismiss() }
@@ -109,7 +111,7 @@ struct SettingsView: View {
             .buttonStyle(SettingsRowStyle())
             SettingsDivider()
             SettingsActionRow(systemImage: "sparkles", title: "Snapreel Pro",
-                              value: auth.isPro ? "Active" : "Try it free") {
+                              value: auth.isPro ? "Active" : "Try it free", showsChevron: true) {
                 ProPresenter.paywall(.settings)
             }
             if auth.isSignedIn {
@@ -299,12 +301,16 @@ struct SettingsActionRow: View {
     let systemImage: String
     let title: String
     var value: String? = nil
+    /// For a row that opens a page of its own (Snapreel Pro).
+    var showsChevron = false
     let action: @MainActor () -> Void
 
-    init(systemImage: String, title: String, value: String? = nil, action: @escaping @MainActor () -> Void) {
+    init(systemImage: String, title: String, value: String? = nil, showsChevron: Bool = false,
+         action: @escaping @MainActor () -> Void) {
         self.systemImage = systemImage
         self.title = title
         self.value = value
+        self.showsChevron = showsChevron
         self.action = action
     }
 
@@ -313,7 +319,7 @@ struct SettingsActionRow: View {
             Haptics.tap()
             action()
         } label: {
-            ListRow(systemImage: systemImage, title: title, value: value, showsChevron: false)
+            ListRow(systemImage: systemImage, title: title, value: value, showsChevron: showsChevron)
                 .padding(.horizontal, Space.m)
                 .padding(.vertical, 3)
         }
