@@ -49,7 +49,8 @@ final class WebCopyTests: XCTestCase {
             case .video(let state):
                 if box.seen.copyIDs.last != state.copyID { box.seen.copyIDs.append(state.copyID) }
                 box.seen.fractions.append(state.fraction)
-                if state.finalBytes > 0 {
+                // Once per stretch: in between, the same final bytes come again with how far the next one got.
+                if state.finalBytes > 0, state.finalBytes != box.seen.final.last?.end {
                     // The last bytes reported final, as they are right now.
                     let from = max(state.headerEnd, state.finalBytes - 65_536)
                     let handle = try? FileHandle(forReadingFrom: video)

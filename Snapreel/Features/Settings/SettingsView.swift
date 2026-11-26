@@ -159,16 +159,20 @@ struct SettingsView: View {
     /// "Uploading 45%", "Upload stopped" or the number of links.
     private var sharedLinksValue: String {
         var stopped = false
+        var working = false
         var uploading: Double?
         for id in uploader.jobs.keys {
             switch links.state(for: id) {
             case .failed: stopped = true
-            case .uploading(let value): uploading = uploading ?? value
+            case .uploading(let value), .waitingForNetwork(let value): uploading = uploading ?? value
+            case .creating, .preparing, .finishing: working = true
             default: break
             }
         }
-        if stopped { return "Upload stopped" }
+        // What is going on now first; an older upload that stopped shows once nothing else is.
         if let uploading { return "Uploading \(Int((uploading * 100).rounded()))%" }
+        if working { return "Uploading" }
+        if stopped { return "Upload stopped" }
         return library.links.isEmpty ? "None" : "\(library.links.count)"
     }
 

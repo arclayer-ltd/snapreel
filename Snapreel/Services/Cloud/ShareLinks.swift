@@ -2,6 +2,7 @@ import SafariServices
 import SwiftUI
 import UIKit
 import UniformTypeIdentifiers
+import UserNotifications
 
 /// Where a recording's share link is, as the share-link sheet and cards show it.
 enum LinkState: Equatable {
@@ -47,6 +48,8 @@ final class ShareLinks: ObservableObject {
     #endif
 
     private var lastRefresh: Date?
+    /// When each link was last put on the clipboard: the sheet says "Link copied" only right after a copy.
+    private var copiedAt: [UUID: Date] = [:]
     private var library: Library { AppEnvironment.shared.library }
 
     private init() {}
@@ -77,6 +80,12 @@ final class ShareLinks: ObservableObject {
             // No job on this iPhone: the upload was interrupted for good (or happened elsewhere).
             return library.video(videoID) == nil ? .finishing : .failed("The upload didn't finish.")
         }
+    }
+
+    /// The link went on the clipboard in the last half minute.
+    func wasJustCopied(_ videoID: UUID) -> Bool {
+        guard let date = copiedAt[videoID] else { return false }
+        return Date().timeIntervalSince(date) < 30
     }
 
     // MARK: - Copy link
@@ -244,6 +253,7 @@ final class ShareLinks: ObservableObject {
     /// shows the picture and a paste anywhere else shows the link.
     func copyToPasteboard(_ link: CloudLink, video: Video?) {
         guard let url = link.linkURL else { return }
+        copiedAt[link.videoID] = Date()
         var item: [String: Any] = [
             UTType.url.identifier: url,
             UTType.plainText.identifier: url.absoluteString,
@@ -430,6 +440,10 @@ final class ShareLinks: ObservableObject {
 
     func uploadFailed(_ videoID: UUID, message: String) {
         let title = library.video(videoID)?.title ?? library.link(for: videoID)?.title ?? "Your recording"
+        // Each Try again that stops again replaces the last notice instead of adding another.
+        let earlier = library.notifications.filter { $0.kind == .uploadFailed && $0.videoID == videoID }
+        for item in earlier { library.deleteNotification(item.id) }
+        UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: earlier.map(\.id.uuidString))
         Notifier.shared.post(.uploadFailed, title: "Upload stopped",
                              body: "\u{201C}\(title)\u{201D}: \(message)", videoID: videoID)
     }

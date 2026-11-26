@@ -157,7 +157,8 @@ final class AuthService: ObservableObject {
             request.setValue("Bearer \(session.accessToken)", forHTTPHeaderField: "Authorization")
             _ = try? await URLSession.shared.data(for: request)
         }
-        clearLocal()
+        // Uploads wait and links stay with their recordings until someone else signs in (`finishSignIn`).
+        clearLocal(keepsUploads: true)
     }
 
     /// Forgets the session, the cached profile and this iPhone's copy of your links. Used
@@ -168,8 +169,11 @@ final class AuthService: ObservableObject {
         Keychain.remove(Self.meKey)
         session = nil
         me = nil
-        if !keepsUploads { Uploader.shared.cancelAll() }
+        // Kept for the same person: uploads carry on and links show on their recordings when they sign in again.
+        guard !keepsUploads else { return }
+        Uploader.shared.cancelAll()
         AppEnvironment.shared.library.removeAllLinks()
+        UserDefaults.standard.removeObject(forKey: Self.lastUserKey)
     }
 
     // MARK: - Profile and plan
@@ -205,7 +209,12 @@ final class AuthService: ObservableObject {
 
     private func finishSignIn(with data: Data, fullName: PersonNameComponents?) async throws {
         let next = try Self.session(from: data, fallbackEmail: nil)
+        let previous = UserDefaults.standard.string(forKey: Self.lastUserKey)
         store(next)
+        // Someone else's links and uploads, kept since they signed out, go.
+        if let previous, previous.lowercased() != next.userID.lowercased() {
+            AppEnvironment.shared.library.removeAllLinks()
+        }
         Uploader.shared.cancelJobs(notOwnedBy: next.userID)
         Haptics.success()
         await refreshMe()
@@ -219,8 +228,12 @@ final class AuthService: ObservableObject {
         CloudServices.didSignIn()
     }
 
+    /// Who signed in last on this iPhone, also after signing out.
+    private static let lastUserKey = "cloud.lastUserID"
+
     private func store(_ next: AuthSession) {
         session = next
+        UserDefaults.standard.set(next.userID, forKey: Self.lastUserKey)
         if let data = try? CloudJSON.encoder.encode(next) { Keychain.set(data, for: Self.sessionKey) }
     }
 

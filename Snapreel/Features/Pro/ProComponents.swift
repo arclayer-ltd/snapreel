@@ -159,10 +159,13 @@ enum UploadText {
         return "Preparing \(percent(prepared))"
     }
 
-    /// "12 MB of about 73 MB sent": what is ready goes up while the rest is being made.
+    /// "12 MB of about 73 MB sent · About 3 min left": what is ready goes up while the rest is being made.
     static func preparingDetail(_ progress: UploadProgress?) -> String? {
-        guard let progress, progress.sentBytes > 0, progress.totalBytes > 0 else { return nil }
-        return progress.bytesLabel + " sent"
+        guard let progress else { return nil }
+        var parts: [String] = []
+        if progress.sentBytes > 0, progress.totalBytes > 0 { parts.append(progress.bytesLabel + " sent") }
+        if !progress.isPaused, let seconds = progress.preparingSecondsLeft { parts.append(UploadProgress.timeLeft(seconds)) }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
     /// "45 MB of 73 MB · About 2 min left".
@@ -175,6 +178,34 @@ enum UploadText {
         guard let progress, progress.totalBytes > 0 else { return nil }
         return progress.bytesLabel + " sent"
     }
+
+    /// "Can't reach snapreel.video": what went wrong while Snapreel waits to try again.
+    static func retryTitle(_ retry: UploadRetry) -> String {
+        switch retry.reason {
+        case .unreachable: return "Can't reach snapreel.video"
+        case .serverTrouble: return "snapreel.video isn't answering properly"
+        }
+    }
+
+    /// "Trying again in 30 s. Check your connection; what is sent is kept."
+    static func retryDetail(_ retry: UploadRetry, now: Date) -> String {
+        var when = "Trying again now"
+        if let at = retry.at {
+            let seconds = Int(at.timeIntervalSince(now).rounded(.up))
+            if seconds >= 60 {
+                when = "Trying again in \(Int((Double(seconds) / 60).rounded(.up))) min"
+            } else if seconds >= 1 {
+                when = "Trying again in \(seconds) s"
+            }
+        }
+        switch retry.reason {
+        case .unreachable: return "\(when). Check your connection; what is sent is kept."
+        case .serverTrouble: return "\(when) by itself. What is sent is kept."
+        }
+    }
+
+    /// Under every stopped upload: the recording is safe, and what to do.
+    static let failureHelp = "Your recording is safe on this iPhone. If the upload keeps stopping, write to support@snapreel.video."
 
     private static func percent(_ value: Double) -> String { "\(Int((min(1, max(0, value)) * 100).rounded()))%" }
 }

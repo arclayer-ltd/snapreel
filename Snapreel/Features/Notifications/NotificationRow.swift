@@ -8,6 +8,13 @@ struct NotificationRow: View {
     let video: Video?
 
     var body: some View {
+        // Once a minute, so "1m ago" doesn't stay for good.
+        TimelineView(.everyMinute) { context in
+            row(now: context.date)
+        }
+    }
+
+    private func row(now: Date) -> some View {
         HStack(alignment: .top, spacing: Space.s) {
             icon
             VStack(alignment: .leading, spacing: 3) {
@@ -15,12 +22,12 @@ struct NotificationRow: View {
                     .font(item.isRead ? Font.srBody : Font.srHeadline)
                     .foregroundStyle(Color.srText)
                     .fixedSize(horizontal: false, vertical: true)
-                Text(item.body)
+                Text(shownBody)
                     .font(.srSubheadline)
                     .foregroundStyle(Color.srTextSecondary)
                     .lineLimit(3)
                     .fixedSize(horizontal: false, vertical: true)
-                meta
+                meta(now: now)
                     .padding(.top, 2)
             }
             Spacer(minLength: Space.xs)
@@ -32,8 +39,19 @@ struct NotificationRow: View {
         .padding(.vertical, 2)
         .contentShape(Rectangle())
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(spokenLabel)
+        .accessibilityLabel(spokenLabel(now: now))
         .accessibilityHint(spokenHint)
+    }
+
+    /// The body says the recording's name as it was then ("“Turned test” can be watched now."): renamed since,
+    /// the row says the new one.
+    private var shownBody: String {
+        guard let video, !video.needsTitle,
+              let open = item.body.firstIndex(of: "\u{201C}"),
+              let close = item.body[item.body.index(after: open)...].firstIndex(of: "\u{201D}") else { return item.body }
+        var body = item.body
+        body.replaceSubrange(body.index(after: open)..<close, with: video.title)
+        return body
     }
 
     private var icon: some View {
@@ -50,9 +68,9 @@ struct NotificationRow: View {
             }
     }
 
-    private var meta: some View {
+    private func meta(now: Date) -> some View {
         HStack(spacing: 4) {
-            Text(Format.age(item.createdAt))
+            Text(Format.age(item.createdAt, now: now))
                 .foregroundStyle(Color.srTextTertiary)
             if let action = actionLabel {
                 Text("\u{00B7}")
@@ -79,9 +97,11 @@ struct NotificationRow: View {
         }
     }
 
-    private var spokenLabel: String {
+    private func spokenLabel(now: Date) -> String {
         let state = item.isRead ? "" : "Unread. "
-        return "\(state)\(item.title). \(item.body). \(Format.age(item.createdAt))."
+        let shown = shownBody
+        let body = shown.hasSuffix(".") || shown.hasSuffix("!") || shown.hasSuffix("?") ? shown : shown + "."
+        return "\(state)\(item.title). \(body) \(Format.age(item.createdAt, now: now))."
     }
 
     private var spokenHint: String {

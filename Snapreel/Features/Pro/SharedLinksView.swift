@@ -168,14 +168,23 @@ private struct UploadRow: View {
         }
     }
 
+    /// "Can't reach snapreel.video · trying again in 30 s" while an upload waits to try again.
+    private func retryLine(_ progress: UploadProgress?) -> String? {
+        guard let retry = progress?.retry else { return nil }
+        return UploadText.retryTitle(retry) + ". " + UploadText.retryDetail(retry, now: Date())
+    }
+
     private func label(_ state: LinkState) -> String {
         switch state {
         case .creating: return "Making the link…"
         case .preparing:
             let progress = uploader.progress(for: videoID)
-            return [UploadText.preparing(progress), UploadText.preparingDetail(progress)].compactMap { $0 }.joined(separator: "\n")
+            return [UploadText.preparing(progress), retryLine(progress) ?? UploadText.preparingDetail(progress)]
+                .compactMap { $0 }.joined(separator: "\n")
         case .uploading(let value):
-            return ["Uploading · \(Int((value * 100).rounded()))%", uploader.progress(for: videoID)?.bytesLabel, uploader.progress(for: videoID)?.timeLabel]
+            let progress = uploader.progress(for: videoID)
+            if let retry = retryLine(progress) { return "Uploading · \(Int((value * 100).rounded()))%\n" + retry }
+            return ["Uploading · \(Int((value * 100).rounded()))%", progress?.bytesLabel, progress?.timeLabel]
                 .compactMap { $0 }.joined(separator: "\n")
         case .waitingForNetwork(let value):
             return ["Waiting for a connection · \(Int((value * 100).rounded()))%", UploadText.waitingDetail(uploader.progress(for: videoID))]
@@ -212,10 +221,12 @@ private struct LinkRow: View {
                     .foregroundStyle(Color.srText)
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
-                Text(meta)
-                    .font(.srFootnote)
-                    .foregroundStyle(Color.srTextSecondary)
-                    .lineLimit(1)
+                TimelineView(.everyMinute) { _ in
+                    Text(meta)
+                        .font(.srFootnote)
+                        .foregroundStyle(Color.srTextSecondary)
+                        .lineLimit(1)
+                }
                 if library.video(link.videoID) == nil {
                     Text("Not on this iPhone")
                         .font(.srCaption)

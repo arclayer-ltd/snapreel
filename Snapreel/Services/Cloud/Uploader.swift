@@ -63,6 +63,8 @@ final class Uploader: ObservableObject {
     /// Server time minus this phone's.
     private var clockOffset: TimeInterval = 0
     private var speeds: [UUID: [(time: Date, bytes: Int64)]] = [:]
+    /// How far preparing got, over the last minute.
+    private var preparedSamples: [UUID: [(time: Date, fraction: Double)]] = [:]
     private var lastPublish: [UUID: Date] = [:]
     private var lastReport: [UUID: Date] = [:]
     /// The last speed measured, bytes a second.
@@ -79,6 +81,8 @@ final class Uploader: ObservableObject {
         /// Preparing that was cut short without Snapreel leaving the screen.
         var interruptions = 0
         var until: Date?
+        /// What the last failure was, for the share-link sheet.
+        var reason: UploadRetry.Reason?
 
         mutating func madeProgress() {
             temporary = 0
@@ -86,6 +90,7 @@ final class Uploader: ObservableObject {
             token = 0
             denied = 0
             until = nil
+            reason = nil
         }
     }
 
@@ -351,6 +356,7 @@ final class Uploader: ObservableObject {
         trouble[videoID] = nil
         liveBytes[videoID] = nil
         speeds[videoID] = nil
+        preparedSamples[videoID] = nil
         tusSynced.remove(videoID)
         pausedPreparing.remove(videoID)
         try? FileManager.default.removeItem(at: folder(for: videoID))
@@ -364,7 +370,7 @@ final class Uploader: ObservableObject {
         #endif
         guard let job = jobs[videoID] else { return nil }
         if job.isActive && !environment.isSignedIn() { return .failed("Sign in to finish this upload.") }
-        let waits = !isOnline || (trouble[videoID]?.network ?? 0) > 2
+        let waits = !isOnline
         switch job.stage {
         case .preparing: return .preparing
         case .finishing: return waits ? .waitingForNetwork(0.99) : .finishing
@@ -386,6 +392,21 @@ final class Uploader: ObservableObject {
         progress.prepared = job.stage == .preparing ? job.prepared : nil
         progress.totalBytes = job.totalBytes
         progress.isEstimate = job.stage == .preparing
+        if job.stage == .preparing, job.estimatedBytes == nil || (job.prepared ?? 0) < 0.1 {
+            // Only the poster and preview are known ("42 KB of about 42 KB"), or the first seconds of the web copy
+            // don't say much about its size yet ("of about 75 MB", then 27).
+            progress.totalBytes = 0
+        }
+        if job.stage == .preparing, let prepared = job.prepared, let samples = preparedSamples[videoID],
+           let first = samples.first, let last = samples.last, last.fraction > first.fraction,
+           last.time.timeIntervalSince(first.time) >= 5, environment.now().timeIntervalSince(last.time) < 30 {
+            let perSecond = (last.fraction - first.fraction) / last.time.timeIntervalSince(first.time)
+            progress.preparingSecondsLeft = max(0, 1 - prepared) / perSecond
+        }
+        if let counts = trouble[videoID], let reason = counts.reason {
+            let now = environment.now()
+            progress.retry = UploadRetry(reason: reason, at: counts.until.flatMap { $0 > now ? $0 : nil })
+        }
         progress.sentBytes = min(job.confirmedBytes + (liveBytes[videoID] ?? 0), max(job.totalBytes, 0))
         progress.isPaused = pausedPreparing.contains(videoID)
         if let samples = speeds[videoID], let first = samples.first, let last = samples.last,
@@ -792,7 +813,7 @@ final class Uploader: ObservableObject {
         let restarts = (job.restarts ?? 0) + 1
         job.restarts = restarts
         guard restarts <= Limits.restarts else {
-            fail(id, "snapreel.video couldn't put the video together.")
+            fail(id, "snapreel.video couldn't put the video together after several tries. Tap Try again in a while.")
             return
         }
         transfers.cancel { $0.videoID == id && $0.part == kind }
@@ -1035,17 +1056,19 @@ final class Uploader: ObservableObject {
             // Offline: the path monitor starts it again.
             guard isOnline else { return }
             counts.network += 1
+            counts.reason = .unreachable
             count = counts.network
             if count > Limits.network {
-                fail(id, "Your connection keeps dropping. What was sent is kept: try again on a better connection.")
+                fail(id, "Snapreel couldn't reach snapreel.video for a long time. Check your connection, then tap Try again: what was sent is kept.")
                 return
             }
             delay = min(60, pow(2, Double(min(count, 6))))
         case .temporary:
             counts.temporary += 1
+            counts.reason = .serverTrouble
             count = counts.temporary
             if count > Limits.temporary {
-                fail(id, "snapreel.video isn't accepting the upload right now. What was sent is kept.")
+                fail(id, "snapreel.video isn't accepting the upload right now. Tap Try again in a few minutes: what was sent is kept.")
                 return
             }
             delay = min(120, pow(2, Double(min(count, 7))))
@@ -1053,6 +1076,7 @@ final class Uploader: ObservableObject {
         let until = environment.now().addingTimeInterval(delay)
         counts.until = until
         trouble[id] = counts
+        objectWillChange.send()
         let environment = environment
         Task { @MainActor in
             await environment.sleep(delay + Double.random(in: 0...0.5))
@@ -1141,7 +1165,7 @@ final class Uploader: ObservableObject {
             case .offsetConflict: wait(id, for: .temporary(409))
             case .busy: wait(id, for: .temporary(423))
             case .temporary(let status): wait(id, for: .temporary(status))
-            case .refused(let status): fail(id, "snapreel.video refused the upload (\(status)).")
+            case .refused(let status): fail(id, "snapreel.video refused the upload (error \(status)). Tap Try again; if it stops again, write to support@snapreel.video.")
             }
             return
         }
@@ -1166,7 +1190,7 @@ final class Uploader: ObservableObject {
         case .offline: wait(id, for: .network)
         case .signedOut, .notConfigured: break
         case .limit(let reason): fail(id, CloudError.limit(reason).message)
-        case .notFound: fail(id, "This link was deleted, so the upload stopped.")
+        case .notFound: fail(id, "This link was deleted, so the upload stopped. Copy link makes a new one.")
         case .incomplete(let missing): sendMissing(id, missing)
         case .server(let status, _) where status >= 500 || status == 0 || status == 429: wait(id, for: .temporary(status))
         case let other: fail(id, other.message)
@@ -1188,6 +1212,7 @@ final class Uploader: ObservableObject {
         }
         liveBytes[id] = nil
         speeds[id] = nil
+        preparedSamples[id] = nil
         environment.failed(id, message)
         startPreparing()
     }
@@ -1246,6 +1271,13 @@ final class Uploader: ObservableObject {
             }
         case .video(let video):
             if video.finalBytes > 0 { trouble[id]?.interruptions = 0 }
+            let now = environment.now()
+            var samples = preparedSamples[id] ?? []
+            // Started over: the old pace says nothing.
+            if let last = samples.last, video.fraction < last.fraction { samples = [] }
+            samples.append((now, video.fraction))
+            samples.removeAll { now.timeIntervalSince($0.time) > 60 }
+            preparedSamples[id] = samples
             job.prepared = video.fraction
             job.estimatedBytes = video.estimatedBytes
             set(&job, .video) {
@@ -1374,6 +1406,7 @@ final class Uploader: ObservableObject {
             self.trouble[id] = nil
             self.liveBytes[id] = nil
             self.speeds[id] = nil
+            self.preparedSamples[id] = nil
             self.removeFiles(for: id)
             self.environment.finished(id, detail)
         }
@@ -1385,7 +1418,7 @@ final class Uploader: ObservableObject {
         let restarts = (job.restarts ?? 0) + 1
         job.restarts = restarts
         guard restarts <= Limits.restarts else {
-            fail(id, "snapreel.video still misses part of the upload.")
+            fail(id, "snapreel.video still misses part of the upload. Tap Try again to send what is missing.")
             return
         }
         job.stage = .uploading

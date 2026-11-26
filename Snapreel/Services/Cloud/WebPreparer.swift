@@ -250,12 +250,18 @@ final class WebPreparer {
         func check() throws { if isSet { throw CancellationError() } }
     }
 
-    private func send(_ state: State, _ facts: VideoFacts) {
+    /// `reading`: how far the encoder has got inside the stretch being made; the estimate still goes by what is
+    /// written.
+    private func send(_ state: State, _ facts: VideoFacts, reading: CMTime? = nil) {
         let done: Double
         if let origin = state.origin?.time, let next = state.next?.time, facts.duration > 0 {
             done = min(0.99, max(0, (next - origin).seconds / facts.duration))
         } else {
             done = 0
+        }
+        var shown = done
+        if let reading, let origin = state.origin?.time, facts.duration > 0, reading.isNumeric {
+            shown = max(done, min(0.99, (reading - origin).seconds / facts.duration))
         }
         let estimate: Int64
         if done > 0.05 {
@@ -263,7 +269,7 @@ final class WebPreparer {
         } else {
             estimate = max(state.length, state.plan.estimatedBytes + state.reserve)
         }
-        update(.video(.init(copyID: state.copyID, fraction: done,
+        update(.video(.init(copyID: state.copyID, fraction: shown,
                             finalBytes: state.records > 0 ? state.length : 0,
                             headerEnd: state.reserve, estimatedBytes: estimate)))
     }
@@ -359,6 +365,7 @@ final class WebPreparer {
         var writer: StretchWriter?
         var stretchStart = CMTime.invalid
         var index = box.value.records
+        var told = Date.distantPast
 
         func close(next: CMTime) throws {
             guard let open = writer else { return }
@@ -396,6 +403,11 @@ final class WebPreparer {
                 stretchStart = time
             }
             try writer?.append(frame, cancelled)
+            // About once a second, how far this stretch has got.
+            if Date().timeIntervalSince(told) >= 1 {
+                told = Date()
+                send(box.value, facts, reading: time)
+            }
         }
 
         var pacer = FramePacer()
@@ -691,9 +703,15 @@ struct WebPlan: Codable, Equatable {
         plan.encodedWidth = facts.isHDR ? plan.width : even(Double(facts.encodedWidth) * scale)
         plan.encodedHeight = facts.isHDR ? plan.height : even(Double(facts.encodedHeight) * scale)
         let target = targetBitRate(pixels: Double(plan.width * plan.height), isScreen: isScreen)
+        // A recording made at a low rate gains nothing from more bits: about its own rate, a little more for
+        // encoding it again (more from HEVC, which packs more into each bit), scaled down with the picture.
+        let ownPixels = Double(max(1, facts.encodedWidth * facts.encodedHeight))
+        let shrink = pow(min(1, Double(plan.encodedWidth * plan.encodedHeight) / ownPixels), 0.8)
+        let own = facts.bitRate * (facts.isH264 ? 1.25 : 2) * shrink
+        let goal = min(target, max(isScreen ? 300_000 : 400_000, own))
         // Two hours still have to fit in 2 GB.
         let most = max(300_000, byteLimit * 8 / max(1, facts.duration) - 160_000)
-        plan.bitRate = Int(min(target, most))
+        plan.bitRate = Int(min(goal, most))
         // Encoding again costs time and sharpness, so a recording a little over the target is sent as it is.
         let fits = long <= Double(maxLongSide) + 1
         plan.copies = facts.isH264 && facts.isSimple && !facts.isHDR && fits
