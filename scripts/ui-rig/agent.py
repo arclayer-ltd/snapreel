@@ -162,7 +162,7 @@ class Steps:
         return "typed"
 
     def do_key(self, a):
-        self._need(a, 1, "key return|delete|space")
+        self._need(a, 1, "key return|delete|space (and on the website: tab, shift+tab, escape, arrows)")
         self.d.key(a[0].lower())
         return "pressed " + a[0]
 
@@ -319,6 +319,8 @@ class Steps:
                                               m.get("Snippet", "")) for m in found) or "no mail yet"
 
     def do_clipboard(self, a):
+        if hasattr(self.d, "clipboard"):
+            return self.d.clipboard(" ".join(a) if a else None)
         if a:
             subprocess.run(["xcrun", "simctl", "pbcopy", self.d.udid], input=" ".join(a), text=True, timeout=20)
             return "put that on the clipboard"

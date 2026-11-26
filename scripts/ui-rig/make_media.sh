@@ -4,6 +4,7 @@
 # Usage: make_media.sh small|long|big OUT_DIR
 set -euo pipefail
 PACK="$1"; OUT="$2"; TMP=$(mktemp -d); mkdir -p "$OUT"
+QUALITY="-crf 24"; GRAIN=""
 FONT=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf
 
 voice() { # seconds: makes $TMP/voice-N.wav
@@ -27,8 +28,8 @@ clip() { # name size fps seconds colour extra-video-options...
   [ -f "$TMP/voice-$n.wav" ] || voice "$n"
   ffmpeg -v error -y -f lavfi -i "color=c=$colour:s=$size:r=$fps:d=$n" \
     -f lavfi -i "color=c=0xFFC247:s=${box}x${box}:r=$fps:d=$n" -i "$TMP/voice-$n.wav" \
-    -filter_complex "[0][1]overlay=x='mod(t*$((w / 6)),W-w)':y='H*0.72+sin(t*2)*H*0.06'[a];[a]drawbox=x=iw*0.06:y=ih*0.08:w=iw*0.88:h=ih*0.16:color=white@0.92:t=fill,drawtext=fontfile=$FONT:text='Sample $name':fontsize=$((f / 2)):fontcolor=0x222222:x=(w-text_w)/2:y=h*0.13,drawtext=fontfile=$FONT:text='%{pts\:hms}':fontsize=$f:fontcolor=white:x=(w-text_w)/2:y=h*0.42,drawtext=fontfile=$FONT:text='frame %{n}':fontsize=$((f / 3)):fontcolor=white:x=(w-text_w)/2:y=h*0.58[v]" \
-    -map "[v]" -map 2:a -c:v libx264 -preset veryfast -crf 24 -pix_fmt yuv420p -c:a aac -b:a 96k \
+    -filter_complex "[0][1]overlay=x='mod(t*$((w / 6)),W-w)':y='H*0.72+sin(t*2)*H*0.06'[a];[a]drawbox=x=iw*0.06:y=ih*0.08:w=iw*0.88:h=ih*0.16:color=white@0.92:t=fill,drawtext=fontfile=$FONT:text='Sample $name':fontsize=$((f / 2)):fontcolor=0x222222:x=(w-text_w)/2:y=h*0.13,drawtext=fontfile=$FONT:text='%{pts\:hms}':fontsize=$f:fontcolor=white:x=(w-text_w)/2:y=h*0.42,drawtext=fontfile=$FONT:text='frame %{n}':fontsize=$((f / 3)):fontcolor=white:x=(w-text_w)/2:y=h*0.58$GRAIN[v]" \
+    -map "[v]" -map 2:a -c:v libx264 -preset veryfast $QUALITY -pix_fmt yuv420p -c:a aac -b:a 96k \
     -movflags +faststart -shortest "$@" "$OUT/$name.mp4"
   ls -la "$OUT/$name.mp4"
 }
@@ -48,6 +49,13 @@ case "$PACK" in
     clip 9min 1920x1080 30 540 0x274046
     ;;
   long) clip 30min 1280x720 24 1800 0x3A2C4D ;;
-  big) clip big 1920x1080 30 600 0x12343B -b:v 17M -minrate 17M -maxrate 17M -bufsize 34M -x264-params nal-hrd=cbr ;;
+  big)
+    # A drawn picture compresses to almost nothing; moving grain does not, so 17 Mbit/s for 10 minutes is about 1.27 GB.
+    GRAIN=",noise=alls=24:allf=t+u"
+    QUALITY="-b:v 17M -minrate 16M -maxrate 17M -bufsize 34M"
+    clip big 1920x1080 30 600 0x12343B
+    SIZE=$(stat -c %s "$OUT/big.mp4")
+    [ "$SIZE" -gt 1100000000 ] || { echo "big.mp4 is only $SIZE bytes"; exit 1; }
+    ;;
 esac
 rm -rf "$TMP"

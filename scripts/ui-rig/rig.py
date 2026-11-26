@@ -434,10 +434,12 @@ def cmd_clean(a):
 
 def follow_run(branch, what):
     print("%s: waiting for the run" % what)
+    started = time.time()
     run_id = None
     for _ in range(30):
-        run_id = gh("run", "list", "-R", REPO, "--branch", branch, "-L", "1", "--json", "databaseId", "--jq", ".[0].databaseId // empty",
-                    check=False).strip()
+        since = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(started - 60))
+        run_id = gh("run", "list", "-R", REPO, "--branch", branch, "-L", "5", "--json", "databaseId,createdAt", "--jq",
+                    '[.[] | select(.createdAt >= "%s")] | .[0].databaseId // empty' % since, check=False).strip()
         if run_id:
             break
         time.sleep(3)

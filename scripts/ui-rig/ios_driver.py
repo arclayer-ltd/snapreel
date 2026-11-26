@@ -847,7 +847,7 @@ class IOSDriver:
     def key(self, name):
         keys = {"return": "\n", "enter": "\n", "delete": "\b", "backspace": "\b", "space": " ", "tab": "\t"}
         if name not in keys:
-            raise StepError("keys: " + ", ".join(sorted(keys)))
+            raise StepError("keys on the phone: " + ", ".join(sorted(keys)) + " (an iPhone keyboard has no others)")
         self._wda("POST", "/wda/keys", {"value": [keys[name]]}, timeout=30)
 
     def alert_buttons(self):
