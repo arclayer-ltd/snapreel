@@ -88,6 +88,8 @@ class PurchaseTestCase: XCTestCase {
     /// Every time Apple's purchase sheet would have come up.
     var sheets = 0
     var announcements: [String] = []
+    /// Every transaction the app finished, across "relaunches" (new services) within one test.
+    var finishedByApp: Set<UInt64> = []
     private var suite = ""
 
     override func setUp() async throws {
@@ -101,6 +103,7 @@ class PurchaseTestCase: XCTestCase {
         backend = FakeBackend(user: alice)
         sheets = 0
         announcements = []
+        finishedByApp = []
         service = makeService()
         try await settleStore()
     }
@@ -141,6 +144,10 @@ class PurchaseTestCase: XCTestCase {
         service.announce = { [weak self] in self?.announcements.append($0) }
         service.retryDelays = [0.3]
         service.syncAppStore = {}
+        service.finishTransaction = { [weak self] transaction in
+            self?.finishedByApp.insert(transaction.id)
+            await transaction.finish()
+        }
         service.purchaseProduct = { [weak self] product, options in
             guard let self else { throw StoreKitError.unknown }
             return try await self.buyInStore(product, options)
@@ -205,26 +212,24 @@ class PurchaseTestCase: XCTestCase {
         return count
     }
 
-    /// This test's transactions that haven't been finished. (On iOS 16, StoreKit can still list an
-    /// earlier test's for a while after the test store forgot them.)
+    /// This test's transactions that StoreKit lists as unfinished and the app hasn't finished.
+    ///
+    /// Not StoreKit's list alone: on GitHub's iOS 16 simulators `Transaction.unfinished` goes on listing a
+    /// transaction for a long while after `finish()` (and an earlier test's after the test store forgot it), so
+    /// each run failed a different test on it. What the app finished is recorded (`finishTransaction`).
     func unfinished() async -> Int {
         let mine = Set(session.allTransactions().map { UInt64($0.identifier) })
         var count = 0
-        for await result in Transaction.unfinished where mine.contains(result.unsafePayloadValue.id) { count += 1 }
+        for await result in Transaction.unfinished where mine.contains(result.unsafePayloadValue.id) {
+            if !finishedByApp.contains(result.unsafePayloadValue.id) { count += 1 }
+        }
         return count
     }
 
-    /// This test's unfinished transactions that the server never accepted. The app finishes a transaction right
-    /// after the server accepts it (`PurchaseService.send`); iOS 16's list can keep showing it for a long while after.
-    func unfinishedNotAccepted() async -> [UInt64] {
-        let mine = Set(session.allTransactions().map { UInt64($0.identifier) })
-        let accepted = Set(backend.sent.map(\.transactionID))
-        var left: [UInt64] = []
-        for await result in Transaction.unfinished where mine.contains(result.unsafePayloadValue.id) {
-            let id = result.unsafePayloadValue.id
-            if !accepted.contains(String(id)) || backend.failure != nil { left.append(id) }
-        }
-        return left
+    /// This test's purchases the app is holding on to, unfinished, until the server has them. From the test
+    /// store's own list, which doesn't lag like StoreKit's on iOS 16.
+    func kept() -> Int {
+        session.allTransactions().filter { !finishedByApp.contains(UInt64($0.identifier)) }.count
     }
 
     /// The newest transaction in the test store.
