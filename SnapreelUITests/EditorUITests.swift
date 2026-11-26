@@ -354,7 +354,10 @@ final class EditorUITests: XCTestCase {
         let length = time.length
         openSaveSheet()
         shot("save-sheet")
-        app.buttons["720p"].tap()
+        // Sizes that make the same file are one choice ("720p · Original"), and a 720p
+        // recording has no choice at all.
+        let small = app.buttons.matching(NSPredicate(format: "label BEGINSWITH '720p'")).firstMatch
+        if small.exists { small.tap() }
         tapButton("Save")
         if app.staticTexts["Saving your edit"].waitForExistence(timeout: 4) {
             shot("saving")
