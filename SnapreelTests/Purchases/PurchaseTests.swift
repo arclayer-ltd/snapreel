@@ -22,8 +22,8 @@ final class PurchaseTests: PurchaseTestCase {
         XCTAssertEqual(backend.sent.count, 1, "the server hears about it once")
         XCTAssertEqual(backend.sent.first?.token, alice)
         XCTAssertGreaterThan(backend.changesSeen, 0, "screens that watch the account redraw")
-        let left = await unfinished()
-        XCTAssertEqual(left, 0, "finished once the server had it")
+        // Finished before `purchase` returned; iOS 16's list of unfinished ones can take a moment to follow.
+        await assertEventually("finished once the server had it", 10) { await self.unfinished() == 0 }
     }
 
     func testBuyingWorksWithPlansNotLoadedYet() async throws {

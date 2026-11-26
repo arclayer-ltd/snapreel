@@ -726,6 +726,14 @@ final class PurchaseService: ObservableObject {
         if activeExpiry != mine?.expiry { activeExpiry = mine?.expiry }
         if mine == nil, willRenew != nil { willRenew = nil }
         if mine == nil, nextProductID != nil { nextProductID = nil }
+        // Approved while waiting, and found by reading the App Store again rather than through `Transaction.updates`
+        // (the approval came while Snapreel was closed, or another listener had it): bought, not "waiting".
+        if let mine, ending == .pending, activity == nil, let since = pendingSince,
+           mine.transaction.purchaseDate >= since.addingTimeInterval(-5) {
+            pendingSince = nil
+            ending = .purchased
+            announceIfNeeded()
+        }
         updateStanding()
         if (had == nil) != (activeProductID == nil) {
             backend.entitlementChanged()
