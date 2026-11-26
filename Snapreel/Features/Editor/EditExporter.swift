@@ -377,11 +377,30 @@ final class EditExporter: @unchecked Sendable {
             try plan.signature.write(to: stamp, atomically: true, encoding: .utf8)
         }
         let pieces = allPieces()
-        // Pieces are made in order, so the first one missing is where to carry on.
-        let first = pieces.firstIndex { !fm.fileExists(atPath: $0.url.path) } ?? pieces.count
-        guard first < pieces.count else { return pieces }
-        try encode(pieces, from: first)
-        return pieces
+        // Pieces are made in order, so the first one missing is where to carry on. The last one is
+        // made again when whether an end frame follows it wasn't written down.
+        var first = pieces.firstIndex { !fm.fileExists(atPath: $0.url.path) } ?? pieces.count
+        let decided = fm.fileExists(atPath: endURL.path) || fm.fileExists(atPath: noEndURL.path)
+        if first == pieces.count, !decided, let last = pieces.last {
+            try? fm.removeItem(at: last.url)
+            first = pieces.count - 1
+        }
+        if first < pieces.count { try encode(pieces, from: first) }
+        return pieces + (fm.fileExists(atPath: endURL.path) ? [endPiece(after: pieces)] : [])
+    }
+
+    /// A last frame of its own at the very end, made only when the picture stood still to the end
+    /// (it ends before the sound, or a screen recording's last frame is long). The encoder may leave
+    /// out repeats of a picture that doesn't change, and the file's picture would end early.
+    /// Never when a frame of the recording falls on the end itself: on iOS 16 such a one-frame
+    /// piece made the joined file fail (-11800 / -16364).
+    private var endURL: URL { plan.workFolder.appendingPathComponent("piece-end.mov") }
+    private var noEndURL: URL { plan.workFolder.appendingPathComponent("no-end.txt") }
+    private static let endLength = CMTime(value: 1, timescale: 30)
+
+    private func endPiece(after pieces: [Piece]) -> Piece {
+        let total = plan.build.duration
+        return Piece(index: pieces.count, start: total - Self.endLength, end: total, url: endURL)
     }
 
     private func encode(_ pieces: [Piece], from first: Int) throws {
@@ -474,12 +493,31 @@ final class EditExporter: @unchecked Sendable {
             }
         }
         try checkStop()
-        guard held != nil else { throw EditExportFailure.failed(nil) }
-        try fill(until: total)
+        guard let last = held else { throw EditExportFailure.failed(nil) }
+        let endsStill = (total - last.time).seconds > 0.1
+        let endStart = total - Self.endLength
+        try fill(until: endsStill ? endStart : total)
         // The last pieces, when the picture stands still to the end.
         try writer?.finish()
         writer = nil
         if pieceIndex + 1 < pieces.count { throw EditExportFailure.failed(nil) }
+        let fm = FileManager.default
+        try? fm.removeItem(at: endURL)
+        try? fm.removeItem(at: noEndURL)
+        if endsStill {
+            stage = "encoding the last frame"
+            let end = try PieceWriter(piece: endURL, start: endStart, end: total, plan: plan)
+            end.overlays = overlays(in: endStart.seconds...total.seconds)
+            do {
+                try working { try end.append(last.buffer, at: endStart) }
+                try end.finish()
+            } catch {
+                end.abandon()
+                throw error
+            }
+        } else {
+            try "no end frame".write(to: noEndURL, atomically: true, encoding: .utf8)
+        }
     }
 
     private func overlays(in range: ClosedRange<Double>) -> [EditOverlayImage] {
