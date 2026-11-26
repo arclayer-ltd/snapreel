@@ -714,9 +714,19 @@ final class EditorModel: ObservableObject {
         takePlayer?.stop()
     }
 
-    /// The player stopped by itself (a call, headphones unplugged).
+    /// The player stopped by itself (a call, headphones unplugged). Its notice can arrive late, from
+    /// just before a play (seen on a busy iOS 16 simulator): it counts only if the player is still
+    /// stopped a moment later.
     private func playerChanged(_ playing: Bool) {
         guard !isStatic, !playing, isPlaying, !playback.isShowing else { return }
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 250_000_000)
+            guard let self, self.isPlaying, !self.playback.isShowing, self.player.rate == 0 else { return }
+            self.playerStopped()
+        }
+    }
+
+    private func playerStopped() {
         if abs(player.currentTime().seconds - duration) < 0.1 {
             reachedEnd()
         } else {

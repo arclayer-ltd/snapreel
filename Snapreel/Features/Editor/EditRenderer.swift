@@ -64,7 +64,7 @@ final class EditRenderer: ObservableObject {
 
     /// "Edited imported video", or "Checkout bug (edited)"; an edit of an edit keeps its name. A
     /// name already in the library gets the next number: "Edited imported video 2".
-    static func title(for source: Video, taken: Set<String> = []) -> String {
+    nonisolated static func title(for source: Video, taken: Set<String> = []) -> String {
         let base: String
         if source.needsTitle {
             base = "Edited \(source.kind.titlePrefix.lowercased())"
@@ -80,7 +80,7 @@ final class EditRenderer: ObservableObject {
     }
 
     /// "Edited imported video 3" → "Edited imported video" (only numbers this added).
-    private static func withoutNumber(_ title: String) -> String {
+    nonisolated private static func withoutNumber(_ title: String) -> String {
         guard let space = title.lastIndex(of: " "), Int(title[title.index(after: space)...]) != nil else { return title }
         let stem = String(title[..<space])
         return stem.hasPrefix("Edited ") || stem.hasSuffix("(edited)") ? stem : title
