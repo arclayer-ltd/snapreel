@@ -401,7 +401,7 @@ export function SettingsForm({
         >
           <p className={`flex-1 text-sm ${error ? "text-red-text" : "text-text-2"}`} role="status">
             {error ? (
-              "Not saved: see the marked field"
+              "Not saved yet"
             ) : saved ? (
               <span className="inline-flex items-center gap-1.5 text-text">
                 <CheckIcon size={16} className="text-red-text" /> Saved
