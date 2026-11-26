@@ -153,12 +153,9 @@ struct EditorView: View {
 
     private func requestClose() {
         guard !isClosing else { return }
-        // A take being recorded stops, and waits with the other edits.
-        if model.isRecordingVoice {
-            model.stopVoice()
-            withAnimation(SwipeDismiss.springBack) { pageOffset = 0 }
-            return
-        }
+        // X always closes: a take being recorded stops first, whatever else is going on.
+        if model.isRecordingVoice { model.stopVoice() }
+        if model.textEntry != nil { model.commitTextEntry(leaving: true) }
         model.pause()
         switch model.phase {
         case .rendering, .restorePrompt:
@@ -436,10 +433,13 @@ struct EditorSectionBar: View {
             .accessibilityLabel("Back to tools")
             Rectangle().fill(Color.srStageLine).frame(width: 0.5, height: 36)
             EditorToolButton(title: "Split", systemImage: "scissors") { model.splitAtPlayhead() }
-            EditorToolButton(title: "Delete", systemImage: "trash", isDestructive: true,
-                             enabled: model.recipe.segments.count > 1) {
-                Haptics.warning()
-                model.confirmsSectionDelete = true
+            EditorToolButton(title: "Delete", systemImage: "trash", isDestructive: true) {
+                if model.recipe.segments.count > 1 {
+                    Haptics.warning()
+                    model.confirmsSectionDelete = true
+                } else {
+                    model.deleteSelectedSegment()
+                }
             }
             EditorToolButton(title: "Speed", systemImage: "speedometer") { model.sheet = .speed }
             Spacer(minLength: 0)
@@ -579,11 +579,12 @@ struct EditorTextEntry: View {
         ZStack {
             Color.black.opacity(0.9).ignoresSafeArea()
                 .accessibilityHidden(true)
-                .onTapGesture { model.commitTextEntry() }
+                .onTapGesture { model.commitTextEntry(leaving: true) }
             VStack(spacing: 0) {
                 HStack {
                     Button("Cancel") {
                         model.textEntry = nil
+                        model.textEntryNeedsWords = false
                     }
                     .font(.srBody)
                     .foregroundStyle(Color.white.opacity(0.85))
@@ -601,6 +602,14 @@ struct EditorTextEntry: View {
                 Spacer(minLength: Space.m)
                 field
                     .padding(.horizontal, Space.l)
+                if model.textEntryNeedsWords {
+                    Text("Type something first, or tap Cancel.")
+                        .font(.srSubheadlineStrong)
+                        .foregroundStyle(Color(hex: 0xFE6262))
+                        .padding(.top, Space.s)
+                        .transition(.opacity)
+                        .accessibilityAddTraits(.isStaticText)
+                }
                 Spacer(minLength: Space.m)
                 if let entry = model.textEntry {
                     EditorTextStyleRow(style: entry.style, color: entry.color, onDark: true,
@@ -622,7 +631,10 @@ struct EditorTextEntry: View {
     private var field: some View {
         if let entry = model.textEntry {
             let binding = Binding<String>(get: { model.textEntry?.text ?? "" },
-                                          set: { model.textEntry?.text = $0 })
+                                          set: {
+                                              model.textEntry?.text = $0
+                                              if model.textEntryNeedsWords { model.textEntryNeedsWords = false }
+                                          })
             TextField("Type something", text: binding, axis: .vertical)
                 .font(.system(size: 30, weight: .bold))
                 .multilineTextAlignment(.center)

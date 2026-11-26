@@ -60,6 +60,8 @@ struct EditorTimelineState: Equatable {
         var edge: TrimEdge
         /// Output seconds.
         var time: Double
+        /// For moving the whole overlay: where it ends.
+        var end: Double = 0
         var row: EditorTimelineRow?
         var bubble: String?
         /// VoiceOver.
@@ -162,6 +164,12 @@ struct EditorTimelineState: Equatable {
             let text: String? = bubble.flatMap { $0.0.target == target && $0.0.edge == edge ? $0.1 : nil }
             return Handle(target: target, edge: edge, time: time, row: row, bubble: text, value: EditorText.precise(time))
         }
+        /// The bar between an overlay's two handles: dragging it moves the overlay in time.
+        func overlay(_ target: TrimTarget, _ start: Double, _ end: Double, row: EditorTimelineRow) -> [Handle] {
+            var mover = handle(target, .whole, start, row: row)
+            mover.end = end
+            return [mover, handle(target, .start, start, row: row), handle(target, .end, end, row: row)]
+        }
         func sectionHandles(_ index: Int, start: Bool, end: Bool) -> [Handle] {
             let segment = segments[index]
             let from = recipe.outputStart(ofSegment: index) + (index >= shiftIndex ? shift : 0)
@@ -177,15 +185,15 @@ struct EditorTimelineState: Equatable {
                 if let index = recipe.segmentIndex(id) { handles = sectionHandles(index, start: true, end: true) }
             case .text(let id):
                 if let item = recipe.texts.first(where: { $0.id == id }) {
-                    handles = [handle(.text(id), .start, item.start, row: .text), handle(.text(id), .end, item.end, row: .text)]
+                    handles = overlay(.text(id), item.start, item.end, row: .text)
                 }
             case .sticker(let id):
                 if let item = recipe.stickers.first(where: { $0.id == id }) {
-                    handles = [handle(.sticker(id), .start, item.start, row: .shapes), handle(.sticker(id), .end, item.end, row: .shapes)]
+                    handles = overlay(.sticker(id), item.start, item.end, row: .shapes)
                 }
             case .blur(let id):
                 if let item = recipe.blurs.first(where: { $0.id == id }) {
-                    handles = [handle(.blur(id), .start, item.start, row: .shapes), handle(.blur(id), .end, item.end, row: .shapes)]
+                    handles = overlay(.blur(id), item.start, item.end, row: .shapes)
                 }
             case .voice:
                 break
@@ -555,15 +563,25 @@ final class EditorTimelineView: UIView, UIScrollViewDelegate, UIGestureRecognize
             view.key = key
             view.target = handle.target
             view.edge = handle.edge
-            view.place(x: CGFloat(handle.time) * pps, top: top, height: height)
+            if handle.edge == .whole {
+                view.isMover = true
+                let from = CGFloat(handle.time) * pps + 6, to = CGFloat(handle.end) * pps - 6
+                view.frame = CGRect(x: from, y: top - 7, width: max(1, to - from), height: height + 14)
+                view.accessibilityLabel = "Move in time"
+                view.accessibilityHint = "Swipe up or down to move it by half a second"
+            } else {
+                view.place(x: CGFloat(handle.time) * pps, top: top, height: height)
+                view.accessibilityLabel = handle.edge == .start ? "Start handle" : "End handle"
+            }
             view.bubble = handle.bubble
-            view.accessibilityLabel = handle.edge == .start ? "Start handle" : "End handle"
             view.accessibilityValue = handle.value
             view.onNudge = { [weak self] seconds in
-                self?.model.nudge(handle.target, edge: handle.edge, by: seconds)
+                self?.model.nudge(handle.target, edge: handle.edge, by: handle.edge == .whole ? seconds * 5 : seconds)
             }
             content.bringSubviewToFront(view)
         }
+        // The ends over the bar between them.
+        for view in handleViews.values where !view.isMover { content.bringSubviewToFront(view) }
         for (key, view) in handleViews where !seen.contains(key) && handleDrag?.key != key {
             view.removeFromSuperview()
             handleViews[key] = nil
@@ -718,7 +736,7 @@ final class EditorTimelineView: UIView, UIScrollViewDelegate, UIGestureRecognize
     // MARK: - Taps
 
     func gestureRecognizer(_ recognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
-        !(touch.view is UIControl) && !(touch.view is EditorHandleView)
+        !(touch.view is UIControl) && !((touch.view as? EditorHandleView).map { !$0.isMover } ?? false)
     }
 
     @objc private func tapped(_ tap: UITapGestureRecognizer) {
@@ -1113,6 +1131,10 @@ final class EditorHandleView: UIView {
     var target: TrimTarget?
     var edge: TrimEdge = .start
     var onNudge: ((Double) -> Void)?
+    /// Covers an overlay's bar to move it in time; nothing is drawn.
+    var isMover = false {
+        didSet { if isMover != oldValue { setNeedsLayout() } }
+    }
     private let bar = UIView()
     private let grip = UIView()
     private let bubbleLabel = EditorBadgeLabel()
@@ -1162,6 +1184,11 @@ final class EditorHandleView: UIView {
 
     override func layoutSubviews() {
         super.layoutSubviews()
+        bar.isHidden = isMover
+        if isMover {
+            bubbleLabel.center = CGPoint(x: bounds.midX, y: -8)
+            return
+        }
         let x = edge == .start ? bounds.width - 8 - Self.barWidth : 8
         bar.frame = CGRect(x: x, y: (bounds.height - barHeight) / 2, width: Self.barWidth, height: barHeight)
         grip.frame = CGRect(x: Self.barWidth / 2 - 1.5, y: barHeight * 0.32, width: 3, height: barHeight * 0.36)

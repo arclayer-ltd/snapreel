@@ -221,6 +221,42 @@ final class EditorModelTests: XCTestCase {
         XCTAssertEqual(model.moment.value.caption, "Second")
     }
 
+    func testOverlaysMoveInTimeAndOnePartOpensTrim() async throws {
+        let (library, id) = TestMedia.placeholder(duration: 60)
+        let model = EditorModel(videoID: id, library: library, isStatic: true)
+        self.model = model
+        model.apply { $0.stickers = [EditSticker(kind: .arrow, start: 10, end: 13)] }
+        let arrow = model.recipe.stickers[0].id
+        model.beginTrim(.sticker(arrow), edge: .whole)
+        model.updateTrim(offset: 5)
+        model.endTrim()
+        XCTAssertEqual(model.recipe.stickers[0].start, 15, accuracy: 0.001)
+        XCTAssertEqual(model.recipe.stickers[0].end, 18, accuracy: 0.001)
+        model.beginTrim(.sticker(arrow), edge: .whole)
+        model.updateTrim(offset: 100)
+        model.endTrim()
+        XCTAssertEqual(model.recipe.stickers[0].end, 60, accuracy: 0.001, "stays inside the video, length kept")
+        XCTAssertEqual(model.recipe.stickers[0].start, 57, accuracy: 0.001)
+        model.toggleSegment(atOutput: 30)
+        XCTAssertNil(model.selection, "one part: nothing to pick")
+        XCTAssertEqual(model.tool, .trim)
+        model.toggleSegment(atOutput: 30)
+        XCTAssertEqual(model.tool, .trim, "tapping again doesn't flip back")
+    }
+
+    func testDoneWithoutWordsAsksForThem() {
+        let (library, id) = TestMedia.placeholder(duration: 60)
+        let model = EditorModel(videoID: id, library: library, isStatic: true)
+        self.model = model
+        model.addText()
+        model.commitTextEntry()
+        XCTAssertNotNil(model.textEntry, "stays open")
+        XCTAssertTrue(model.textEntryNeedsWords)
+        model.commitTextEntry(leaving: true)
+        XCTAssertNil(model.textEntry)
+        XCTAssertTrue(model.recipe.texts.isEmpty)
+    }
+
     func testMissingFileSaysSo() async throws {
         let (library, id) = TestMedia.placeholder(duration: 30)
         let model = EditorModel(videoID: id, library: library)

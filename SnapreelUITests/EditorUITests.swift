@@ -247,6 +247,15 @@ final class EditorUITests: XCTestCase {
         XCTAssertEqual(moved.midY - was.midY, 60, accuracy: 14)
         XCTAssertEqual(moved.midX - was.midX, 25, accuracy: 14)
         shot("arrow-moved")
+        // The white corner makes it larger.
+        let corner = app.buttons["Resize and turn"].firstMatch
+        XCTAssertTrue(corner.waitForExistence(timeout: 3), "a corner to resize with")
+        let size = moved.width
+        let grab = app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: corner.frame.midX, dy: corner.frame.midY))
+        grab.press(forDuration: 0.1, thenDragTo: grab.withOffset(CGVector(dx: 40, dy: 40)), withVelocity: .slow, thenHoldForDuration: 0.2)
+        RunLoop.current.run(until: Date().addingTimeInterval(1))
+        XCTAssertGreaterThan(arrowOnPicture()?.frame.width ?? 0, size + 10, "dragging the corner makes it larger")
+        shot("arrow-larger")
         tapButton("Done")
         openTool("Sound")
         app.buttons["Fade in"].tap()

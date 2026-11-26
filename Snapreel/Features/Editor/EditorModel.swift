@@ -114,7 +114,11 @@ enum NoisePhase: Equatable {
     case failed
 }
 
-enum TrimEdge: Equatable { case start, end }
+enum TrimEdge: Equatable {
+    case start, end
+    /// The whole overlay moves in time, its length kept.
+    case whole
+}
 
 /// A handle being dragged on the timeline.
 struct TrimDrag: Equatable {
@@ -937,6 +941,14 @@ final class EditorModel: ObservableObject {
     func toggleSegment(atOutput t: Double) {
         guard !isRecordingVoice else { return }
         dismissTrimCoach()
+        // The whole video is one part: there is nothing to pick, so tapping it opens Trim (its ends).
+        if recipe.segments.count == 1 {
+            if tool != .trim {
+                selection = nil
+                open(.trim)
+            }
+            return
+        }
         guard let index = recipe.segmentIndex(atOutput: t) else { return }
         let id = recipe.segments[index].id
         if selection == .segment(id) {
@@ -983,7 +995,8 @@ final class EditorModel: ObservableObject {
     func deleteSelectedSegment() {
         guard let segment = selectedSegment else { return }
         guard recipe.segments.count > 1 else {
-            toast = ToastMessage(text: "Keep at least one section. Trim it instead.", systemImage: "exclamationmark.circle.fill")
+            toast = ToastMessage(text: "This is the whole video. Split it first, or drag its ends to trim.",
+                                 systemImage: "exclamationmark.circle.fill")
             confirmsSectionDelete = false
             return
         }
@@ -1090,6 +1103,11 @@ final class EditorModel: ObservableObject {
 
     /// An overlay's start and end with one end moved, kept inside the video and 0.3 s long at least.
     private func adjusted(edge: TrimEdge, offset: Double, from original: (Double, Double), total: Double) -> (Double, Double) {
+        if edge == .whole {
+            let length = original.1 - original.0
+            let start = min(max(0, original.0 + offset), max(0, total - length))
+            return (start, min(total, start + length))
+        }
         if edge == .start {
             return (min(max(0, original.0 + offset), original.1 - 0.3), original.1)
         }
@@ -1139,13 +1157,13 @@ final class EditorModel: ObservableObject {
             return EditorText.precise(drag.edge == .start ? segment.start : segment.end)
         case .text(let id):
             guard let item = recipe.texts.first(where: { $0.id == id }) else { return nil }
-            return EditorText.precise(drag.edge == .start ? item.start : item.end)
+            return EditorText.precise(drag.edge == .end ? item.end : item.start)
         case .sticker(let id):
             guard let item = recipe.stickers.first(where: { $0.id == id }) else { return nil }
-            return EditorText.precise(drag.edge == .start ? item.start : item.end)
+            return EditorText.precise(drag.edge == .end ? item.end : item.start)
         case .blur(let id):
             guard let item = recipe.blurs.first(where: { $0.id == id }) else { return nil }
-            return EditorText.precise(drag.edge == .start ? item.start : item.end)
+            return EditorText.precise(drag.edge == .end ? item.end : item.start)
         }
     }
 
@@ -1311,11 +1329,21 @@ final class EditorModel: ObservableObject {
         textEntry = item
     }
 
-    func commitTextEntry() {
+    /// Done with nothing typed asks for words, instead of closing with nothing to show for it; tapping
+    /// beside the text then closes it.
+    @Published var textEntryNeedsWords = false
+
+    func commitTextEntry(leaving: Bool = false) {
         guard let entry = textEntry else { return }
-        textEntry = nil
         let trimmed = entry.text.trimmingCharacters(in: .whitespacesAndNewlines)
         let exists = recipe.texts.contains { $0.id == entry.id }
+        if trimmed.isEmpty, !exists, !leaving {
+            textEntryNeedsWords = true
+            Haptics.warning()
+            return
+        }
+        textEntry = nil
+        textEntryNeedsWords = false
         if trimmed.isEmpty {
             if exists { deleteText(entry.id) }
             return

@@ -319,6 +319,7 @@ struct EditorTextPanel: View {
                 EditorTextStyleRow(style: item.style, color: item.color,
                                    onStyle: { style in model.updateText(item.id) { $0.style = style } },
                                    onColor: { color in model.updateText(item.id) { $0.color = color } })
+                EditorHint(text: "Drag it to move it, drag the white corner to resize it, tap it to change the words.")
                 HStack(spacing: Space.s) {
                     EditorPanelButton(title: "Edit", systemImage: "pencil") { model.editText(item) }
                     EditorPanelButton(title: "Delete", systemImage: "trash", isDestructive: true) { model.deleteText(item.id) }
@@ -390,6 +391,9 @@ struct EditorShapesPanel: View {
                     }
                 }
                 .padding(.horizontal, Space.gutter)
+                EditorHint(text: item.kind == .circle || item.kind == .emoji
+                           ? "Drag it to move it. Drag the white corner to make it larger or smaller."
+                           : "Drag it to move it. Drag the white corner to resize and turn it. Drag its bar on the timeline to move it in time.")
             } else {
                 EditorHint(text: "Point at what matters in a screen recording. Drag to place, pinch to resize, twist to turn.")
             }

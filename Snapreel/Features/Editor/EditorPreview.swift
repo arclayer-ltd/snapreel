@@ -193,6 +193,7 @@ struct EditorSoundArtwork: View {
 
 /// Text, shapes, blur boxes and the caption at the playhead, in picture coordinates.
 struct EditorCanvas: View {
+    static let space = "editorCanvas"
     @ObservedObject var model: EditorModel
     /// Changes only when something appears or goes, so playing costs nothing here.
     @ObservedObject var moment: EditorMomentStore
@@ -220,7 +221,10 @@ struct EditorCanvas: View {
                                   onChange: { center in model.liveMove(.sticker(item.id), center: center) },
                                   onEnd: { model.endLiveChange() },
                                   onDelete: { model.deleteSticker(item.id) },
-                                  onEdit: nil) {
+                                  onEdit: nil,
+                                  turns: item.kind != .circle && item.kind != .emoji,
+                                  onResize: { scale, degrees in model.pinch(scale: scale, degrees: degrees) },
+                                  onResizeEnd: { model.endPinch() }) {
                         EditStickerOverlayView(item: item, frame: size)
                     }
                 }
@@ -233,13 +237,17 @@ struct EditorCanvas: View {
                                   onChange: { center in model.liveMove(.text(item.id), center: center) },
                                   onEnd: { model.endLiveChange() },
                                   onDelete: { model.deleteText(item.id) },
-                                  onEdit: { model.editText(item) }) {
+                                  onEdit: { model.editText(item) },
+                                  turns: false,
+                                  onResize: { scale, _ in model.pinch(scale: scale, degrees: nil) },
+                                  onResizeEnd: { model.endPinch() }) {
                         EditTextOverlayView(item: item, frame: size)
                     }
                 }
             }
         }
         .frame(width: size.width, height: size.height)
+        .coordinateSpace(name: EditorCanvas.space)
         // Laid out in picture units, so the person's text size must not change them.
         .dynamicTypeSize(.large)
     }
@@ -257,9 +265,15 @@ struct EditorMovable<Content: View>: View {
     let onEnd: () -> Void
     let onDelete: () -> Void
     let onEdit: (() -> Void)?
+    /// The corner handle turns it as well as sizing it.
+    var turns = false
+    var onResize: ((Double, Double?) -> Void)?
+    var onResizeEnd: (() -> Void)?
     @ViewBuilder let content: () -> Content
 
     @State private var startCenter: CGPoint?
+    @State private var resizeStart: (distance: CGFloat, angle: CGFloat)?
+    @GestureState private var isResizing = false
     /// Resets by itself, also when the system takes the touch away (a call, a second gesture).
     @GestureState private var isDragging = false
 
@@ -293,6 +307,9 @@ struct EditorMovable<Content: View>: View {
                         .offset(x: 32, y: -32)
                 }
             }
+            .overlay(alignment: .bottomTrailing) {
+                if isSelected, onResize != nil { resizeHandle }
+            }
             .accessibilityElement(children: .contain)
             .accessibilityLabel(label)
             .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
@@ -301,6 +318,48 @@ struct EditorMovable<Content: View>: View {
             .onChange(of: isDragging) { dragging in
                 if !dragging { finish() }
             }
+            .onChange(of: isResizing) { resizing in
+                if !resizing { finishResize() }
+            }
+    }
+
+    /// The corner to drag: away from the middle makes it larger, around it turns it. Pinching with two
+    /// fingers anywhere on the picture does the same.
+    private var resizeHandle: some View {
+        Image(systemName: turns ? "arrow.triangle.2.circlepath" : "arrow.up.left.and.arrow.down.right")
+            .font(.system(size: 10, weight: .bold))
+            .foregroundStyle(Color.srInk)
+            .frame(width: 24, height: 24)
+            .background(Circle().fill(Color.white))
+            .shadow(color: .black.opacity(0.3), radius: 2)
+            .frame(width: 44, height: 44, alignment: .topLeading)
+            .contentShape(Rectangle())
+            .offset(x: 32, y: 32)
+            .gesture(
+                DragGesture(minimumDistance: 1, coordinateSpace: .named(EditorCanvas.space))
+                    .updating($isResizing) { _, resizing, _ in resizing = true }
+                    .onChanged { value in
+                        let middle = CGPoint(x: center.x * size.width, y: center.y * size.height)
+                        let now = CGVector(dx: value.location.x - middle.x, dy: value.location.y - middle.y)
+                        if resizeStart == nil {
+                            let first = CGVector(dx: value.startLocation.x - middle.x, dy: value.startLocation.y - middle.y)
+                            resizeStart = (max(12, hypot(first.dx, first.dy)), atan2(first.dy, first.dx))
+                        }
+                        guard let start = resizeStart else { return }
+                        let scale = Double(hypot(now.dx, now.dy) / start.distance)
+                        let turn = Double((atan2(now.dy, now.dx) - start.angle) * 180 / .pi)
+                        onResize?(max(0.2, scale), turns ? turn : nil)
+                    }
+                    .onEnded { _ in finishResize() }
+            )
+            .accessibilityLabel(turns ? "Resize and turn" : "Resize")
+            .accessibilityHint("Drag away from the middle to make it larger")
+    }
+
+    private func finishResize() {
+        guard resizeStart != nil else { return }
+        resizeStart = nil
+        onResizeEnd?()
     }
 
     /// The button sits on the corner and its touch area reaches outwards: a small item's middle is for
