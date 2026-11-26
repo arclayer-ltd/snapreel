@@ -428,8 +428,15 @@ class Steps:
                       "sudo lsof -nP -iTCP:443 -sTCP:LISTEN 2>&1 | head -3; curl -s http://127.0.0.1:8899/ | tail -c 700; "
                       "tail -5 $W/stub/stub.log")
             return subprocess.run(["bash", "-c", script], capture_output=True, text=True, timeout=60).stdout
-        out = subprocess.run("uptime; memory_pressure | tail -1; ps -Ao pcpu,rss,command -r | cut -c1-210 | head -22; "
-                             "echo; echo in the phone: $(ps -Ao command | grep -c RuntimeRoot), on the Mac: $(ps -Ao command | grep -vc RuntimeRoot)",
+        if a and a[0] == "logs":
+            # Who fills the phone's log: a flood keeps its diagnosticd (and the Mac's) busy.
+            script = ("xcrun simctl spawn %s log show --last 5s --style compact --info 2>/dev/null | "
+                      "awk 'NR > 1 {split($4, p, \"[\\\\[:]\"); print p[1]}' | sort | uniq -c | sort -rn | head -15" % self.d.udid)
+            return subprocess.run(["bash", "-c", script], capture_output=True, text=True, timeout=40).stdout
+        out =subprocess.run("uptime; memory_pressure | tail -1; ps -Ao pcpu,rss,command -r | cut -c1-210 | head -22; "
+                             "echo; echo in the phone: $(ps -Ao command | grep -c RuntimeRoot), on the Mac: $(ps -Ao command | grep -vc RuntimeRoot); "
+                             "echo; echo long-running helpers:; ps -Ao pid,ppid,pcpu,rss,etime,command | "
+                             "grep -E 'log (stream|show|collect)|simctl|sample |recordVideo|ocr$|xctest|diagnos' | grep -v grep | cut -c1-200",
                              shell=True, capture_output=True, text=True, timeout=60).stdout
         return out
 

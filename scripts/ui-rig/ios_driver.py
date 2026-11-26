@@ -183,7 +183,14 @@ class IOSDriver:
         """The practice server's certificate (made on this runner a minute ago)."""
         cert = self.opt.get("ca")
         if cert and os.path.exists(cert):
-            simctl("keychain", self.udid, "add-root-cert", cert, check=False)
+            for attempt in range(2):  # a slow phone's keychain service can take minutes
+                try:
+                    simctl("keychain", self.udid, "add-root-cert", cert, check=False, timeout=180)
+                    return
+                except subprocess.TimeoutExpired:
+                    print("the certificate was not taken in 180 s (try %d); %s" % (attempt + 1, mac_health()), flush=True)
+            raise StepError("the phone did not take the practice server's certificate in 6 minutes; %s. Start another "
+                            "session (another Mac)." % mac_health())
 
     def _create(self):
         want = self.opt.get("ios", "")
