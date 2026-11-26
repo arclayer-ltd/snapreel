@@ -163,12 +163,11 @@ final class LargeRecordingTests: SharingTestCase {
             var cardAt: Double?
             let peak = SharingMemoryPeak()
             flow.start(video, library: library, onEnd: { ended = true })
-            for _ in 0..<6_000 where flow.phase != .sheet && !ended {
+            let stalled = try await untilSheet(flow, started: started, ended: { ended }) {
                 if cardAt == nil, flow.card != nil { cardAt = Date().timeIntervalSince(started) }
-                try await Task.sleep(nanoseconds: 10_000_000)
             }
             let seconds = Date().timeIntervalSince(started)
-            XCTAssertEqual(flow.phase, .sheet, "\(video.title) \(flow.toast?.text ?? "") state \(UIApplication.shared.applicationState.rawValue)")
+            XCTAssertEqual(flow.phase, .sheet, "\(video.title) \(flow.toast?.text ?? "") state \(UIApplication.shared.applicationState.rawValue), \(stalled)")
             let sheet = ShareSheetPresenter.topViewController()
             XCTAssertTrue(sheet is UIActivityViewController, "\(String(describing: sheet))")
             measure(String(format: "tap to share sheet, %@ (%.0f MB): %.2f s, card after %@, sheet built in %.2f s, up after %.2f s, +%.0f MB",
@@ -177,18 +176,47 @@ final class LargeRecordingTests: SharingTestCase {
                            ShareSheetPresenter.lastBuild, ShareSheetPresenter.lastOpen, peak.stop()))
             // Closing the sheet ends the flow, so the next tap works.
             sheet?.dismiss(animated: true)
-            for _ in 0..<500 where !ended { try await Task.sleep(nanoseconds: 10_000_000) }
+            let closing = Date()
+            while !ended, Date().timeIntervalSince(closing) < 20 { try await Task.sleep(nanoseconds: 10_000_000) }
             XCTAssertTrue(ended)
             XCTAssertFalse(flow.isBusy(with: video.id))
         }
         // Again, with everything prepared.
         let flow = ShareFlow()
         let started = Date()
-        flow.start(two, library: library, onEnd: {})
-        for _ in 0..<2_000 where flow.phase != .sheet { try await Task.sleep(nanoseconds: 10_000_000) }
+        var again = false
+        flow.start(two, library: library, onEnd: { again = true })
+        let stalled = try await untilSheet(flow, started: started, ended: { again }) {}
         measure(String(format: "tap to share sheet, second time: %.2f s", Date().timeIntervalSince(started)))
-        XCTAssertEqual(flow.phase, .sheet)
+        XCTAssertEqual(flow.phase, .sheet, stalled)
         ShareSheetPresenter.topViewController()?.dismiss(animated: false)
         try await Task.sleep(nanoseconds: 600_000_000)
+    }
+
+    /// Waits for the share sheet as long as the flow keeps moving. Mixing nine minutes of two sounds
+    /// took over a minute on a busy CI runner (26 Nov 2026), and the first share sheet after launch
+    /// can take as long, so a fixed limit failed runs that were only slow. Gives up when nothing on
+    /// the card or the phase has changed for 90 s, or after 6 minutes; says which.
+    @MainActor
+    private func untilSheet(_ flow: ShareFlow, started: Date, ended: () -> Bool,
+                            each: () -> Void) async throws -> String {
+        var last: (ShareFlow.Phase, ShareFlow.Card?) = (flow.phase, flow.card)
+        var moved = Date()
+        while flow.phase != .sheet && !ended() {
+            each()
+            let now = Date()
+            if last.0 != flow.phase || last.1 != flow.card {
+                last = (flow.phase, flow.card)
+                moved = now
+            }
+            if now.timeIntervalSince(moved) > 90 {
+                return "stalled at \(flow.phase) \(String(describing: flow.card?.step)) \(flow.card?.progress ?? -1)"
+            }
+            if now.timeIntervalSince(started) > 360 {
+                return "still moving after 6 min at \(flow.phase) \(flow.card?.progress ?? -1)"
+            }
+            try await Task.sleep(nanoseconds: 10_000_000)
+        }
+        return "after \(String(format: "%.1f", Date().timeIntervalSince(started))) s"
     }
 }
