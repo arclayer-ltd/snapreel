@@ -49,6 +49,7 @@ extension DebugCatalog {
                 $0.debugShow(.signInNeeded)
             },
             purchase("pro.buy.nothing", "Paywall [nothing to restore]") { $0.debugShow(ending: .restoredNothing) },
+            purchase("pro.buy.restorecancel", "Paywall [restore cancelled]") { $0.debugShow(ending: .restoreCancelled) },
             purchase("pro.buy.payment", "Paywall [renewal couldn't be charged]") { $0.debugShow(.paymentProblem) },
             purchase("pro.buy.welcome", "Paywall [bought on the way to a link]", .pro, reason: .duration(555), continues: true,
                      outcome: .purchased) { _ in },

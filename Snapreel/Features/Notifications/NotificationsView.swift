@@ -9,6 +9,7 @@ struct NotificationsView: View {
     @EnvironmentObject private var library: Library
     @EnvironmentObject private var router: AppRouter
     @EnvironmentObject private var settings: AppSettings
+    @ObservedObject private var settingsSheet = SettingsSheet.shared
     @Environment(\.scenePhase) private var scenePhase
 
     @State private var filter: FeedFilter
@@ -318,7 +319,7 @@ struct NotificationsView: View {
     private var isViewing: Bool {
         router.tab == .notifications
             && scenePhase == .active
-            && !router.isSettingsPresented
+            && !settingsSheet.isPresented
             && router.recorder == nil
             && (router.player?.isMinimized ?? true)
             && !showsStorage

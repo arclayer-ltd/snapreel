@@ -178,10 +178,23 @@ final class AuthService: ObservableObject {
 
     // MARK: - Profile and plan
 
-    /// Reloads `me` from the server; quiet on failure.
+    private var meTask: (user: String, task: Task<Void, Never>)?
+
+    /// Reloads `me` from the server; quiet on failure. Callers at the same time share one request. The plan can
+    /// change anywhere (the web, another iPhone, Apple), so screens that show it ask again when they appear.
     func refreshMe() async {
-        guard isSignedIn else { return }
-        if let latest = try? await APIClient.shared.me() { setMe(latest) }
+        guard let asked = session?.userID else { return }
+        if let meTask, meTask.user == asked { return await meTask.task.value }
+        let task = Task { @MainActor in
+            guard let latest = try? await APIClient.shared.me() else { return }
+            // Signed out, or into another account, while it was asked.
+            guard self.session?.userID.lowercased() == asked.lowercased(),
+                  latest.user.id.lowercased() == asked.lowercased() else { return }
+            self.setMe(latest)
+        }
+        meTask = (asked, task)
+        await task.value
+        if meTask?.task == task { meTask = nil }
     }
 
     func setMe(_ latest: CloudMe) {

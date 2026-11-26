@@ -31,16 +31,22 @@ private struct SRButtonBody: View {
     let compact: Bool
     @Environment(\.isEnabled) private var isEnabled
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.dynamicTypeSize) private var typeSize
 
     var body: some View {
+        // At the accessibility text sizes a label wraps onto more lines instead of being cut off ("Try 1 week fr…").
+        let wraps = typeSize.isAccessibilitySize
         configuration.label
             .font(compact ? .srSubheadlineStrong : .srHeadline)
-            .lineLimit(1)
-            .minimumScaleFactor(0.85)
+            .lineLimit(wraps ? 4 : 1)
+            .multilineTextAlignment(.center)
+            .fixedSize(horizontal: false, vertical: wraps)
+            .minimumScaleFactor(wraps ? 1 : 0.85)
             .foregroundStyle(foreground)
             .padding(.horizontal, compact ? Space.m : Space.xl)
+            .padding(.vertical, wraps && kind != .tertiary ? Space.s : 0)
             .frame(maxWidth: fullWidth ? .infinity : nil)
-            .frame(height: kind == .tertiary ? nil : (compact ? 40 : 54))
+            .frame(minHeight: kind == .tertiary ? nil : (compact ? 40 : 54))
             .background(background)
             .overlay(border)
             .contentShape(Capsule())

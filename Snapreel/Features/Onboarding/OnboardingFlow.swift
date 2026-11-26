@@ -73,6 +73,8 @@ struct OnboardingFlow: View {
                             ProPresenter.signIn(reason: .account) { signedIn in
                                 if signedIn {
                                     Haptics.success()
+                                    // They know Snapreel; the tour stays in Settings › Take the tour again.
+                                    settings.hasCompletedTour = true
                                     onFinish()
                                 }
                             }

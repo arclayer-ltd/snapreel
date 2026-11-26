@@ -30,6 +30,8 @@ struct AccountView: View {
             .padding(.top, Space.s)
             .padding(.bottom, Space.xxl)
         }
+        // Sign out can sit at the bottom edge; a tap there is a tap, not the start of the home gesture.
+        .defersSystemGestures(on: .bottom)
         .background(Color.srCanvas.ignoresSafeArea())
         .navigationTitle("Account")
         .navigationBarTitleDisplayMode(.inline)
@@ -128,15 +130,14 @@ struct AccountView: View {
                     .font(.srSubheadline)
                     .foregroundStyle(Color.srTextSecondary)
                     .fixedSize(horizontal: false, vertical: true)
-                Button("Manage subscription") { store.manageSubscriptions() }
-                    .buttonStyle(.srSecondaryCompact)
             } else {
                 let used = auth.me?.usage.activeLinks ?? library.links.count
                 let limit = auth.me?.usage.linkLimit ?? CloudConfig.freeLinkLimit
                 Text("\(used) of \(limit) links · videos up to 5 minutes · 720p")
                     .font(.srSubheadline)
                     .foregroundStyle(Color.srTextSecondary)
-                LinkProgressBar(fraction: Double(used) / Double(max(1, limit)))
+                LinkProgressBar(fraction: Double(used) / Double(max(1, limit)), label: "Links used",
+                                valueText: "\(used) of \(limit)")
                 Button("Get Snapreel Pro") { ProPresenter.paywall(.settings) }
                     .buttonStyle(.srPrimaryCompact)
                     .padding(.top, Space.xxs)
@@ -170,12 +171,6 @@ struct AccountView: View {
 
     private var subscriptionGroup: some View {
         SettingsGroup(title: "Subscription", footnote: restoreMessage) {
-            if !auth.isPro {
-                SettingsActionRow(systemImage: "sparkles", title: "Snapreel Pro") {
-                    ProPresenter.paywall(.settings)
-                }
-                SettingsDivider()
-            }
             SettingsActionRow(systemImage: "creditcard.fill", title: "Manage subscription") {
                 store.manageSubscriptions()
             }
@@ -210,9 +205,11 @@ struct AccountView: View {
         Task { @MainActor in
             do {
                 let found = try await store.restore()
-                restoreMessage = found ? "Snapreel Pro was restored." : "No subscription was found for this Apple Account."
+                restoreMessage = found || auth.me?.isPro == true
+                    ? "Snapreel Pro was restored."
+                    : "No subscription was found for this Apple Account."
             } catch {
-                restoreMessage = "Restore didn't finish. Check your connection and try again."
+                restoreMessage = PurchaseService.restoreProblem(error) ?? "Restore was cancelled, so nothing changed."
             }
             isRestoring = false
         }
@@ -446,6 +443,8 @@ struct DeleteAccountSheet: View {
     }
 
     private func delete() {
+        // A second tap of a double tap: the first is already deleting.
+        guard step == .confirm || step == .failed, understood else { return }
         failure = nil
         withAnimation(Motion.standard) { step = .deleting }
         Task { @MainActor in
@@ -456,7 +455,8 @@ struct DeleteAccountSheet: View {
                 Haptics.success()
                 withAnimation(Motion.standard) { step = .done }
             } catch {
-                failure = (error as? CloudError)?.message ?? CloudError.offline.message
+                let reason = (error as? CloudError)?.message ?? CloudError.offline.message
+                failure = "Your account wasn't deleted. \(reason)"
                 withAnimation(Motion.standard) { step = .failed }
             }
         }

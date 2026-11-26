@@ -1,3 +1,4 @@
+import StoreKit
 import XCTest
 @testable import Snapreel
 
@@ -28,6 +29,40 @@ final class PaywallTests: XCTestCase {
         XCTAssertEqual(stage(.otherAccount(hint: "h", canMove: true)), .otherAccount(hint: "h", canMove: true))
         // Pro on the server from another Apple Account wins over this one's being somebody else's.
         XCTAssertEqual(stage(.otherAccount(hint: "h", canMove: true), isPro: true, serverIsPro: true), .active)
+    }
+
+    func testEmailAddressesThatCanGetACode() {
+        XCTAssertTrue(SignInSheet.looksLikeEmail("maya@example.com"))
+        XCTAssertTrue(SignInSheet.looksLikeEmail("a.b+c@mail.example.co.uk"))
+        XCTAssertFalse(SignInSheet.looksLikeEmail(""))
+        XCTAssertFalse(SignInSheet.looksLikeEmail("maya"))
+        XCTAssertFalse(SignInSheet.looksLikeEmail("maya@example"))
+        XCTAssertFalse(SignInSheet.looksLikeEmail("@example.com"))
+        XCTAssertFalse(SignInSheet.looksLikeEmail("maya@@example.com"))
+        XCTAssertFalse(SignInSheet.looksLikeEmail("maya@.example.com"))
+        XCTAssertFalse(SignInSheet.looksLikeEmail("maya@example..com"))
+        XCTAssertFalse(SignInSheet.looksLikeEmail("ma ya@example.com"))
+        XCTAssertFalse(SignInSheet.looksLikeEmail(String(repeating: "a", count: 65) + "@example.com"))
+        XCTAssertFalse(SignInSheet.looksLikeEmail("a@" + String(repeating: "b", count: 300) + ".com"),
+                       "tester t26 got a 312-character address through")
+    }
+
+    func testServerFaultsSayWhatHappened() {
+        let fault = CloudError.server(status: 500, message: "Something went wrong.").message
+        XCTAssertFalse(fault.contains("Something went wrong"))
+        XCTAssertTrue(fault.contains("500"))
+        XCTAssertTrue(fault.contains("isn't your connection"))
+        XCTAssertEqual(CloudError.server(status: 400, message: "Bad title.").message, "Bad title.")
+        XCTAssertEqual(CloudError.server(status: 0, message: nil).message,
+                       "snapreel.video didn't answer properly. Try again in a moment.")
+    }
+
+    func testARestoreThatDidntFinishSaysWhy() {
+        XCTAssertNil(PurchaseService.restoreProblem(StoreKitError.userCancelled))
+        XCTAssertTrue(PurchaseService.restoreProblem(StoreKitError.networkError(URLError(.notConnectedToInternet)))?
+            .contains("offline") == true)
+        XCTAssertFalse(PurchaseService.restoreProblem(StoreKitError.unknown)?.contains("connection") ?? true,
+                       "not the connection's fault")
     }
 
     func testWhatTheServersAnswersMean() {

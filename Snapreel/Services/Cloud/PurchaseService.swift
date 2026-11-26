@@ -57,6 +57,8 @@ enum PurchaseEnding: Equatable {
     case restored
     /// Restore found no subscription on this Apple Account.
     case restoredNothing
+    /// Apple's sheet for Restore was closed, so nothing was looked up.
+    case restoreCancelled
     /// Anything else, in words for the person.
     case failed(String)
 }
@@ -355,9 +357,10 @@ final class PurchaseService: ObservableObject {
                 return .failed("This Apple Account already has Snapreel Pro for another Snapreel account, and it can't be checked right now. Check your connection and try again.")
             }
             if current.transaction.productID == productID { return .alreadyYours }
-        } else if backend.serverIsPro {
-            // Pro from another Apple Account, if the server still says so.
-            await backend.refreshPlan()
+        } else {
+            // Pro from another Apple Account, or switched on or off since the plan was last read: the server's
+            // word, before Apple's sheet offers to sell what the account has.
+            await refreshPlanBriefly()
             if backend.serverIsPro { return .alreadyYours }
         }
 
@@ -497,11 +500,22 @@ final class PurchaseService: ObservableObject {
             } else if standing == .none || standing == .paymentProblem {
                 ending = .restoredNothing
             }
-        } catch StoreKitError.userCancelled {
-            ending = .none
         } catch {
-            ending = .failed("Restore didn't finish. Check your connection and try again.")
+            ending = Self.restoreProblem(error).map { .failed($0) } ?? .restoreCancelled
         }
+    }
+
+    /// Why a restore didn't finish, in words; nil when the person closed Apple's sheet.
+    static func restoreProblem(_ error: Error) -> String? {
+        if let storeKit = error as? StoreKitError {
+            switch storeKit {
+            case .userCancelled: return nil
+            case .networkError: return "Restore didn't finish because you're offline. Check your connection and try again."
+            default: break
+            }
+        }
+        if error is URLError { return "Restore didn't finish because you're offline. Check your connection and try again." }
+        return "Restore didn't finish: the App Store didn't answer. Try again in a moment."
     }
 
     /// Takes the subscription over from the other Snapreel account it is on. The person was asked.
@@ -612,6 +626,38 @@ final class PurchaseService: ObservableObject {
         await refreshRenewal()
     }
 
+    /// The server's plan, read again; a slow server isn't waited for long, and its answer still lands later.
+    private func refreshPlanBriefly(_ seconds: Double = 4) async {
+        let backend = backend
+        // A race, not a task group: a group would wait for the request even after the time ran out.
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            let once = Once(continuation)
+            Task { @MainActor in
+                await backend.refreshPlan()
+                once.resume()
+            }
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+                once.resume()
+            }
+        }
+    }
+
+    /// Resumes a continuation the first time only.
+    /// Both callers run on the main actor, one after the other.
+    private final class Once {
+        private var continuation: CheckedContinuation<Void, Never>?
+
+        init(_ continuation: CheckedContinuation<Void, Never>) {
+            self.continuation = continuation
+        }
+
+        func resume() {
+            continuation?.resume()
+            continuation = nil
+        }
+    }
+
     /// Reads what this Apple Account has and shows it, unless a newer reading overtook this one.
     private func reload() async {
         reloads += 1
@@ -680,6 +726,14 @@ final class PurchaseService: ObservableObject {
         if activeExpiry != mine?.expiry { activeExpiry = mine?.expiry }
         if mine == nil, willRenew != nil { willRenew = nil }
         if mine == nil, nextProductID != nil { nextProductID = nil }
+        // Approved while waiting, and found by reading the App Store again rather than through `Transaction.updates`
+        // (the approval came while Snapreel was closed, or another listener had it): bought, not "waiting".
+        if let mine, ending == .pending, activity == nil, let since = pendingSince,
+           mine.transaction.purchaseDate >= since.addingTimeInterval(-5) {
+            pendingSince = nil
+            ending = .purchased
+            announceIfNeeded()
+        }
         updateStanding()
         if (had == nil) != (activeProductID == nil) {
             backend.entitlementChanged()
@@ -905,8 +959,14 @@ final class PurchaseService: ObservableObject {
         set { defaults.set(newValue, forKey: Self.pendingKey) }
     }
 
+    private var lastAnnounced: Date?
+
+    /// Once per purchase: the approval can be found by reading the App Store again and by `Transaction.updates`.
     private func announceIfNeeded() {
-        if !isPaywallOpen { announce("Snapreel Pro is on") }
+        guard !isPaywallOpen else { return }
+        if let lastAnnounced, Date().timeIntervalSince(lastAnnounced) < 10 { return }
+        lastAnnounced = Date()
+        announce("Snapreel Pro is on")
     }
 
     // MARK: - The paywall
@@ -920,6 +980,8 @@ final class PurchaseService: ObservableObject {
         #endif
         if activity == nil { ending = pendingSince == nil ? .none : .pending }
         Task { @MainActor in
+            // The plan may have changed since it was read (on the web, on another iPhone).
+            if activity == nil { await backend.refreshPlan() }
             if activity == nil { await refreshEntitlements() }
             await refreshTrial()
         }

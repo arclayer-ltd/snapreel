@@ -22,8 +22,8 @@ final class PurchaseTests: PurchaseTestCase {
         XCTAssertEqual(backend.sent.count, 1, "the server hears about it once")
         XCTAssertEqual(backend.sent.first?.token, alice)
         XCTAssertGreaterThan(backend.changesSeen, 0, "screens that watch the account redraw")
-        let left = await unfinished()
-        XCTAssertEqual(left, 0, "finished once the server had it")
+        // Finished before `purchase` returned; iOS 16's list of unfinished ones can take a moment to follow.
+        await assertEventually("finished once the server had it", 10) { await self.unfinished() == 0 }
     }
 
     func testBuyingWorksWithPlansNotLoadedYet() async throws {
@@ -76,6 +76,23 @@ final class PurchaseTests: PurchaseTestCase {
         let ending = await service.purchase(yearly)
         XCTAssertEqual(ending, .alreadyYours)
         XCTAssertEqual(sheets, 0)
+    }
+
+    func testProSwitchedOnElsewhereIsntSoldAgain() async throws {
+        // Tester t26: the account went Pro on the server while Settings still said Free; Apple's sheet came up.
+        backend.serverIsPro = false
+        backend.planOnServer = true
+        let ending = await service.purchase(yearly)
+        XCTAssertEqual(ending, .alreadyYours)
+        XCTAssertEqual(sheets, 0, "Apple isn't asked")
+        XCTAssertGreaterThan(backend.refreshes, 0)
+    }
+
+    func testOpeningThePaywallReadsThePlanAgain() async throws {
+        backend.planOnServer = true
+        service.paywallOpened()
+        await assertEventually("the plan is read again") { self.backend.refreshes > 0 && self.backend.serverIsPro }
+        service.paywallClosed()
     }
 
     func testAStaleProPlanDoesntStopBuying() async throws {
@@ -480,7 +497,7 @@ final class PurchaseTests: PurchaseTestCase {
     func testRestoreCancelledOrOffline() async throws {
         service.syncAppStore = { throw StoreKitError.userCancelled }
         await service.restoreForPaywall()
-        XCTAssertEqual(service.ending, .none)
+        XCTAssertEqual(service.ending, .restoreCancelled)
         service.syncAppStore = { throw StoreKitError.networkError(URLError(.notConnectedToInternet)) }
         await service.restoreForPaywall()
         guard case .failed = service.ending else { return XCTFail("\(service.ending)") }
@@ -508,7 +525,7 @@ final class PurchaseTests: PurchaseTestCase {
         try session.forceRenewalOfSubscription(productIdentifier: monthly)
         await assertEventually("renewal sent") { self.backend.sent.count > before }
         XCTAssertEqual(service.standing, .subscribed)
-        await assertEventually("and finished") { await self.unfinished() == 0 }
+        await assertEventually("and finished") { await self.unfinishedNotAccepted().isEmpty }
     }
 
     func testARefundTurnsProOff() async throws {

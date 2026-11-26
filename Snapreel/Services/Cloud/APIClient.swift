@@ -32,7 +32,15 @@ enum CloudError: Error, Equatable {
         case .auth(let text): return text
         case .notFound: return "This link no longer exists."
         case .incomplete: return "The upload isn't complete yet."
-        case .server(_, let text): return text ?? "snapreel.video didn't answer properly. Try again in a moment."
+        case .server(let status, let text):
+            // A server fault's own words ("Something went wrong.") don't help; say what's known and what to do.
+            if status >= 500 {
+                return "snapreel.video is having a problem right now (error \(status)). It isn't your connection. Try again in a few minutes."
+            }
+            if let text, !text.isEmpty { return text }
+            return status > 0
+                ? "snapreel.video didn't accept that (error \(status)). Try again in a moment."
+                : "snapreel.video didn't answer properly. Try again in a moment."
         case .unreadable: return "snapreel.video sent something Snapreel couldn't read. Try again in a moment."
         }
     }
