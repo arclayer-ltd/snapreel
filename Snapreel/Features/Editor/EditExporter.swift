@@ -115,7 +115,7 @@ struct EditExportPlan {
             return plain
         }
         let data = (try? JSONEncoder.snapreelStable.encode(recipe)) ?? Data()
-        return "3|\(Int(settings.size.width))x\(Int(settings.size.height))|\(Int(settings.videoBitRate))|" + data.base64EncodedString()
+        return "4|\(Int(settings.size.width))x\(Int(settings.size.height))|\(Int(settings.videoBitRate))|" + data.base64EncodedString()
     }
 }
 
@@ -359,15 +359,9 @@ final class EditExporter: @unchecked Sendable {
                                 url: plan.workFolder.appendingPathComponent("piece-\(result.count).mov")))
             start = end
         }
-        // The last moment is a piece of its own, so the file surely ends with a frame: encoders may
-        // leave out a repeat of a picture that stands still, and a file's last frame gets a usual
-        // length, not the rest of the video.
-        if let last = result.last, (last.end - last.start).seconds > 0.5 {
-            let tail = last.end - CMTime(value: 1, timescale: 30)
-            result[result.count - 1] = Piece(index: last.index, start: last.start, end: tail, url: last.url)
-            result.append(Piece(index: result.count, start: tail, end: last.end,
-                                url: plan.workFolder.appendingPathComponent("piece-\(result.count).mov")))
-        }
+        // No separate one-frame piece for the last moment any more: the join gives the last frame
+        // the rest of the video itself. On iOS 16 a one-frame piece starting on a real frame made
+        // the joined file fail (-11800 / -16364; the testers' saves with text, and 9-minute edits).
         return result
     }
 
@@ -894,8 +888,11 @@ private final class PieceFeed {
     private var backwards = 0
 
     var timingNote: String {
-        "frames moved \(moved), back in time \(backwards), closest \(closest.isFinite ? String(format: "%.4f", closest) : "-") s"
+        "frames moved \(moved), back in time \(backwards), closest \(closest.isFinite ? String(format: "%.4f", closest) : "-") s, "
+            + "pieces with another format \(otherFormats)"
     }
+    private var firstFormat: CMFormatDescription?
+    private var otherFormats = 0
 
     init(pieces: [(url: URL, start: CMTime, end: CMTime)]) {
         self.pieces = pieces
@@ -933,6 +930,13 @@ private final class PieceFeed {
                 if let sample = output.copyNextSampleBuffer() {
                     let count = CMSampleBufferGetNumSamples(sample)
                     guard count > 0, CMSampleBufferGetDataBuffer(sample) != nil else { continue }
+                    if self.shift == nil, let format = CMSampleBufferGetFormatDescription(sample) {
+                        if let firstFormat {
+                            if !CMFormatDescriptionEqual(firstFormat, otherFormatDescription: format) { otherFormats += 1 }
+                        } else {
+                            firstFormat = format
+                        }
+                    }
                     let shift = self.shift ?? pieces[index].start - CMSampleBufferGetPresentationTimeStamp(sample)
                     self.shift = shift
                     if count == 1 { return try spaced(try shifted(sample, by: shift)) }
