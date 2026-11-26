@@ -959,8 +959,14 @@ final class PurchaseService: ObservableObject {
         set { defaults.set(newValue, forKey: Self.pendingKey) }
     }
 
+    private var lastAnnounced: Date?
+
+    /// Once per purchase: the approval can be found by reading the App Store again and by `Transaction.updates`.
     private func announceIfNeeded() {
-        if !isPaywallOpen { announce("Snapreel Pro is on") }
+        guard !isPaywallOpen else { return }
+        if let lastAnnounced, Date().timeIntervalSince(lastAnnounced) < 10 { return }
+        lastAnnounced = Date()
+        announce("Snapreel Pro is on")
     }
 
     // MARK: - The paywall

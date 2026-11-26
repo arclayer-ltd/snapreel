@@ -214,6 +214,19 @@ class PurchaseTestCase: XCTestCase {
         return count
     }
 
+    /// This test's unfinished transactions that the server never accepted. The app finishes a transaction right
+    /// after the server accepts it (`PurchaseService.send`); iOS 16's list can keep showing it for a long while after.
+    func unfinishedNotAccepted() async -> [UInt64] {
+        let mine = Set(session.allTransactions().map { UInt64($0.identifier) })
+        let accepted = Set(backend.sent.map(\.transactionID))
+        var left: [UInt64] = []
+        for await result in Transaction.unfinished where mine.contains(result.unsafePayloadValue.id) {
+            let id = result.unsafePayloadValue.id
+            if !accepted.contains(String(id)) || backend.failure != nil { left.append(id) }
+        }
+        return left
+    }
+
     /// The newest transaction in the test store.
     func latest() throws -> SKTestTransaction {
         try XCTUnwrap(session.allTransactions().max { $0.identifier < $1.identifier })

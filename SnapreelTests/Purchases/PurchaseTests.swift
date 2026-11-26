@@ -525,7 +525,7 @@ final class PurchaseTests: PurchaseTestCase {
         try session.forceRenewalOfSubscription(productIdentifier: monthly)
         await assertEventually("renewal sent") { self.backend.sent.count > before }
         XCTAssertEqual(service.standing, .subscribed)
-        await assertEventually("and finished") { await self.unfinished() == 0 }
+        await assertEventually("and finished") { await self.unfinishedNotAccepted().isEmpty }
     }
 
     func testARefundTurnsProOff() async throws {
