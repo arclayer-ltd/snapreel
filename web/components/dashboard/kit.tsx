@@ -125,7 +125,7 @@ export function SwitchRow({
 }
 
 export const inputClass =
-  "block h-11 w-full rounded-xl border border-line bg-canvas px-3 text-[15px] placeholder:text-text-3 focus:border-sr-red focus:outline-none focus:ring-2 focus:ring-sr-red/25 disabled:cursor-not-allowed disabled:opacity-60";
+  "block h-11 w-full rounded-xl border border-line bg-canvas px-3 text-base placeholder:text-text-3 focus:border-sr-red focus:outline-none focus:ring-2 focus:ring-sr-red/25 disabled:cursor-not-allowed disabled:opacity-60";
 
 export type LinkState = "ready" | "uploading" | "failed" | "expired";
 

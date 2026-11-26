@@ -4,7 +4,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { Activity, Insights, Me, PublicVideo, VideoDetail } from "@/lib/contract";
 import { errorMessage, ownerApi } from "@/lib/client/api";
 import { formatDate, formatTime, formatUntil, isPast } from "@/lib/client/format";
@@ -41,6 +41,26 @@ export function VideoDashboard({
   const [stopping, setStopping] = useState(false);
   const [stopError, setStopError] = useState<string | null>(null);
   const pro = me.plan.tier === "pro";
+
+  // While it's uploading the page asks again by itself, and takes the new state when it arrives.
+  const [seen, setSeen] = useState(initial);
+  if (seen !== initial) {
+    setSeen(initial);
+    if (initial.status !== video.status) setVideo(initial);
+  }
+  const uploading = video.status === "uploading";
+  useEffect(() => {
+    if (!uploading) return;
+    const look = () => {
+      if (document.visibilityState === "visible") router.refresh();
+    };
+    const id = window.setInterval(look, 15_000);
+    document.addEventListener("visibilitychange", look);
+    return () => {
+      window.clearInterval(id);
+      document.removeEventListener("visibilitychange", look);
+    };
+  }, [uploading, router]);
   const url = watchUrl(video.slug);
   const expired = video.expiresAt ? isPast(video.expiresAt) : false;
 
@@ -68,7 +88,7 @@ export function VideoDashboard({
     <PlaybackContext value={store}>
       <Link
         href="/app"
-        className="-ml-2 inline-flex h-9 items-center gap-1 rounded-full px-2 text-sm font-semibold text-text-2 hover:bg-fill hover:text-text focus-visible:outline-2 focus-visible:outline-sr-red"
+        className="-ml-2 inline-flex h-11 items-center gap-1 rounded-full px-2 text-sm font-semibold text-text-2 hover:bg-fill hover:text-text focus-visible:outline-2 focus-visible:outline-sr-red"
       >
         <ChevronLeftIcon size={17} />
         All links
@@ -123,7 +143,7 @@ export function VideoDashboard({
                 role="tab"
                 aria-selected={tab === t.id}
                 onClick={() => setTab(t.id)}
-                className={`h-9 flex-1 rounded-full text-sm font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-sr-red motion-reduce:transition-none ${
+                className={`h-11 flex-1 rounded-full text-sm font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-sr-red motion-reduce:transition-none ${
                   tab === t.id ? "bg-surface text-text shadow-sm" : "text-text-2"
                 }`}
               >
@@ -163,10 +183,10 @@ export function VideoDashboard({
           </p>
         )}
         <div className="mt-6 flex justify-end gap-2">
-          <button type="button" className={btn("ghost")} onClick={() => setConfirmStop(false)}>
+          <button type="button" className={btn("ghost", "md", "max-sm:flex-1")} onClick={() => setConfirmStop(false)}>
             Keep sharing
           </button>
-          <button type="button" className={btn("primary", "md", "min-w-[8.5rem]")} onClick={stopSharing} disabled={stopping}>
+          <button type="button" className={btn("primary", "md", "min-w-[8.5rem] max-sm:flex-1")} onClick={stopSharing} disabled={stopping}>
             {stopping ? <Spinner size={16} /> : "Stop sharing"}
           </button>
         </div>
@@ -205,7 +225,7 @@ function Preview({
   }
   const message =
     video.status === "uploading"
-      ? "Still uploading from your iPhone. Keep Snapreel open until it finishes."
+      ? "Still uploading from your iPhone. This page updates by itself."
       : video.status === "failed"
         ? "This upload didn't finish. Open Snapreel on your iPhone to send it again."
         : expired

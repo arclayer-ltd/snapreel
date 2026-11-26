@@ -9,6 +9,33 @@ import { AppleIcon, ChevronLeftIcon, MailIcon } from "@/components/player/icons"
 import { Spinner, btn } from "@/components/player/ui";
 
 const RESEND_AFTER_S = 30;
+/** Codes work for 10 minutes (the email says so); after that the page starts again from the email. */
+const CODE_LIFE_MS = 10 * 60_000;
+
+// Going to Mail for the code can reload this page: iOS drops background tabs when memory is short, and the app's
+// Safari sheet starts over when it's closed. So the address and when the code went out are kept for as long as the
+// code works, on this device only, and removed on sign-in. The code itself is never kept.
+const PENDING_KEY = "sr_signin";
+
+function readPending(): { email: string; sentAt: number } | null {
+  try {
+    const p = JSON.parse(localStorage.getItem(PENDING_KEY) ?? "null") as { email?: unknown; sentAt?: unknown } | null;
+    if (!p || typeof p.email !== "string" || typeof p.sentAt !== "number") return null;
+    const age = Date.now() - p.sentAt;
+    return age >= 0 && age < CODE_LIFE_MS ? { email: p.email, sentAt: p.sentAt } : null;
+  } catch {
+    return null;
+  }
+}
+
+function savePending(p: { email: string; sentAt: number } | null) {
+  try {
+    if (p) localStorage.setItem(PENDING_KEY, JSON.stringify(p));
+    else localStorage.removeItem(PENDING_KEY);
+  } catch {
+    // Private mode: a reload starts from the email again.
+  }
+}
 
 function authMessage(err: unknown, fallback: string): string {
   const e = err as { status?: number; code?: string; message?: string } | null;
@@ -43,17 +70,42 @@ export function LoginForm({
   const [error, setError] = useState<string | null>(
     initialError ? "Sign in with Apple didn’t finish. Try again, or use your email." : null,
   );
-  const [cooldown, setCooldown] = useState(0);
+  const [sentAt, setSentAt] = useState(0);
+  const [now, setNow] = useState(0);
+  const [codeFocused, setCodeFocused] = useState(false);
+  const [canPaste, setCanPaste] = useState(false);
+  const [resent, setResent] = useState(false);
   const lastTried = useRef("");
+  const cooldown = sentAt > 0 ? Math.max(0, Math.ceil((sentAt + RESEND_AFTER_S * 1000 - now) / 1000)) : 0;
+
+  // Back from Mail to a page that had to reload: straight to the code, not the email again.
+  useEffect(() => {
+    const pending = readPending();
+    /* eslint-disable react-hooks/set-state-in-effect -- localStorage and the clipboard are only known after mount */
+    setCanPaste(typeof navigator.clipboard?.readText === "function");
+    if (!pending) return;
+    setEmail(pending.email);
+    setSentAt(pending.sentAt);
+    setNow(Date.now());
+    setStep("code");
+    /* eslint-enable react-hooks/set-state-in-effect */
+  }, []);
+
+  // The resend wait runs on the clock, not on ticks: iOS stops timers while Mail is open.
+  const counting = cooldown > 0;
+  useEffect(() => {
+    if (!counting) return;
+    const tick = () => setNow(Date.now());
+    const id = window.setInterval(tick, 1000);
+    document.addEventListener("visibilitychange", tick);
+    return () => {
+      window.clearInterval(id);
+      document.removeEventListener("visibilitychange", tick);
+    };
+  }, [counting]);
 
   useEffect(() => {
-    if (cooldown <= 0) return;
-    const id = window.setTimeout(() => setCooldown((c) => c - 1), 1000);
-    return () => window.clearTimeout(id);
-  }, [cooldown]);
-
-  useEffect(() => {
-    if (step === "code") codeRef.current?.focus();
+    if (step === "code") codeRef.current?.focus({ preventScroll: true });
   }, [step]);
 
   // Already signed in in this browser (for example after the session refreshed): go straight on.
@@ -73,6 +125,7 @@ export function LoginForm({
   }, [next, router]);
 
   function finish() {
+    savePending(null);
     router.replace(next);
     router.refresh();
   }
@@ -115,8 +168,12 @@ export function LoginForm({
       }
       setCode("");
       lastTried.current = "";
+      const at = Date.now();
+      setResent(step === "code");
+      setSentAt(at);
+      setNow(at);
+      savePending({ email: address, sentAt: at });
       setStep("code");
-      setCooldown(RESEND_AFTER_S);
     } catch (err) {
       setError(authMessage(err, "We couldn’t send a code. Check the address and try again."));
     } finally {
@@ -141,6 +198,26 @@ export function LoginForm({
       setBusy(null);
       setError(authMessage(err, "That code didn’t work. Check it and try again."));
       codeRef.current?.select();
+    }
+  }
+
+  function takeCode(text: string) {
+    const digits = text.replace(/\D/g, "").slice(0, 6);
+    if (!digits) return false;
+    setCode(digits);
+    if (digits.length === 6) void verify(digits);
+    return true;
+  }
+
+  // iOS shows its own "Paste" bubble for this, so one tap here and one there.
+  async function pasteCode() {
+    try {
+      const text = await navigator.clipboard.readText();
+      // "Your code is 123456" is fine; a long page of other text isn't a code.
+      const six = /(?:^|\D)(\d{3}[ -]?\d{3})(?!\d)/.exec(text)?.[1];
+      if (!six || !takeCode(six)) setError("There’s no 6-digit code on the clipboard. Copy it from the email first.");
+    } catch {
+      codeRef.current?.focus();
     }
   }
 
@@ -188,10 +265,13 @@ export function LoginForm({
             </label>
             <input
               id={`${ids}-email`}
+              name="email"
               type="email"
               inputMode="email"
               autoComplete="email"
               autoCapitalize="none"
+              autoCorrect="off"
+              enterKeyHint="send"
               spellCheck={false}
               value={email}
               onChange={(e) => setEmail(e.target.value)}
@@ -211,6 +291,10 @@ export function LoginForm({
           <button
             type="button"
             onClick={() => {
+              savePending(null);
+              setSentAt(0);
+              setCode("");
+              setResent(false);
               setStep("email");
               setError(null);
             }}
@@ -221,7 +305,7 @@ export function LoginForm({
           </button>
           <h1 className="text-2xl font-semibold tracking-tight">Check your email</h1>
           <p className="mt-2 text-[15px] leading-relaxed text-text-2">
-            We sent a 6-digit code to <span className="font-medium text-text">{email.trim()}</span>. It works for a few minutes.
+            We sent a 6-digit code to <span className="break-words font-medium text-text">{email.trim()}</span>. It works for 10 minutes.
           </p>
 
           <form
@@ -237,7 +321,7 @@ export function LoginForm({
               6-digit code
             </label>
             <div className="relative">
-              <div className="grid grid-cols-6 gap-2" aria-hidden="true">
+              <div className="grid grid-cols-6 gap-1.5 sm:gap-2" aria-hidden="true">
                 {Array.from({ length: 6 }, (_, i) => {
                   const filled = i < code.length;
                   const current = i === Math.min(code.length, 5);
@@ -245,7 +329,7 @@ export function LoginForm({
                     <div
                       key={i}
                       className={`flex h-14 items-center justify-center rounded-2xl border bg-canvas text-2xl font-semibold tabular-nums transition-colors motion-reduce:transition-none ${
-                        current && busy !== "code" ? "border-sr-red ring-2 ring-sr-red/25" : filled ? "border-text-3" : "border-line"
+                        current && codeFocused && busy !== "code" ? "border-sr-red ring-2 ring-sr-red/25" : filled ? "border-text-3" : "border-line"
                       }`}
                     >
                       {code[i] ?? ""}
@@ -257,21 +341,23 @@ export function LoginForm({
                 ref={codeRef}
                 id={`${ids}-code`}
                 value={code}
+                name="code"
+                onFocus={() => setCodeFocused(true)}
+                onBlur={() => setCodeFocused(false)}
                 onChange={(e) => {
                   const digits = e.target.value.replace(/\D/g, "").slice(0, 6);
                   setCode(digits);
+                  setError(null);
                   if (digits.length === 6) void verify(digits);
                 }}
                 onPaste={(e) => {
                   // "123 456" or "Your code is 123456": keep the digits. No maxLength, so nothing is cut first.
-                  const digits = e.clipboardData.getData("text").replace(/\D/g, "").slice(0, 6);
-                  if (!digits) return;
-                  e.preventDefault();
-                  setCode(digits);
-                  if (digits.length === 6) void verify(digits);
+                  if (takeCode(e.clipboardData.getData("text"))) e.preventDefault();
                 }}
                 inputMode="numeric"
                 autoComplete="one-time-code"
+                enterKeyHint="go"
+                autoCorrect="off"
                 aria-invalid={!!error}
                 aria-describedby={error ? `${ids}-error` : undefined}
                 className="absolute inset-0 h-full w-full bg-transparent text-transparent caret-transparent selection:bg-transparent focus:outline-none"
@@ -280,16 +366,24 @@ export function LoginForm({
             <button type="submit" disabled={busy !== null || code.length !== 6} className={btn("primary", "lg", "mt-4 w-full")}>
               {busy === "code" ? <Spinner size={18} /> : "Sign in"}
             </button>
+            {canPaste && code.length < 6 && busy !== "code" && (
+              <button type="button" onClick={() => void pasteCode()} className={btn("secondary", "lg", "mt-2.5 w-full")}>
+                Paste code
+              </button>
+            )}
           </form>
-          <p className="mt-4 text-center text-sm text-text-2">
-            No email?{" "}
+          <p className="mt-2 min-h-11 text-center text-sm leading-[2.75rem] text-text-2" role="status">
+            {resent && cooldown > 0 ? "New code sent. " : "No email? "}
             {cooldown > 0 ? (
-              <span className="tabular-nums">You can send another in {cooldown} s.</span>
+              <span className="tabular-nums" aria-hidden="true">
+                You can send another in {cooldown} s.
+              </span>
             ) : (
               <button
                 type="button"
                 onClick={() => void sendCode()}
-                className="rounded font-semibold text-red-text underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-sr-red"
+                disabled={busy !== null}
+                className="inline-flex min-h-11 items-center rounded font-semibold leading-normal disabled:opacity-60 text-red-text underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-sr-red"
               >
                 Send a new code
               </button>

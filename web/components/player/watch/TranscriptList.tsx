@@ -61,7 +61,7 @@ export function TranscriptList({ transcript, onSeek }: { transcript: Transcript;
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search the transcript"
-            className="h-full min-w-0 flex-1 bg-transparent text-[15px] text-text placeholder:text-text-3 focus:outline-none"
+            className="h-full min-w-0 flex-1 bg-transparent text-base text-text placeholder:text-text-3 focus:outline-none"
           />
         </label>
       </div>

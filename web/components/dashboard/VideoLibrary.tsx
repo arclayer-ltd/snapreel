@@ -3,7 +3,8 @@
 // The signed-in list of shared videos: search, sort, and one row per link.
 import Image from "next/image";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
 import type { Me, VideoSummary } from "@/lib/contract";
 import { formatCount, formatTime, plural } from "@/lib/client/format";
 import { AlertIcon, ChevronRightIcon, LockIcon, MicIcon, SearchIcon } from "@/components/player/icons";
@@ -44,6 +45,22 @@ function sortVideos(list: VideoSummary[], sort: Sort): VideoSummary[] {
 export function VideoLibrary({ videos, me }: { videos: VideoSummary[]; me: Me }) {
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<Sort>("newest");
+  const router = useRouter();
+
+  // Anything still uploading: keep the list fresh, so it turns "Live" by itself.
+  const uploading = videos.some((v) => v.status === "uploading");
+  useEffect(() => {
+    if (!uploading) return;
+    const look = () => {
+      if (document.visibilityState === "visible") router.refresh();
+    };
+    const id = window.setInterval(look, 30_000);
+    document.addEventListener("visibilitychange", look);
+    return () => {
+      window.clearInterval(id);
+      document.removeEventListener("visibilitychange", look);
+    };
+  }, [uploading, router]);
 
   const shown = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -75,23 +92,24 @@ export function VideoLibrary({ videos, me }: { videos: VideoSummary[]; me: Me })
       ) : (
         <>
           <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:items-center">
-            <label className="flex h-11 flex-1 items-center gap-2 rounded-full border border-line bg-surface px-4 text-text-2 focus-within:border-sr-red focus-within:ring-2 focus-within:ring-sr-red/25">
+            <label className="flex h-11 shrink-0 items-center gap-2 rounded-full border border-line bg-surface px-4 sm:flex-1 text-text-2 focus-within:border-sr-red focus-within:ring-2 focus-within:ring-sr-red/25">
               <SearchIcon size={18} />
               <span className="sr-only">Search your videos</span>
               <input
                 type="search"
+                enterKeyHint="search"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Search by title"
-                className="h-full min-w-0 flex-1 bg-transparent text-[15px] text-text placeholder:text-text-3 focus:outline-none"
+                className="h-full min-w-0 flex-1 bg-transparent text-base text-text placeholder:text-text-3 focus:outline-none"
               />
             </label>
-            <label className="flex h-11 items-center gap-2 rounded-full border border-line bg-surface pl-4 pr-2 text-sm text-text-2 focus-within:border-sr-red focus-within:ring-2 focus-within:ring-sr-red/25">
+            <label className="flex h-11 shrink-0 items-center gap-2 rounded-full border border-line bg-surface pl-4 pr-2 text-sm text-text-2 focus-within:border-sr-red focus-within:ring-2 focus-within:ring-sr-red/25">
               Sort
               <select
                 value={sort}
                 onChange={(e) => setSort(e.target.value as Sort)}
-                className="h-full cursor-pointer rounded-full bg-transparent pr-1 text-[15px] font-medium text-text focus:outline-none"
+                className="h-full min-w-0 flex-1 cursor-pointer rounded-full bg-transparent pr-1 text-base font-medium text-text focus:outline-none"
               >
                 {SORTS.map((s) => (
                   <option key={s.value} value={s.value}>

@@ -1,13 +1,15 @@
 "use client";
 
-// The app's six quick reactions plus a picker. A reaction is pinned to the moment being watched,
-// floats up over the picture, and appears on the scrubber straight away.
+// The app's six quick reactions plus a picker. A reaction is pinned to the moment being watched, shows beside the
+// buttons as it happens (other viewers' too, as playback passes them; never over the picture) and appears on the
+// scrubber straight away.
 import { useEffect, useId, useRef, useState } from "react";
 import type { Reaction } from "@/lib/contract";
 import { errorMessage, publicApi } from "@/lib/client/api";
 import { formatTime } from "@/lib/client/format";
 import { EMOJI_GROUPS, QUICK_EMOJI, QUICK_EMOJI_NAMES } from "../emoji";
 import { SmilePlusIcon } from "../icons";
+import "../player.css";
 import { usePlaybackSecond, usePlaybackStore } from "../playback";
 import { readViewerName } from "./viewerName";
 
@@ -31,8 +33,20 @@ export function ReactionBar({
   const second = usePlaybackSecond();
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [live, setLive] = useState<{ id: string; emoji: string }[]>([]);
+  const [popped, setPopped] = useState<{ emoji: string; key: string } | null>(null);
   const pickerId = useId();
   const wrapRef = useRef<HTMLDivElement>(null);
+
+  // One row, newest on the right, as many as fit: a phone has room for two beside the buttons.
+  useEffect(
+    () =>
+      store.onBurst((emoji) => {
+        const room = window.innerWidth < 640 ? 2 : 5;
+        setLive((all) => [...all.slice(1 - room), { id: tempId(), emoji }]);
+      }),
+    [store],
+  );
 
   useEffect(() => {
     if (!open) return;
@@ -47,7 +61,9 @@ export function ReactionBar({
     };
     document.addEventListener("pointerdown", onDown);
     document.addEventListener("keydown", onKey);
-    wrapRef.current?.querySelector<HTMLButtonElement>(`[data-picker] button`)?.focus();
+    const picker = wrapRef.current?.querySelector<HTMLElement>("[data-picker]");
+    picker?.querySelector<HTMLButtonElement>("button")?.focus({ preventScroll: true });
+    picker?.scrollIntoView({ block: "nearest" });
     return () => {
       document.removeEventListener("pointerdown", onDown);
       document.removeEventListener("keydown", onKey);
@@ -66,6 +82,7 @@ export function ReactionBar({
     const name = readViewerName() || null;
     const id = tempId();
     store.burst(emoji);
+    setPopped({ emoji, key: id });
     onAdd({ id, emoji, atS, authorName: name, createdAt: new Date().toISOString() });
     try {
       const real = await publicApi.react(slug, { emoji, atS, name });
@@ -77,8 +94,8 @@ export function ReactionBar({
   }
 
   return (
-    <div ref={wrapRef} className="relative flex items-center gap-2">
-      <div role="group" aria-label={`React at ${formatTime(second)}`} className="flex items-center">
+    <div ref={wrapRef} className="relative flex items-center gap-1">
+      <div role="group" aria-label={`React at ${formatTime(second)}`} className="flex min-w-0 flex-1 items-center sm:flex-none">
         {QUICK_EMOJI.map((e) => (
           <button
             key={e}
@@ -86,9 +103,11 @@ export function ReactionBar({
             onClick={() => react(e)}
             aria-label={`React with ${QUICK_EMOJI_NAMES[e]}`}
             title={QUICK_EMOJI_NAMES[e]}
-            className="flex h-10 w-10 items-center justify-center rounded-full text-[22px] leading-none transition-transform duration-100 hover:bg-fill active:scale-90 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-sr-red motion-reduce:transition-none"
+            className="flex h-11 min-w-0 max-w-11 flex-1 items-center justify-center rounded-full text-[22px] leading-none transition-transform duration-100 hover:bg-fill active:scale-90 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-sr-red motion-reduce:transition-none sm:w-11"
           >
-            {e}
+            <span key={popped?.emoji === e ? popped.key : e} className={popped?.emoji === e ? "sr-pop" : undefined}>
+              {e}
+            </span>
           </button>
         ))}
         <button
@@ -98,7 +117,7 @@ export function ReactionBar({
           aria-expanded={open}
           aria-controls={pickerId}
           aria-label="More reactions"
-          className="flex h-10 w-10 items-center justify-center rounded-full text-text-2 hover:bg-fill hover:text-text focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-sr-red"
+          className="flex h-11 min-w-0 max-w-11 flex-1 items-center justify-center rounded-full text-text-2 sm:w-11 hover:bg-fill hover:text-text focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-sr-red"
         >
           <SmilePlusIcon size={21} />
         </button>
@@ -106,6 +125,17 @@ export function ReactionBar({
       <span className="hidden text-[13px] tabular-nums text-text-3 sm:inline" aria-hidden="true">
         at {formatTime(second)}
       </span>
+      <div className="flex h-11 w-[58px] shrink-0 items-center justify-end gap-0.5 overflow-hidden pr-1.5 max-[359px]:hidden sm:ml-auto sm:w-40" aria-hidden="true">
+        {live.map((l) => (
+          <span
+            key={l.id}
+            className="sr-live flex w-6 shrink-0 justify-center text-[20px] leading-none"
+            onAnimationEnd={() => setLive((all) => all.filter((x) => x.id !== l.id))}
+          >
+            {l.emoji}
+          </span>
+        ))}
+      </div>
       {error && (
         <p role="alert" className="absolute left-0 top-full z-20 mt-1 rounded-lg bg-surface px-3 py-2 text-sm text-red-text shadow-lg ring-1 ring-line">
           {error}
@@ -117,7 +147,7 @@ export function ReactionBar({
           data-picker
           role="dialog"
           aria-label="Pick a reaction"
-          className="absolute left-0 top-full z-30 mt-2 w-[min(22rem,calc(100vw-2rem))] rounded-2xl border border-line bg-surface p-3 shadow-[0_18px_50px_rgb(0_0_0/0.22)]"
+          className="absolute left-1.5 top-full z-30 mt-1 max-h-[min(24rem,60svh)] w-[min(22rem,calc(100vw-2rem))] scroll-mb-4 overflow-y-auto overscroll-contain rounded-2xl border border-line bg-surface p-3 shadow-[0_18px_50px_rgb(0_0_0/0.22)]"
         >
           {EMOJI_GROUPS.map((g) => (
             <div key={g.name} className="mb-2 last:mb-0">

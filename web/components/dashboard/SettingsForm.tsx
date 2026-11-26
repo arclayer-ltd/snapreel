@@ -212,7 +212,7 @@ export function SettingsForm({
                     <span className="flex items-center gap-2">
                       <CheckIcon size={16} className="text-red-text" /> A password is set.
                     </span>
-                    <button type="button" className={btn("secondary", "sm", "h-8")} onClick={() => set("changingPassword", true)}>
+                    <button type="button" className={btn("secondary", "sm")} onClick={() => set("changingPassword", true)}>
                       Change
                     </button>
                   </div>
@@ -225,6 +225,8 @@ export function SettingsForm({
                       id={`${ids}-pw`}
                       type="text"
                       autoComplete="off"
+                      autoCapitalize="none"
+                      autoCorrect="off"
                       spellCheck={false}
                       value={form.password}
                       onChange={(e) => set("password", e.target.value)}
@@ -337,6 +339,8 @@ export function SettingsForm({
                   id={`${ids}-cta-url`}
                   type="url"
                   inputMode="url"
+                  autoCapitalize="none"
+                  autoCorrect="off"
                   value={form.ctaUrl}
                   onChange={(e) => set("ctaUrl", e.target.value)}
                   placeholder="https://"
@@ -355,7 +359,7 @@ export function SettingsForm({
         )}
 
         <div
-          className={`sticky bottom-3 z-10 flex items-center gap-2 rounded-2xl border border-line bg-surface/95 p-2 pl-4 shadow-[0_10px_30px_rgb(19_20_27/0.12)] backdrop-blur ${
+          className={`sticky bottom-[calc(4.25rem+env(safe-area-inset-bottom))] z-10 sm:bottom-3 flex items-center gap-2 rounded-2xl border border-line bg-surface/95 p-2 pl-4 shadow-[0_10px_30px_rgb(19_20_27/0.12)] backdrop-blur ${
             dirty || saved ? "" : "hidden"
           }`}
         >

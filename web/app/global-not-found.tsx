@@ -9,7 +9,7 @@ import { MarketingShell } from "@/components/marketing/shell";
 // Served for any address that matches no route (e.g. /nope). Next skips the root layout here, so this file
 // repeats its fonts, html attributes and theme colours (keep them in step with app/layout.tsx).
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
-const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
+const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"], preload: false });
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://snapreel.video"),

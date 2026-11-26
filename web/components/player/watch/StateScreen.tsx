@@ -30,7 +30,7 @@ const COPY: Record<WatchState, { title: string; body: (owner: string | null) => 
 export function StateScreen({ state, ownerName = null, extra }: { state: WatchState; ownerName?: string | null; extra?: ReactNode }) {
   const copy = COPY[state];
   return (
-    <div className="flex min-h-svh flex-col">
+    <div className="sr-safe-x flex min-h-svh flex-col">
       <WatchHeader logoUrl={null} ownerName={null} showBadge />
       <main className="mx-auto flex w-full max-w-md flex-1 flex-col items-center justify-center px-6 py-10 text-center">
         <div className="mb-7 w-56 overflow-hidden rounded-[2rem] bg-[#f3eee6] shadow-[0_10px_40px_rgb(19_20_27/0.12)] sm:w-64">

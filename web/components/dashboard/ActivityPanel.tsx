@@ -100,7 +100,7 @@ export function ActivityPanel({ initial, allowComments }: { initial: Activity; a
         <p role="status" className="mb-4 flex items-start gap-2 rounded-2xl bg-fill px-3.5 py-3 text-sm">
           <CheckIcon size={16} className="mt-0.5 shrink-0 text-red-text" />
           <span className="flex-1">{notice}</span>
-          <button type="button" onClick={() => setNotice(null)} className="text-text-2 underline-offset-2 hover:underline">
+          <button type="button" onClick={() => setNotice(null)} className="-my-3 min-h-11 px-2 text-text-2 underline-offset-2 hover:underline">
             OK
           </button>
         </p>
@@ -145,7 +145,7 @@ export function ActivityPanel({ initial, allowComments }: { initial: Activity; a
             type="button"
             onClick={() => setShowAllReactions((s) => !s)}
             aria-expanded={showAllReactions}
-            className="mt-2 rounded text-[13px] font-semibold text-text-2 underline-offset-2 hover:text-text hover:underline focus-visible:outline-2 focus-visible:outline-sr-red"
+            className="mt-1 min-h-11 rounded text-[13px] font-semibold text-text-2 underline-offset-2 hover:text-text hover:underline focus-visible:outline-2 focus-visible:outline-sr-red"
           >
             {showAllReactions ? "Hide who reacted" : `See who reacted (${reactions.length})`}
           </button>
@@ -163,7 +163,7 @@ export function ActivityPanel({ initial, allowComments }: { initial: Activity; a
                   <button
                     type="button"
                     onClick={() => setBlockTarget({ kind: "reaction", item: r })}
-                    className={btn("quiet", "sm", "h-8 text-[13px]")}
+                    className={btn("quiet", "sm", "h-8 text-[13px] pointer-coarse:h-11")}
                     aria-label={`Block ${r.authorName ?? "this viewer"}`}
                   >
                     <BlockIcon size={15} /> Block
@@ -309,28 +309,28 @@ function CommentRow({
           {confirming ? (
             <>
               <span className="px-2 text-[13px] text-text-2">Delete this comment{hasReplies ? " and its replies" : ""}?</span>
-              <button type="button" onClick={onDelete} disabled={deleting} className={btn("danger", "sm", "h-8")}>
+              <button type="button" onClick={onDelete} disabled={deleting} className={btn("danger", "sm", "h-8 pointer-coarse:h-11")}>
                 {deleting ? <Spinner size={14} /> : "Delete"}
               </button>
-              <button type="button" onClick={onCancelDelete} className={btn("quiet", "sm", "h-8")}>
+              <button type="button" onClick={onCancelDelete} className={btn("quiet", "sm", "h-8 pointer-coarse:h-11")}>
                 Cancel
               </button>
             </>
           ) : (
             <>
               {c.held && (
-                <button type="button" onClick={onApprove} disabled={approving} className={btn("secondary", "sm", "h-8 text-[13px]")}>
+                <button type="button" onClick={onApprove} disabled={approving} className={btn("secondary", "sm", "h-8 text-[13px] pointer-coarse:h-11")}>
                   {approving ? <Spinner size={14} /> : <CheckIcon size={15} />} Approve
                 </button>
               )}
-              <button type="button" onClick={onAskDelete} className={btn("quiet", "sm", "h-8 text-[13px]")}>
+              <button type="button" onClick={onAskDelete} className={btn("quiet", "sm", "h-8 text-[13px] pointer-coarse:h-11")}>
                 <TrashIcon size={15} /> Delete
               </button>
               {!c.isOwner && (
                 <button
                   type="button"
                   onClick={onBlock}
-                  className={btn("quiet", "sm", "h-8 text-[13px]")}
+                  className={btn("quiet", "sm", "h-8 text-[13px] pointer-coarse:h-11")}
                 >
                   <BlockIcon size={15} /> Block
                 </button>

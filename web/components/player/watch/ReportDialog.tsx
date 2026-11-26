@@ -115,8 +115,9 @@ export function ReportDialog({ slug, open, onClose }: { slug: string; open: bool
               value={details}
               onChange={(e) => setDetails(e.target.value)}
               rows={3}
+              enterKeyHint="done"
               maxLength={2000}
-              className="block w-full resize-none rounded-xl border border-line bg-canvas px-3 py-2 text-[15px] focus:border-sr-red focus:outline-none focus:ring-2 focus:ring-sr-red/25"
+              className="block w-full scroll-mb-4 resize-none rounded-xl border border-line bg-canvas px-3 py-2 text-base focus:border-sr-red focus:outline-none focus:ring-2 focus:ring-sr-red/25"
             />
           </div>
           <div>
@@ -128,9 +129,11 @@ export function ReportDialog({ slug, open, onClose }: { slug: string; open: bool
               type="email"
               inputMode="email"
               autoComplete="email"
+              autoCapitalize="none"
+              enterKeyHint="send"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="block h-11 w-full rounded-xl border border-line bg-canvas px-3 text-[15px] focus:border-sr-red focus:outline-none focus:ring-2 focus:ring-sr-red/25"
+              className="block h-11 w-full rounded-xl border border-line bg-canvas px-3 text-base focus:border-sr-red focus:outline-none focus:ring-2 focus:ring-sr-red/25"
             />
           </div>
           {error && (
@@ -139,10 +142,10 @@ export function ReportDialog({ slug, open, onClose }: { slug: string; open: bool
             </p>
           )}
           <div className="flex justify-end gap-2">
-            <button type="button" className={btn("ghost")} onClick={close}>
+            <button type="button" className={btn("ghost", "md", "max-sm:flex-1")} onClick={close}>
               Cancel
             </button>
-            <button type="submit" disabled={busy} className={btn("primary", "md", "min-w-[8rem]")}>
+            <button type="submit" disabled={busy} className={btn("primary", "md", "min-w-[8rem] max-sm:flex-1")}>
               {busy ? <Spinner size={16} /> : "Send report"}
             </button>
           </div>

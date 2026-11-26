@@ -4,7 +4,7 @@
 // title and owner, call-to-action, download, and a panel with comments and the transcript.
 import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from "react";
 import type { Comment, PublicVideo, Reaction } from "@/lib/contract";
-import { publicApi } from "@/lib/client/api";
+import { ApiError, publicApi } from "@/lib/client/api";
 import { formatDate, formatTime, plural } from "@/lib/client/format";
 import { downloadName, downloadUrl, watchUrl } from "@/lib/client/links";
 import { CommentIcon, DownloadIcon, ExternalIcon, FlagIcon, TranscriptIcon } from "../icons";
@@ -15,8 +15,9 @@ import { accentVars } from "../ui-classes";
 import { CommentsPanel } from "./CommentsPanel";
 import { ReactionBar } from "./ReactionBar";
 import { ReportDialog } from "./ReportDialog";
-import { StateScreen } from "./StateScreen";
+import { StateScreen, type WatchState } from "./StateScreen";
 import { TranscriptList } from "./TranscriptList";
+import { FailedUpload } from "./FailedUpload";
 import { UploadingStage } from "./UploadingStage";
 import { useViewBeacons } from "./useViewBeacons";
 import { ViewCountSwitch } from "./ViewCountSwitch";
@@ -28,6 +29,7 @@ export function WatchView({ slug, initial }: { slug: string; initial: PublicVide
   const [video, setVideo] = useState(initial);
   const [autoStart, setAutoStart] = useState(false);
   const [uploadFailed, setUploadFailed] = useState(initial.status === "failed");
+  const [gone, setGone] = useState<WatchState | null>(null);
   const [store] = useState(() => new PlaybackStore(initial.durationS));
   const [comments, setComments] = useState<Comment[]>([]);
   const [reactions, setReactions] = useState<Reaction[]>([]);
@@ -82,8 +84,36 @@ export function WatchView({ slug, initial }: { slug: string; initial: PublicVide
     setAutoStart(true);
   }, []);
   const onFailed = useCallback(() => setUploadFailed(true), []);
+  const onRevived = useCallback((next: PublicVideo) => {
+    setVideo(next);
+    setUploadFailed(false);
+  }, []);
+  // The link stopped working while the page was open.
+  const onGone = useCallback((error: string) => {
+    if (error === "expired" || error === "removed" || error === "not_found") setGone(error);
+    else location.reload(); // a password was set: the server shows its page
+  }, []);
 
-  if (uploadFailed) return <StateScreen state="failed" ownerName={video.ownerName} />;
+  // Signed addresses last 2 hours; a page left open longer gets a new one and carries on from where it was.
+  const videoUrl = useRef(initial.videoUrl);
+  useEffect(() => {
+    videoUrl.current = video.videoUrl;
+  }, [video.videoUrl]);
+  const onRefresh = useCallback(async () => {
+    try {
+      const next = await publicApi.video(slug);
+      if (next.status === "failed") setUploadFailed(true);
+      const changed = next.videoUrl !== videoUrl.current;
+      setVideo((v) => ({ ...v, status: next.status, uploadProgress: next.uploadProgress, videoUrl: next.videoUrl }));
+      return changed;
+    } catch (err) {
+      if (err instanceof ApiError && [401, 404, 410].includes(err.status)) onGone(err.code);
+      throw err;
+    }
+  }, [slug, onGone]);
+
+  if (gone) return <StateScreen state={gone} ownerName={video.ownerName} />;
+  if (uploadFailed) return <FailedUpload slug={slug} ownerName={video.ownerName} onRevived={onRevived} onGone={onGone} />;
 
   const showPanel = video.allowComments || comments.length > 0 || hasTranscript;
   const ctaLink = video.cta ? (
@@ -95,7 +125,7 @@ export function WatchView({ slug, initial }: { slug: string; initial: PublicVide
 
   return (
     <PlaybackContext value={store}>
-      <div className="flex min-h-svh flex-col" style={accentVars(video.brand?.color)}>
+      <div className="sr-safe-x flex min-h-svh flex-col" style={accentVars(video.brand?.color)}>
         <WatchHeader
           logoUrl={video.brand?.logoUrl ?? null}
           ownerName={video.ownerName}
@@ -121,16 +151,17 @@ export function WatchView({ slug, initial }: { slug: string; initial: PublicVide
                   reactions={video.allowReactions ? reactions : []}
                   autoStart={autoStart}
                   floatReactions={video.allowReactions}
+                  onRefresh={onRefresh}
                   endScreen={ctaLink}
                 />
               ) : (
-                <UploadingStage slug={slug} video={video} onReady={onReady} onFailed={onFailed} />
+                <UploadingStage slug={slug} video={video} onReady={onReady} onFailed={onFailed} onGone={onGone} />
               )}
             </div>
 
             <div className="px-4 lg:px-0">
               {ready && video.allowReactions && (
-                <div className="-mx-1 mt-2">
+                <div className="-mx-1.5 mt-1.5">
                   <ReactionBar
                     slug={slug}
                     onAdd={(r) => setReactions((all) => [...all, r])}
@@ -231,7 +262,7 @@ export function WatchView({ slug, initial }: { slug: string; initial: PublicVide
           <button
             type="button"
             onClick={() => setReportOpen(true)}
-            className="inline-flex items-center gap-1.5 rounded hover:text-text focus-visible:outline-2 focus-visible:outline-sr-red"
+            className="inline-flex min-h-11 items-center gap-1.5 rounded hover:text-text focus-visible:outline-2 focus-visible:outline-sr-red"
           >
             <FlagIcon size={14} />
             Report this video
@@ -276,7 +307,7 @@ function TabButton({
           sibling?.click();
         }
       }}
-      className={`flex h-10 flex-1 items-center justify-center gap-2 rounded-xl text-sm font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-sr-red motion-reduce:transition-none ${
+      className={`flex h-11 flex-1 items-center justify-center gap-2 rounded-xl text-sm font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-sr-red motion-reduce:transition-none ${
         selected ? "bg-fill text-text" : "text-text-2 hover:text-text"
       }`}
     >

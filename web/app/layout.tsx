@@ -10,6 +10,8 @@ const geistSans = Geist({
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
+  // Only the dashboard's colour code uses it: don't make every page download it before it paints.
+  preload: false,
 });
 
 export const metadata: Metadata = {

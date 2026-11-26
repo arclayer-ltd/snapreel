@@ -16,7 +16,7 @@ export const metadata: Metadata = {
 
 export default function LoginPage({ searchParams }: PageProps<"/login">) {
   return (
-    <div className="flex min-h-svh flex-col lg:flex-row">
+    <div className="sr-safe-x flex min-h-svh flex-col lg:flex-row">
       <aside className="relative hidden overflow-hidden bg-[radial-gradient(circle_at_30%_20%,#fe6262_0%,#d32434_42%,#5e0b16_100%)] lg:flex lg:w-[46%] lg:flex-col lg:justify-between lg:p-12">
         <div
           className="pointer-events-none absolute inset-0 opacity-[0.12]"
@@ -40,11 +40,11 @@ export default function LoginPage({ searchParams }: PageProps<"/login">) {
         </p>
       </aside>
 
-      <main className="flex flex-1 flex-col px-5 py-8 sm:px-8">
-        <a href={SITE_URL} className="w-fit rounded-lg focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-sr-red lg:hidden">
+      <main className="flex flex-1 flex-col px-5 pb-[calc(1.5rem+env(safe-area-inset-bottom))] pt-5 sm:px-8 sm:py-8">
+        <a href={SITE_URL} className="flex min-h-11 w-fit items-center rounded-lg focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-sr-red lg:hidden">
           <SnapreelWordmark />
         </a>
-        <div className="mx-auto flex w-full max-w-sm flex-1 flex-col justify-center py-10">
+        <div className="mx-auto flex w-full max-w-sm flex-1 flex-col justify-start pb-8 pt-8 sm:justify-center sm:py-10">
           <Suspense fallback={<FormSkeleton />}>
             <Gate searchParams={searchParams} />
           </Suspense>
