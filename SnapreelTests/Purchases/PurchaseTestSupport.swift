@@ -102,7 +102,7 @@ class PurchaseTestCase: XCTestCase {
         sheets = 0
         announcements = []
         service = makeService()
-        await settleStore()
+        try await settleStore()
     }
 
     override func tearDown() async throws {
@@ -114,8 +114,17 @@ class PurchaseTestCase: XCTestCase {
     }
 
     /// Transactions of the test before can take a moment to go.
-    private func settleStore() async {
-        _ = await eventually(5) { await self.entitlements() == 0 }
+    /// The simulator's StoreKit can go on listing an earlier test's subscription for a while after the
+    /// test store forgot it. Each test starts with nothing, or doesn't start.
+    private func settleStore() async throws {
+        for await result in Transaction.unfinished { await result.unsafePayloadValue.finish() }
+        let clean = await eventually(30) {
+            var left = 0
+            for await _ in Transaction.currentEntitlements { left += 1 }
+            for await _ in Transaction.unfinished { left += 1 }
+            return left == 0
+        }
+        try XCTSkipUnless(clean, "The simulator's StoreKit still lists an earlier test's purchase after 30 s")
     }
 
     private static func makeSession() throws -> SKTestSession {
