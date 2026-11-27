@@ -125,6 +125,9 @@ final class EditorModelTests: XCTestCase {
         NotificationCenter.default.post(name: UIApplication.didEnterBackgroundNotification, object: nil)
         let left = await wait(1) { !model.isPlaying }
         XCTAssertTrue(left, "leaving the app pauses")
+        // And come back: the edit saver listens for these too, and a save started while it thinks
+        // the app is away waits for it to return (the perf tests' saves hung behind this once).
+        NotificationCenter.default.post(name: UIApplication.willEnterForegroundNotification, object: nil)
         await startPlaying()
         model.player.pause()
         let system = await wait(2) { !model.isPlaying }

@@ -249,6 +249,25 @@ final class EditorFaultTests: XCTestCase {
 
     /// Testers, 26 Nov: on iOS 16 every edit with a text or an arrow failed when the file was
     /// finished (-11800 / -16364), with sound and without.
+    /// CI, 27 Nov: a test told the app it had gone to the background and never that it came back;
+    /// every later save waited for it, 75 minutes each. A save started while Snapreel is on screen
+    /// must run whatever an old notice said.
+    func testSaveRunsAfterAMissedComingBack() async throws {
+        var spec = TestMedia.Spec()
+        spec.name = "missed-foreground"
+        spec.duration = 4
+        spec.audioDuration = 4
+        let (url, _) = try await TestMedia.make(spec)
+        let (library, id) = try await TestMedia.library(with: url)
+        var recipe = EditRecipe.original(sourceID: id, duration: 4)
+        recipe.remove(source: 1...1.5)
+        NotificationCenter.default.post(name: UIApplication.didEnterBackgroundNotification, object: nil)
+        EditRenderer.shared.setBackground(true)
+        defer { EditRenderer.shared.setBackground(false) }
+        let (video, _) = try await TestMedia.export(recipe, library: library, stall: 60)
+        XCTAssertEqual(video.duration, 3.5, accuracy: 0.1)
+    }
+
     func testTextAndArrowSave() async throws {
         for sound in [true, false] {
             var spec = TestMedia.Spec()

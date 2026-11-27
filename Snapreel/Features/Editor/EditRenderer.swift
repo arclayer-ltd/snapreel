@@ -191,6 +191,9 @@ final class EditRenderer: ObservableObject {
             Task { @MainActor in EditRenderer.shared.setProgress(id, 0.03 + fraction * 0.95, library: library) }
         }
         job.exporter = exporter
+        // Away from the app the save waits for it to come back. The flag follows notifications; one
+        // that went missing must not hold a save forever while Snapreel is on screen.
+        if isInBackground, UIApplication.shared.applicationState != .background { setBackground(false) }
         if isInBackground { exporter.suspend() }
         do {
             try await exporter.run()
