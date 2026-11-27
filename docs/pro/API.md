@@ -169,6 +169,7 @@ Bodies are JSON with camelCase keys. Errors look like `{error: "<code>", message
 | `POST /api/devices` | `{token, environment: "production"\|"sandbox", appVersion}` | 204 |
 | `DELETE /api/devices/{token}` | | 204 |
 | `POST /api/purchases/verify` | `{signedTransaction}` (StoreKit 2 JWS) | `{plan}`. The server checks the x5c chain to Apple Root CA G3, the bundle ID, and that `appAccountToken` equals the user ID |
+| `POST /api/auth/handoff` | | `{url, expiresInS}`. Bearer only (the app's "Open the web dashboard"). `url` is `https://snapreel.video/login/handoff?t=…`, which signs the browser in as this account and opens `/app`: single use (a Supabase magic-link token, used up by `verifyOtp`), sealed with AES-256-GCM under a key derived from `SUPABASE_SECRET_KEY`, valid 120 s. No email is sent. 409 `no_email` for an account without an email |
 | `POST /api/account/delete` | `{appleAuthorizationCode?, appleClientId?}` | 204. Deletes everything, including the auth user. Sign in with Apple is revoked when the app sends a fresh `appleAuthorizationCode` (from an `ASAuthorizationAppleIDCredential`; `appleClientId` defaults to the bundle ID) |
 
 Shapes:
@@ -242,6 +243,7 @@ Each one also gets an email from Resend if the user hasn't turned email off. Tha
 - `/v/preview/locked` and `/v/preview/generic`: 1200×630 PNG link-preview images for password videos and videos with no poster.
 - `/app`: dashboard. `/app/v/{id}` is a video's insights, comments and settings. `/app/account` is account and plan.
 - `/login`: email code and Sign in with Apple. Apple on the web returns to `/login/callback?next=…`, which exchanges the code for the cookie session; add `https://snapreel.video/login/callback` (and `http://localhost:3000/login/callback`) to Supabase Auth redirect URLs.
+- `/login/handoff?t=…&next=/app`: the app's one-time sign-in link (`POST /api/auth/handoff`). Sets the cookie session and goes to `next`; an expired, used or changed link goes to `/login?error=handoff`.
 - `/`, `/pricing`, `/help`, `/help/{slug}`, `/privacy`, `/terms`, `/support`: the marketing site.
 
 ## Who owns which files (parallel sessions)

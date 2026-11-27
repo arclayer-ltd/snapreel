@@ -39,6 +39,7 @@ struct PaywallView: View {
     @State private var fixedOutcome: Outcome
     @State private var isRestoring = false
     @State private var isSigningIn = false
+    @State private var heroGone = false
     @State private var asksAboutMoving = false
     @State private var asksAboutSwitching = false
 
@@ -108,8 +109,19 @@ struct PaywallView: View {
                     withAnimation(Motion.standard) { scroller.scrollTo(Self.mainID, anchor: .bottom) }
                 }
             }
-            CircleIconButton(systemName: "xmark", label: "Close", tone: .glass, size: 32) { onClose() }
+            // Once the hero has scrolled away, the close button sits in a plain bar, so what scrolls under it (the
+            // check marks, the plans) is covered instead of showing through around the button.
+            topBar
+                .opacity(heroGone ? 1 : 0)
+                .allowsHitTesting(heroGone)
+                .accessibilityHidden(true)
+            CircleIconButton(systemName: "xmark", label: "Close", tone: .glass, size: Self.closeSize) { onClose() }
                 .padding(Space.m)
+        }
+        .coordinateSpace(name: Self.space)
+        .onPreferenceChange(HeroBottomKey.self) { bottom in
+            let gone = bottom < Self.barHeight
+            if gone != heroGone { withAnimation(Motion.quick) { heroGone = gone } }
         }
         .background(Color.srCanvas.ignoresSafeArea())
         .toolbar(.hidden, for: .navigationBar)
@@ -177,6 +189,24 @@ struct PaywallView: View {
 
     // MARK: Hero
 
+    private static let closeSize: CGFloat = 32
+    private static let barHeight: CGFloat = closeSize + Space.m * 2
+    private static let space = "paywall"
+
+    private var topBar: some View {
+        Text("Snapreel Pro")
+            .font(.srHeadline)
+            .foregroundStyle(Color.srText)
+            .lineLimit(1)
+            .padding(.horizontal, Self.barHeight)
+            .frame(maxWidth: .infinity)
+            .frame(height: Self.barHeight)
+            .background(Color.srCanvas.ignoresSafeArea(edges: .top))
+            .overlay(alignment: .bottom) {
+                Rectangle().fill(Color.srLine).frame(height: 0.5)
+            }
+    }
+
     private var hero: some View {
         VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: Space.s) {
@@ -206,6 +236,9 @@ struct PaywallView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(ProHeroBackground())
+        .background(GeometryReader { proxy in
+            Color.clear.preference(key: HeroBottomKey.self, value: proxy.frame(in: .named(Self.space)).maxY)
+        })
     }
 
     /// Already Pro, or just subscribed.
@@ -696,6 +729,12 @@ struct PaywallView: View {
 // MARK: - Pieces
 
 /// One plan to pick: title, price and period, and the trial or per-month line.
+/// Where the hero ends, in the paywall's own space: above the close button's bar means it has scrolled away.
+private struct HeroBottomKey: PreferenceKey {
+    static var defaultValue: CGFloat = .infinity
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = min(value, nextValue()) }
+}
+
 private struct PlanCard: View {
     let plan: ProPlan
     let isSelected: Bool

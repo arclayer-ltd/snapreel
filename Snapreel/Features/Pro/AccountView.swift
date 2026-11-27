@@ -12,6 +12,7 @@ struct AccountView: View {
     @State private var deleteStep: DeleteAccountSheet.Step?
     @State private var restoreMessage: String?
     @State private var isRestoring = false
+    @State private var isOpeningDashboard = false
 
     var body: some View {
         ScrollView {
@@ -163,8 +164,9 @@ struct AccountView: View {
             SettingsLinkRow(page: .sharedLinks, systemImage: "link", title: "Shared links",
                             value: library.links.isEmpty ? "None" : "\(library.links.count)")
             SettingsDivider()
-            SettingsActionRow(systemImage: "safari.fill", title: "Open the web dashboard") {
-                ShareLinks.openInSafari(CloudConfig.dashboardURL)
+            SettingsActionRow(systemImage: "safari.fill",
+                              title: isOpeningDashboard ? "Opening the web dashboard…" : "Open the web dashboard") {
+                openDashboard()
             }
         }
     }
@@ -197,6 +199,31 @@ struct AccountView: View {
             }
             .buttonStyle(SettingsRowStyle())
         }
+    }
+
+    private func openDashboard() {
+        guard !isOpeningDashboard else { return }
+        isOpeningDashboard = true
+        Task { @MainActor in
+            let url = await Self.dashboardLink()
+            isOpeningDashboard = false
+            ShareLinks.openInSafari(url)
+        }
+    }
+
+    /// The dashboard signed in, through a one-time link from snapreel.video. Plain `/app` (which asks to sign in) when
+    /// the link doesn't come within a few seconds, or isn't snapreel.video's.
+    static func dashboardLink(within seconds: Double = 6) async -> URL {
+        let link = Task { try? await APIClient.shared.webSignInLink() }
+        let timer = Task {
+            try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+            link.cancel()
+        }
+        defer { timer.cancel() }
+        guard let url = await link.value, url.scheme == "https", url.host == CloudConfig.siteURL.host else {
+            return CloudConfig.dashboardURL
+        }
+        return url
     }
 
     private func restore() {

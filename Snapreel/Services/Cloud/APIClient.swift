@@ -94,6 +94,12 @@ final class APIClient {
         try await sendEmpty("POST", "account/delete")
     }
 
+    /// A one-time link that opens the web dashboard signed in as this account.
+    func webSignInLink() async throws -> URL {
+        let response: WebSignInLinkResponse = try await send("POST", "auth/handoff")
+        return response.url
+    }
+
     // MARK: Videos
 
     func createVideo(_ request: CreateVideoRequest) async throws -> CreateVideoResponse {

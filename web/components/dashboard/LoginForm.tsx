@@ -68,7 +68,11 @@ export function LoginForm({
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState<"apple" | "email" | "code" | null>(null);
   const [error, setError] = useState<string | null>(
-    initialError ? "Sign in with Apple didn’t finish. Try again, or use your email." : null,
+    initialError === "handoff"
+      ? "That sign-in link from the app has expired or was already used. Sign in here, or open the dashboard from the app again."
+      : initialError
+        ? "Sign in with Apple didn’t finish. Try again, or use your email."
+        : null,
   );
   const [sentAt, setSentAt] = useState(0);
   const [sentFor, setSentFor] = useState("");

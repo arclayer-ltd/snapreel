@@ -380,6 +380,11 @@ struct VerifyPurchaseResponse: Codable, Hashable {
     var plan: CloudPlan
 }
 
+/// `POST /api/auth/handoff`: a link that signs this account in on the website, once, for 2 minutes.
+struct WebSignInLinkResponse: Codable, Hashable {
+    var url: URL
+}
+
 struct BlockRequest: Encodable {
     var commentId: String?
     var reactionId: String?
