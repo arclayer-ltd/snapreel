@@ -111,10 +111,11 @@ struct PaywallView: View {
             }
             // Once the hero has scrolled away, the close button sits in a plain bar, so what scrolls under it (the
             // check marks, the plans) is covered instead of showing through around the button.
-            topBar
-                .opacity(heroGone ? 1 : 0)
-                .allowsHitTesting(heroGone)
-                .accessibilityHidden(true)
+            if heroGone {
+                topBar
+                    .transition(.opacity)
+                    .accessibilityHidden(true)
+            }
             CircleIconButton(systemName: "xmark", label: "Close", tone: .glass, size: Self.closeSize) { onClose() }
                 .padding(Space.m)
         }
