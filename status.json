@@ -1,0 +1,1 @@
+{"state": "failed", "note": "the rig failed: TimeoutExpired: Command '['xcrun', 'simctl', 'get_app_container', '8124E4F2-0857-45CA-B02E-70E259334950', 'com.facebook.WebDriverAgentRunner.xctrunner']' timed out after 60 seconds", "started": 1795769861.6312551, "at": 1795770279.3151739}
