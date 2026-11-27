@@ -1,0 +1,363 @@
+name: UI rig
+
+# The test rig's runner side (scripts/ui-rig/README.md). Not started by hand: `rig.py` pushes a throwaway
+# branch ui-rig/<session> that holds only this file, scripts/ui-rig and the session's settings (as the commit
+# message, JSON), and this job deletes that branch when it ends. Nothing here uses a repository secret; the
+# job's own token is used for the app's source, the stored builds and the session's refs (refs/rig/<session>/*).
+run-name: "UI rig: ${{ fromJSON(github.event.head_commit.message).title }}"
+on:
+  push:
+    branches: ["ui-rig/**"]
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: ${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  phone:
+    if: ${{ !github.event.deleted && fromJSON(github.event.head_commit.message).job == 'phone' }}
+    runs-on: ${{ fromJSON(github.event.head_commit.message).runner }}
+    timeout-minutes: ${{ fromJSON(github.event.head_commit.message).timeout }}
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
+      GH_TOKEN: ${{ github.token }}
+      SESSION: ${{ github.event.head_commit.message }}
+      W: ${{ github.workspace }}/w
+    steps:
+      - uses: actions/checkout@v4
+        with: { path: rig, persist-credentials: false }
+
+      - name: Pick Xcode, read the session
+        run: |
+          mkdir -p "$W/app"
+          # The newest Xcode, but an older one when an iOS that needs downloading was asked for.
+          python3 - <<'PY' >> "$GITHUB_ENV"
+          import json, os
+          s = json.loads(os.environ["SESSION"])
+          print("APP_REF=%s" % s["app_ref"]); print("IOS=%s" % s.get("ios", "")); print("KIND=%s" % s.get("kind", "live"))
+          print("CLOUD=%s" % s.get("cloud", "stub"))
+          for i, phone in enumerate(s["phones"]):
+              phone.update(index=i, minutes=s["minutes"], idle=s["idle"], ios=s.get("ios", ""))
+              if s.get("cloud", "stub") == "stub":
+                  phone.update(ca=os.environ["W"] + "/stub/ca.pem", control="http://127.0.0.1:8899")
+              json.dump(phone, open("%s/phone-%d.json" % (os.environ["W"], i), "w"))
+          open(os.environ["W"] + "/sids.txt", "w").write("".join(p["sid"] + "\n" for p in s["phones"]))
+          PY
+      - name: Quiet the Mac
+        run: |
+          # Its own indexing and learning jobs compete with the phone for three cores.
+          sudo mdutil -a -i off > /dev/null 2>&1 || true
+          for JOB in spotlightknowledged spotlightknowledged.updater photoanalysisd mediaanalysisd triald suggestd assistantd tipsd \
+              intelligenceplatformd knowledgeconstructiond duetexpertd proactived siriknowledged generativeexperiencesd cloudd bird; do
+            launchctl disable "gui/$(id -u)/com.apple.$JOB" 2> /dev/null || true
+            launchctl bootout "gui/$(id -u)/com.apple.$JOB" 2> /dev/null || true
+          done
+          uptime
+
+      - name: Find the newest Xcode and the iOS asked for
+        run: |
+          XCODE=$(for app in /Applications/Xcode*.app; do
+              if echo "$app" | grep -qiE 'beta|_rc'; then continue; fi
+              v=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app/Contents/Info.plist" 2>/dev/null) || continue
+              echo "$v $app"
+            done | sort -t. -k1,1n -k2,2n -k3,3n | tail -1 | cut -d' ' -f2-)
+          sudo xcode-select -s "$XCODE"
+          echo "BUILD_XCODE=$XCODE" >> "$GITHUB_ENV"
+          xcodebuild -version
+
+      # A 6 GB download from Apple, about 2 minutes. In the foreground and before anything else touches the
+      # network settings: it has hung in the background. Each try gets 6 minutes.
+      - name: iOS 16.4 simulator
+        if: ${{ env.IOS == '16.4' }}
+        run: |
+          echo '{}' > "$W/say.json"
+          for SID in $(cat "$W/sids.txt" 2> /dev/null); do
+            python3 rig/scripts/ui-rig/agent.py --sid "$SID" --options "$W/say.json" --work "$W" --say "downloading the iOS 16.4 simulator" || true
+          done
+          xcrun simctl list runtimes | grep iOS || true
+          for BUILD in 16.4 20E247 16.4; do
+            perl -e 'alarm shift; exec @ARGV' 360 xcodebuild -downloadPlatform iOS -buildVersion $BUILD < /dev/null > "$W/runtime.log" 2>&1 || true
+            tail -c 300 "$W/runtime.log"
+            xcrun simctl list runtimes | grep "iOS 16.4" && break
+            sleep 5
+          done
+          xcrun simctl list runtimes | grep -q "iOS 16.4" || {
+            echo '{"say_state": "failed"}' > "$W/say.json"
+            for SID in $(cat "$W/sids.txt" 2> /dev/null); do
+              python3 rig/scripts/ui-rig/agent.py --sid "$SID" --options "$W/say.json" --work "$W" --say "the iOS 16.4 simulator could not be downloaded; try again" || true
+            done
+            exit 1; }
+
+      - uses: actions/checkout@v4
+        with: { path: src, ref: "${{ fromJSON(github.event.head_commit.message).app_ref }}", persist-credentials: false }
+
+      - name: Practice server
+        if: ${{ env.KIND != 'build' }}
+        run: |
+          # Without proof that the real services are out of reach there is no session.
+          if ! bash rig/scripts/ui-rig/start_stub.sh src "$W/stub" "$CLOUD"; then
+            echo '{"say_state": "failed"}' > "$W/say.json"
+            for SID in $(cat "$W/sids.txt"); do
+              python3 rig/scripts/ui-rig/agent.py --sid "$SID" --options "$W/say.json" --work "$W" --say "the app could not be cut off from its real services, so the session was not started" || true
+            done
+            exit 1
+          fi
+
+      - name: The app (stored build, or build it)
+        id: app
+        run: |
+          # Before the phones start: building and booting at once is slower than one after the other.
+          set -o pipefail
+          echo '{}' > "$W/say.json"
+          say() { for SID in $(cat "$W/sids.txt" 2> /dev/null); do python3 rig/scripts/ui-rig/agent.py --sid "$SID" --options "$W/say.json" --work "$W" --say "$1" || true; done; }
+          say "fetching the app"
+          export DEVELOPER_DIR="$BUILD_XCODE/Contents/Developer"
+          if ! bash rig/scripts/ui-rig/build_app.sh src "$W/app" fetch; then
+            say "building the app (8 to 15 minutes; the build is kept for the next session)"
+            if ! bash rig/scripts/ui-rig/build_app.sh src "$W/app" build 2>&1 | tee "$W/build-out.txt"; then
+              echo '{"say_state": "failed"}' > "$W/say.json"
+              say "the app could not be built: $(tail -12 "$W/build-out.txt")"
+              exit 1
+            fi
+          fi
+
+      - name: Start the phones (in the background)
+        if: ${{ env.KIND != 'build' }}
+        run: |
+          i=0
+          for SID in $(cat "$W/sids.txt"); do
+            SCRIPT=""; [ -f "rig/steps-$SID.txt" ] && SCRIPT="$PWD/rig/steps-$SID.txt"
+            ( cd "$W" && exec nohup python3 "$GITHUB_WORKSPACE/rig/scripts/ui-rig/agent.py" --sid "$SID" --options "$W/phone-$i.json" \
+                --work "$W/phone-$i" --app "$W/app/Snapreel.app" --wda "$W/wda/WebDriverAgentRunner-Runner.app" \
+                --wait-for "$W/wda.ready" --script "$SCRIPT" > "$W/agent-$SID.log" 2>&1 < /dev/null ) &
+            i=$((i + 1))
+          done
+          bash rig/scripts/ui-rig/get_wda.sh "$W/wda"
+          swiftc -O rig/scripts/ui-rig/ocr.swift -o "$W/ocr" 2> "$W/ocr.log" || tail -5 "$W/ocr.log"
+          touch "$W/wda.ready"
+
+      - name: Store the new build
+        if: ${{ steps.app.outputs.built == '1' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.app.outputs.key }}
+          path: ${{ github.workspace }}/w/app/app.tgz
+          retention-days: 30
+          compression-level: 0
+
+      - name: Session
+        if: ${{ env.KIND != 'build' }}
+        run: |
+          trap 'kill $TAIL 2>/dev/null || true' EXIT
+          tail -n +1 -F "$W"/agent-*.log & TAIL=$!
+          # An agent that starts its own side again (after being stuck) is not listed for a moment: three misses in a row.
+          MISSED=0
+          while [ "$MISSED" -lt 3 ]; do
+            if pgrep -f ui-rig/agent.py > /dev/null; then MISSED=0; else MISSED=$((MISSED + 1)); fi
+            sleep 3
+          done
+          i=0
+          for SID in $(cat "$W/sids.txt"); do
+            if [ ! -f "$W/phone-$i/ended" ]; then
+              echo "$SID: the rig stopped without a word" >> "$W/failed.txt"
+              echo '{"say_state": "failed"}' > "$W/say.json"
+              python3 rig/scripts/ui-rig/agent.py --sid "$SID" --options "$W/say.json" --work "$W" \
+                --say "the rig on the Mac stopped unexpectedly; its log is in the run's results" || true
+            fi
+            i=$((i + 1))
+          done
+          sleep 2
+          if [ -f "$W/failed.txt" ]; then cat "$W/failed.txt"; exit 1; fi
+
+      - name: Keep the results
+        if: ${{ always() && env.KIND != 'build' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-rig-${{ fromJSON(github.event.head_commit.message).title }}-${{ github.run_id }}
+          path: |
+            w/phone-*/out
+            w/phone-*/wda.log
+            w/agent-*.log
+            w/stub/stub.log
+            w/runtime.log
+          retention-days: 7
+          if-no-files-found: ignore
+
+      - name: Remove the throwaway branch
+        if: always()
+        run: |
+          case "$GITHUB_REF" in refs/heads/ui-rig/*) gh api -X DELETE "repos/$GITHUB_REPOSITORY/git/${GITHUB_REF}" || true ;; esac
+
+  # A prepared phone: started, settled, filled with the samples and stored, so sessions start from it.
+  image:
+    if: ${{ !github.event.deleted && fromJSON(github.event.head_commit.message).job == 'image' }}
+    runs-on: ${{ fromJSON(github.event.head_commit.message).runner }}
+    timeout-minutes: ${{ fromJSON(github.event.head_commit.message).timeout }}
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
+      GH_TOKEN: ${{ github.token }}
+      SESSION: ${{ github.event.head_commit.message }}
+      IOS: ${{ fromJSON(github.event.head_commit.message).ios }}
+      W: ${{ github.workspace }}/w
+    steps:
+      - uses: actions/checkout@v4
+        with: { path: rig, persist-credentials: false }
+      - run: mkdir -p "$W/phone"
+      - name: Quiet the Mac
+        run: |
+          # Its own indexing and learning jobs compete with the phone for three cores.
+          sudo mdutil -a -i off > /dev/null 2>&1 || true
+          for JOB in spotlightknowledged spotlightknowledged.updater photoanalysisd mediaanalysisd triald suggestd assistantd tipsd \
+              intelligenceplatformd knowledgeconstructiond duetexpertd proactived siriknowledged generativeexperiencesd cloudd bird; do
+            launchctl disable "gui/$(id -u)/com.apple.$JOB" 2> /dev/null || true
+            launchctl bootout "gui/$(id -u)/com.apple.$JOB" 2> /dev/null || true
+          done
+          uptime
+
+      - name: Find the newest Xcode and the iOS asked for
+        run: |
+          XCODE=$(for app in /Applications/Xcode*.app; do
+              if echo "$app" | grep -qiE 'beta|_rc'; then continue; fi
+              v=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app/Contents/Info.plist" 2>/dev/null) || continue
+              echo "$v $app"
+            done | sort -t. -k1,1n -k2,2n -k3,3n | tail -1 | cut -d' ' -f2-)
+          sudo xcode-select -s "$XCODE"
+          echo "BUILD_XCODE=$XCODE" >> "$GITHUB_ENV"
+          xcodebuild -version
+
+      # A 6 GB download from Apple, about 2 minutes. In the foreground and before anything else touches the
+      # network settings: it has hung in the background. Each try gets 6 minutes.
+      - name: iOS 16.4 simulator
+        if: ${{ env.IOS == '16.4' }}
+        run: |
+          echo '{}' > "$W/say.json"
+          for SID in $(cat "$W/sids.txt" 2> /dev/null); do
+            python3 rig/scripts/ui-rig/agent.py --sid "$SID" --options "$W/say.json" --work "$W" --say "downloading the iOS 16.4 simulator" || true
+          done
+          xcrun simctl list runtimes | grep iOS || true
+          for BUILD in 16.4 20E247 16.4; do
+            perl -e 'alarm shift; exec @ARGV' 360 xcodebuild -downloadPlatform iOS -buildVersion $BUILD < /dev/null > "$W/runtime.log" 2>&1 || true
+            tail -c 300 "$W/runtime.log"
+            xcrun simctl list runtimes | grep "iOS 16.4" && break
+            sleep 5
+          done
+          xcrun simctl list runtimes | grep -q "iOS 16.4" || {
+            echo '{"say_state": "failed"}' > "$W/say.json"
+            for SID in $(cat "$W/sids.txt" 2> /dev/null); do
+              python3 rig/scripts/ui-rig/agent.py --sid "$SID" --options "$W/say.json" --work "$W" --say "the iOS 16.4 simulator could not be downloaded; try again" || true
+            done
+            exit 1; }
+
+      - name: Make the phone
+        id: make
+        run: |
+          python3 - <<'PY'
+          import json, os
+          s = json.loads(os.environ["SESSION"])
+          json.dump(dict(s["phones"][0], ios=s["ios"], prepare=True), open(os.environ["W"] + "/phone.json", "w"))
+          open(os.environ["W"] + "/sid.txt", "w").write(s["phones"][0]["sid"])
+          PY
+          bash rig/scripts/ui-rig/get_wda.sh "$W/wda"
+          bash rig/scripts/ui-rig/get_media.sh small "$W/phone/media"
+          python3 rig/scripts/ui-rig/agent.py --sid "$(cat "$W/sid.txt")" --options "$W/phone.json" --work "$W/phone" \
+            --wda "$W/wda/WebDriverAgentRunner-Runner.app" --prepare "$W/out"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.make.outputs.name }}
+          path: ${{ github.workspace }}/w/out
+          retention-days: 90
+          compression-level: 0
+      - name: Remove the throwaway branch
+        if: always()
+        run: |
+          case "$GITHUB_REF" in refs/heads/ui-rig/*) gh api -X DELETE "repos/$GITHUB_REPOSITORY/git/${GITHUB_REF}" || true ;; esac
+
+  web:
+    if: ${{ !github.event.deleted && fromJSON(github.event.head_commit.message).job == 'web' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ fromJSON(github.event.head_commit.message).timeout }}
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
+      GH_TOKEN: ${{ github.token }}
+      SESSION: ${{ github.event.head_commit.message }}
+    steps:
+      - uses: actions/checkout@v4
+        with: { path: rig, persist-credentials: false }
+      - uses: actions/checkout@v4
+        with: { path: src, ref: "${{ fromJSON(github.event.head_commit.message).app_ref }}", persist-credentials: false }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - name: Start the browser's agent and the site
+        run: |
+          mkdir -p w
+          python3 - <<'PY'
+          import json, os
+          s = json.loads(os.environ["SESSION"])
+          for i, p in enumerate(s["phones"]):
+              p.update(minutes=s["minutes"], idle=s["idle"], links=os.path.abspath("w/links.json"), mail="http://127.0.0.1:54324")
+              json.dump(p, open("w/web-%d.json" % i, "w")); open("w/sids.txt", "a").write(p["sid"] + "\n")
+          PY
+          echo '{"say_state": "starting"}' > w/say.json
+          say() { for sid in $(cat w/sids.txt); do python3 rig/scripts/ui-rig/agent.py --sid "$sid" --options w/say.json --work w --say "$1" || true; done; }
+          say "building the website with its own database"
+          pip install -q "playwright==1.*" > /dev/null && playwright install ffmpeg > /dev/null
+          if ! bash rig/scripts/ui-rig/site_local.sh src w; then
+            echo '{"say_state": "failed"}' > w/say.json; say "the website did not start; see the run log"; exit 1
+          fi
+          i=0
+          for sid in $(cat w/sids.txt); do
+            nohup python3 rig/scripts/ui-rig/agent.py --sid "$sid" --kind web --options "w/web-$i.json" --work "w/web-$i" > "w/agent-$sid.log" 2>&1 < /dev/null &
+            i=$((i + 1))
+          done
+          sleep 2
+      - name: Session
+        run: |
+          tail -n +1 -F w/agent-*.log & TAIL=$!
+          MISSED=0
+          while [ "$MISSED" -lt 3 ]; do
+            if pgrep -f ui-rig/agent.py > /dev/null; then MISSED=0; else MISSED=$((MISSED + 1)); fi
+            sleep 3
+          done
+          kill $TAIL
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ui-rig-web-${{ github.run_id }}
+          path: |
+            w/*.log
+          retention-days: 7
+          if-no-files-found: ignore
+      - name: Remove the throwaway branch
+        if: always()
+        run: |
+          case "$GITHUB_REF" in refs/heads/ui-rig/*) gh api -X DELETE "repos/$GITHUB_REPOSITORY/git/${GITHUB_REF}" || true ;; esac
+
+  media:
+    if: ${{ !github.event.deleted && fromJSON(github.event.head_commit.message).job == 'media' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy: { fail-fast: false, matrix: { pack: [small, long, big] } }
+    steps:
+      - uses: actions/checkout@v4
+        with: { persist-credentials: false }
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg espeak-ng fonts-dejavu-core > /dev/null
+      - run: bash scripts/ui-rig/make_media.sh ${{ matrix.pack }} out && ls -la out
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ui-media-${{ matrix.pack }}
+          path: out
+          retention-days: 90
+          compression-level: 0
+
+  media-done:
+    if: ${{ always() && !github.event.deleted && fromJSON(github.event.head_commit.message).job == 'media' }}
+    needs: media
+    runs-on: ubuntu-latest
+    env: { GH_TOKEN: "${{ github.token }}" }
+    steps:
+      - run: |
+          case "$GITHUB_REF" in refs/heads/ui-rig/*) gh api -X DELETE "repos/$GITHUB_REPOSITORY/git/${GITHUB_REF}" || true ;; esac

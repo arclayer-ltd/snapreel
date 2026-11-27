@@ -1,20 +1,32 @@
 "use client";
 
-// Comments and reactions on one video, with delete and block (App Review 1.2: user-generated content). Comments the
-// word filter held are listed first, marked "Held", and stay hidden from viewers until approved here.
-import { useMemo, useState } from "react";
+// Comments and reactions on one video: reply, delete, block and unblock (App Review 1.2: user-generated content).
+// Comments the word filter held are listed first, marked "Held", and stay hidden from viewers until approved here.
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import type { Activity, Comment, Reaction } from "@/lib/contract";
-import { errorMessage, ownerApi } from "@/lib/client/api";
+import { errorMessage, ownerApi, publicApi } from "@/lib/client/api";
 import { formatTime, plural, spokenTime } from "@/lib/client/format";
 import { emojiName } from "@/components/player/emoji";
-import { BlockIcon, CheckIcon, CommentIcon, TrashIcon } from "@/components/player/icons";
+import { BlockIcon, CheckIcon, CommentIcon, ReplyIcon, TrashIcon } from "@/components/player/icons";
 import { usePlaybackStore } from "@/components/player/playback";
 import { Avatar, Dialog, RelativeTime, Spinner, btn } from "@/components/player/ui";
 import { Card } from "./kit";
 
 type BlockTarget = { kind: "comment"; item: Comment } | { kind: "reaction"; item: Reaction };
 
-export function ActivityPanel({ initial, allowComments }: { initial: Activity; allowComments: boolean }) {
+export function ActivityPanel({
+  initial,
+  allowComments,
+  videoId,
+  slug,
+  ownerName,
+}: {
+  initial: Activity;
+  allowComments: boolean;
+  videoId: string;
+  slug: string;
+  ownerName: string | null;
+}) {
   const store = usePlaybackStore();
   const [comments, setComments] = useState(initial.comments);
   const [reactions] = useState(initial.reactions);
@@ -24,6 +36,25 @@ export function ActivityPanel({ initial, allowComments }: { initial: Activity; a
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showAllReactions, setShowAllReactions] = useState(false);
+  const [replyTo, setReplyTo] = useState<string | null>(null);
+  const [blocked, setBlocked] = useState<{ comments: Set<string>; reactions: Set<string> }>({
+    comments: new Set(),
+    reactions: new Set(),
+  });
+
+  // Who is blocked is asked for, not remembered here, so it's right after a reload and on another device.
+  const loadBlocked = useCallback(async () => {
+    try {
+      const b = await ownerApi.blockedIn(videoId);
+      setBlocked({ comments: new Set(b.commentIds), reactions: new Set(b.reactionIds) });
+    } catch {
+      // Without it the list still works; it just can't say who is blocked.
+    }
+  }, [videoId]);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- first load
+    void loadBlocked();
+  }, [loadBlocked]);
 
   const { roots, replies } = useMemo(() => {
     const roots = comments
@@ -79,13 +110,34 @@ export function ActivityPanel({ initial, allowComments }: { initial: Activity; a
     try {
       await ownerApi.block(target.kind === "comment" ? { commentId: target.item.id } : { reactionId: target.item.id });
       const who = target.item.authorName ?? "That viewer";
-      setNotice(`${who} is blocked. They can't comment or react on any of your videos.`);
+      setNotice(`${who} is blocked. They can’t comment or react on any of your videos. You can unblock them here.`);
       setBlockTarget(null);
+      await loadBlocked();
     } catch (err) {
       setError(errorMessage(err, "Blocking didn't work. Try again."));
     } finally {
       setBusy(null);
     }
+  }
+
+  async function unblock(target: { commentId: string } | { reactionId: string }, name: string | null) {
+    setBusy("block");
+    setError(null);
+    try {
+      await ownerApi.unblock(target);
+      setNotice(`${name ?? "That viewer"} is unblocked. They can comment and react again.`);
+      await loadBlocked();
+    } catch (err) {
+      setError(errorMessage(err, "Unblocking didn’t work. Try again."));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  function replied(c: Comment) {
+    setComments((all) => [...all, c]);
+    setReplyTo(null);
+    setNotice("Your reply is on the watch page.");
   }
 
   const reactionList = [...reactions].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
@@ -100,7 +152,7 @@ export function ActivityPanel({ initial, allowComments }: { initial: Activity; a
         <p role="status" className="mb-4 flex items-start gap-2 rounded-2xl bg-fill px-3.5 py-3 text-sm">
           <CheckIcon size={16} className="mt-0.5 shrink-0 text-red-text" />
           <span className="flex-1">{notice}</span>
-          <button type="button" onClick={() => setNotice(null)} className="text-text-2 underline-offset-2 hover:underline">
+          <button type="button" onClick={() => setNotice(null)} className="-my-3 min-h-11 px-2 text-text-2 underline-offset-2 hover:underline">
             OK
           </button>
         </p>
@@ -145,7 +197,7 @@ export function ActivityPanel({ initial, allowComments }: { initial: Activity; a
             type="button"
             onClick={() => setShowAllReactions((s) => !s)}
             aria-expanded={showAllReactions}
-            className="mt-2 rounded text-[13px] font-semibold text-text-2 underline-offset-2 hover:text-text hover:underline focus-visible:outline-2 focus-visible:outline-sr-red"
+            className="mt-1 min-h-11 rounded text-[13px] font-semibold text-text-2 underline-offset-2 hover:text-text hover:underline focus-visible:outline-2 focus-visible:outline-sr-red"
           >
             {showAllReactions ? "Hide who reacted" : `See who reacted (${reactions.length})`}
           </button>
@@ -160,14 +212,26 @@ export function ActivityPanel({ initial, allowComments }: { initial: Activity; a
                     {r.authorName ?? "Anonymous"}
                     <span className="text-text-3"> at {formatTime(r.atS)}</span>
                   </span>
+                  {blocked.reactions.has(r.id) ? (
+                    <button
+                      type="button"
+                      onClick={() => void unblock({ reactionId: r.id }, r.authorName)}
+                      disabled={busy === "block"}
+                      className={btn("quiet", "sm", "h-8 text-[13px] pointer-coarse:h-11")}
+                      aria-label={`Unblock ${r.authorName ?? "this viewer"}`}
+                    >
+                      Blocked · Unblock
+                    </button>
+                  ) : (
                   <button
                     type="button"
                     onClick={() => setBlockTarget({ kind: "reaction", item: r })}
-                    className={btn("quiet", "sm", "h-8 text-[13px]")}
+                    className={btn("quiet", "sm", "h-8 text-[13px] pointer-coarse:h-11")}
                     aria-label={`Block ${r.authorName ?? "this viewer"}`}
                   >
                     <BlockIcon size={15} /> Block
                   </button>
+                  )}
                 </li>
               ))}
             </ul>
@@ -198,6 +262,9 @@ export function ActivityPanel({ initial, allowComments }: { initial: Activity; a
                   onCancelDelete={() => setConfirmDelete(null)}
                   onDelete={() => remove(c.id)}
                   onBlock={() => setBlockTarget({ kind: "comment", item: c })}
+                  blocked={blocked.comments.has(c.id)}
+                  onUnblock={() => void unblock({ commentId: c.id }, c.authorName)}
+                  onReply={allowComments && !c.held ? () => setReplyTo(c.id) : undefined}
                 />
                 {(replies.get(c.id)?.length ?? 0) > 0 && (
                   <ol className="ml-4 mt-3 space-y-3 border-l-2 border-line pl-4 sm:ml-11">
@@ -216,10 +283,18 @@ export function ActivityPanel({ initial, allowComments }: { initial: Activity; a
                           onCancelDelete={() => setConfirmDelete(null)}
                           onDelete={() => remove(r.id)}
                           onBlock={() => setBlockTarget({ kind: "comment", item: r })}
+                  blocked={blocked.comments.has(r.id)}
+                  onUnblock={() => void unblock({ commentId: r.id }, r.authorName)}
+                  onReply={allowComments && !r.held ? () => setReplyTo(c.id) : undefined}
                         />
                       </li>
                     ))}
                   </ol>
+                )}
+                {replyTo === c.id && (
+                  <div className="ml-4 mt-3 sm:ml-11">
+                    <OwnerReply slug={slug} parent={c} ownerName={ownerName} onDone={replied} onCancel={() => setReplyTo(null)} />
+                  </div>
                 )}
               </li>
             ))}
@@ -263,6 +338,9 @@ function CommentRow({
   onCancelDelete,
   onDelete,
   onBlock,
+  blocked,
+  onUnblock,
+  onReply,
 }: {
   c: Comment;
   reply?: boolean;
@@ -276,6 +354,9 @@ function CommentRow({
   onCancelDelete: () => void;
   onDelete: () => void;
   onBlock: () => void;
+  blocked: boolean;
+  onUnblock: () => void;
+  onReply?: () => void;
 }) {
   return (
     <article className={`flex gap-3 ${c.held ? "-mx-2 rounded-2xl bg-fill/70 p-2" : ""}`}>
@@ -289,6 +370,11 @@ function CommentRow({
               Held
             </span>
           )}
+          {blocked && (
+            <span className="rounded-full border border-line bg-surface px-1.5 py-px text-[11px] font-semibold text-text-2">
+              Blocked
+            </span>
+          )}
           <RelativeTime iso={c.createdAt} className="text-xs text-text-3" />
         </header>
         {c.held && <p className="mt-0.5 text-[13px] text-text-2">Only you can see this until you approve it.</p>}
@@ -297,7 +383,7 @@ function CommentRow({
             <button
               type="button"
               onClick={() => onSeek(c.atS!)}
-              className="mr-1.5 inline-flex rounded-md bg-red-soft px-1.5 py-px align-middle text-[13px] font-semibold tabular-nums text-red-text hover:brightness-95 focus-visible:outline-2 focus-visible:outline-sr-red"
+              className="mr-1.5 inline-flex rounded-md bg-red-soft px-1.5 py-px align-middle pointer-coarse:px-2.5 pointer-coarse:py-1.5 text-[13px] font-semibold tabular-nums text-red-text hover:brightness-95 focus-visible:outline-2 focus-visible:outline-sr-red"
               aria-label={`Play from ${spokenTime(c.atS)}`}
             >
               {formatTime(c.atS)}
@@ -309,36 +395,113 @@ function CommentRow({
           {confirming ? (
             <>
               <span className="px-2 text-[13px] text-text-2">Delete this comment{hasReplies ? " and its replies" : ""}?</span>
-              <button type="button" onClick={onDelete} disabled={deleting} className={btn("danger", "sm", "h-8")}>
+              <button type="button" onClick={onDelete} disabled={deleting} className={btn("danger", "sm", "h-8 pointer-coarse:h-11")}>
                 {deleting ? <Spinner size={14} /> : "Delete"}
               </button>
-              <button type="button" onClick={onCancelDelete} className={btn("quiet", "sm", "h-8")}>
+              <button type="button" onClick={onCancelDelete} className={btn("quiet", "sm", "h-8 pointer-coarse:h-11")}>
                 Cancel
               </button>
             </>
           ) : (
             <>
               {c.held && (
-                <button type="button" onClick={onApprove} disabled={approving} className={btn("secondary", "sm", "h-8 text-[13px]")}>
+                <button type="button" onClick={onApprove} disabled={approving} className={btn("secondary", "sm", "h-8 text-[13px] pointer-coarse:h-11")}>
                   {approving ? <Spinner size={14} /> : <CheckIcon size={15} />} Approve
                 </button>
               )}
-              <button type="button" onClick={onAskDelete} className={btn("quiet", "sm", "h-8 text-[13px]")}>
+              <button type="button" onClick={onAskDelete} className={btn("quiet", "sm", "h-8 text-[13px] pointer-coarse:h-11")}>
                 <TrashIcon size={15} /> Delete
               </button>
-              {!c.isOwner && (
-                <button
-                  type="button"
-                  onClick={onBlock}
-                  className={btn("quiet", "sm", "h-8 text-[13px]")}
-                >
-                  <BlockIcon size={15} /> Block
+              {onReply && (
+                <button type="button" onClick={onReply} className={btn("quiet", "sm", "h-8 text-[13px] pointer-coarse:h-11")}>
+                  <ReplyIcon size={15} /> Reply
                 </button>
               )}
+              {!c.isOwner &&
+                (blocked ? (
+                  <button type="button" onClick={onUnblock} className={btn("quiet", "sm", "h-8 text-[13px] pointer-coarse:h-11")}>
+                    Unblock
+                  </button>
+                ) : (
+                  <button type="button" onClick={onBlock} className={btn("quiet", "sm", "h-8 text-[13px] pointer-coarse:h-11")}>
+                    <BlockIcon size={15} /> Block
+                  </button>
+                ))}
             </>
           )}
         </div>
       </div>
     </article>
+  );
+}
+
+/** The owner answers a viewer: posted like any comment, under the owner's name, marked as the creator. */
+function OwnerReply({
+  slug,
+  parent,
+  ownerName,
+  onDone,
+  onCancel,
+}: {
+  slug: string;
+  parent: Comment;
+  ownerName: string | null;
+  onDone: (c: Comment) => void;
+  onCancel: () => void;
+}) {
+  const [body, setBody] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function send(e: FormEvent) {
+    e.preventDefault();
+    const text = body.trim();
+    if (!text) return;
+    setBusy(true);
+    setError(null);
+    try {
+      // An empty name makes the server use the account's name.
+      const c = await publicApi.comment(slug, { name: ownerName ?? "", body: text, atS: null, parentId: parent.id, website: "" });
+      onDone(c);
+    } catch (err) {
+      setError(
+        errorMessage(err, "Your reply didn’t post. Try again.").replace(
+          "Add your name.",
+          "Add your name in Account first, so viewers know who replied.",
+        ),
+      );
+      setBusy(false);
+    }
+  }
+
+  return (
+    <form onSubmit={send} className="space-y-2">
+      <label className="sr-only" htmlFor={`reply-${parent.id}`}>
+        Reply to {parent.authorName}
+      </label>
+      <textarea
+        id={`reply-${parent.id}`}
+        autoFocus
+        value={body}
+        onChange={(e) => setBody(e.target.value)}
+        rows={2}
+        maxLength={1000}
+        placeholder={`Reply to ${parent.authorName}…`}
+        className="block w-full resize-none rounded-2xl border border-line bg-canvas px-3 py-2.5 text-base leading-relaxed placeholder:text-text-3 focus:border-sr-red focus:outline-none focus:ring-2 focus:ring-sr-red/25"
+      />
+      {error && (
+        <p role="alert" className="text-sm text-red-text">
+          {error}
+        </p>
+      )}
+      <div className="flex justify-end gap-2">
+        <button type="button" onClick={onCancel} className={btn("quiet", "sm")}>
+          Cancel
+        </button>
+        <button type="submit" disabled={busy || !body.trim()} className={btn("primary", "sm", "min-w-[4.5rem]")}>
+          {busy ? <Spinner size={15} /> : "Reply"}
+        </button>
+      </div>
+    </form>
   );
 }

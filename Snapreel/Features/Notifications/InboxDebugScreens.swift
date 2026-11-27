@@ -34,11 +34,41 @@ extension DebugCatalog {
                 InboxSettingsDebugHost { StorageView(initialErase: .done) }
             },
 
+            // An edit still being written: why Share and Save to Photos wait.
+            .shell("share.actions.saving", "Video actions sheet [still saving]", tab: .library, configure: { _, library in
+                library.update(FixtureStorage.IDs.checkout) {
+                    $0.state = .saving(progress: 0.12)
+                    $0.fileSize = 0
+                    $0.pixelWidth = 0
+                    $0.pixelHeight = 0
+                    $0.thumbnailFileName = nil
+                }
+                BrowseIntent.shared.libraryTab = .videos
+                BrowseIntent.shared.librarySheet = .video(.actions(FixtureStorage.IDs.checkout))
+            }),
             DebugScreen("share.sheet", "Share sheet over the library", wait: 5) {
                 SharingDebugHost(action: .share)
             },
+            DebugScreen("share.preparing", "Share [finishing the sound]") {
+                SharingDebugHost(action: .preparing(.sound, 0.43))
+            },
+            DebugScreen("share.preparing.start", "Share [getting the video ready]") {
+                SharingDebugHost(action: .preparing(.packing, nil))
+            },
+            DebugScreen("share.smaller", "Share [making a smaller copy]") {
+                SharingDebugHost(action: .preparing(.shrinking, 0.62))
+            },
+            DebugScreen("photos.preparing", "Save to Photos [finishing the sound]") {
+                SharingDebugHost(action: .photos(.preparing(0.43)))
+            },
+            DebugScreen("photos.failed", "Save to Photos [couldn't save]", wait: 4) {
+                SharingDebugHost(action: .photos(PhotosLibraryWriter.stage(for: NSError(domain: "PHPhotosErrorDomain", code: 3302), accessDenied: false)))
+            },
             DebugScreen("photos.permission", "Save to Photos [permission]", wait: 4) {
                 SharingDebugHost(action: .photos(.permission))
+            },
+            DebugScreen("photos.again", "Save to Photos [already saved]", wait: 4) {
+                SharingDebugHost(action: .photos(.alreadySaved(1)))
             },
             DebugScreen("photos.progress", "Save to Photos [saving]") {
                 SharingDebugHost(action: .photos(.saving))
@@ -98,6 +128,8 @@ struct InboxSettingsDebugHost<Content: View>: View {
 struct SharingDebugHost: View {
     enum Action {
         case share
+        /// The card shown while a file is prepared, held at a step.
+        case preparing(ShareFlow.Card.Step, Double?)
         case photos(PhotosSaveStage)
     }
 
@@ -110,7 +142,7 @@ struct SharingDebugHost: View {
 
     var body: some View {
         DebugShellHost(tab: .library, configure: nil)
-            .shareVideo($shareTarget)
+            .modifier(ShareVideoModifier(video: $shareTarget, frozen: frozenStep, bottomInset: 72))
             // Lifted above the shell's tab bar; on a tab root the default inset is enough.
             .modifier(SaveToPhotosModifier(video: $photosTarget, initialStage: photosStage, bottomInset: 72))
             .task { await open() }
@@ -121,12 +153,17 @@ struct SharingDebugHost: View {
         return nil
     }
 
+    private var frozenStep: (step: ShareFlow.Card.Step, progress: Double?)? {
+        if case .preparing(let step, let progress) = action { return (step, progress) }
+        return nil
+    }
+
     private func open() async {
         // Let the shell finish its first layout before presenting over it.
         try? await Task.sleep(nanoseconds: 600_000_000)
         let video = library.video(videoID)
         switch action {
-        case .share: shareTarget = video
+        case .share, .preparing: shareTarget = video
         case .photos: photosTarget = video
         }
     }

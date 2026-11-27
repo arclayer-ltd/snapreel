@@ -70,3 +70,13 @@ body {
   color: var(--sr-text);
   font-family: var(--font-geist-sans), system-ui, sans-serif;
 }
+
+/* iOS Safari zooms the page into any field whose text is under 16px and leaves it zoomed. Unlayered, so it beats the
+   text-size utilities; max() keeps bigger fields as they are. */
+@media (max-width: 767px), (pointer: coarse) {
+  input,
+  textarea,
+  select {
+    font-size: max(16px, 1em);
+  }
+}

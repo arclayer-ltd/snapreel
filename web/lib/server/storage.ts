@@ -44,6 +44,21 @@ export async function listFolder(prefix: string): Promise<Map<string, number>> {
   return out;
 }
 
+// Deletes the zero-byte files directly inside a folder (an interrupted export once uploaded an empty preview).
+// They hold nothing. Returns how many were removed.
+export async function removeEmpty(prefix: string): Promise<number> {
+  const bucket = db().storage.from(BUCKET);
+  const { data, error } = await bucket.list(prefix, { limit: 1000 });
+  if (error) throw error;
+  const empty = (data ?? [])
+    .filter((item) => item.id && (item.metadata as { size?: number } | null)?.size === 0)
+    .map((item) => `${prefix}/${item.name}`);
+  if (!empty.length) return 0;
+  const removed = await bucket.remove(empty);
+  if (removed.error) throw removed.error;
+  return empty.length;
+}
+
 // Deletes every object under {userId}/ or {userId}/{videoId}/. Returns how many were removed.
 export async function removePrefix(prefix: string): Promise<number> {
   const bucket = db().storage.from(BUCKET);

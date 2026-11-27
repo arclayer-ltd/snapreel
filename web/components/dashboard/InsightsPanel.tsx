@@ -10,21 +10,43 @@ import { Avatar, RelativeTime } from "@/components/player/ui";
 import { DropoffChart } from "./DropoffChart";
 import { Card, ProBadge } from "./kit";
 
-export function InsightsPanel({ video, insights, pro }: { video: VideoDetail; insights: Insights | null; pro: boolean }) {
+export function InsightsPanel({
+  video,
+  insights,
+  pro,
+  activityCount = 0,
+}: {
+  video: VideoDetail;
+  insights: Insights | null;
+  pro: boolean;
+  /** Comments and reactions, which can come before anyone has watched long enough to count. */
+  activityCount?: number;
+}) {
   const store = usePlaybackStore();
   const views = insights?.views ?? video.views;
   const unique = insights?.uniqueViewers ?? video.uniqueViewers;
   const locked = !pro || insights?.dropoff == null;
 
   return (
-    <Card title="Insights" id="insights" description={views === 0 ? "Nobody has watched yet. Views count after 5 seconds." : undefined}>
+    <Card
+      title="Insights"
+      id="insights"
+      description={
+        views === 0
+          ? activityCount > 0
+            ? "No views counted yet. A view counts after 5 seconds of watching, so people can comment or react before it does. Your own watching never counts."
+            : "Nobody has watched yet. A view counts after 5 seconds of watching; yours never count."
+          : undefined
+      }
+    >
       <dl className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
         <Stat label="Views" value={formatCount(views)} icon={<EyeIcon size={16} />} />
         <Stat label="Unique viewers" value={formatCount(unique)} icon={<UsersIcon size={16} />} />
-        <Stat label="Average watched" value={insights?.avgPercent != null ? `${Math.round(insights.avgPercent)}%` : null} />
+        {/* With no views there is no average: a dash, not "0%". */}
+        <Stat label="Average watched" value={insights?.avgPercent != null ? (views ? `${Math.round(insights.avgPercent)}%` : "–") : null} />
         <Stat
           label="Watched to the end"
-          value={insights?.completionRate != null ? `${Math.round(insights.completionRate)}%` : null}
+          value={insights?.completionRate != null ? (views ? `${Math.round(insights.completionRate)}%` : "–") : null}
         />
       </dl>
 

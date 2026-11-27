@@ -1,28 +1,29 @@
 "use client";
 
 // Small building blocks shared by the watch page, login and dashboard.
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { formatRelative, initials, nameHue } from "@/lib/client/format";
 import { CheckIcon, CloseIcon, LinkIcon } from "./icons";
+import "./player.css";
 import { btn, type ButtonSize, type ButtonVariant } from "./ui-classes";
 
 export { btn };
 
 export function Avatar({ name, size = 32, owner = false }: { name: string | null; size?: number; owner?: boolean }) {
   const hue = nameHue(name);
+  const colours: Record<string, string> = owner
+    ? { "--av-bg": "var(--sr-red-deep)", "--av-ink": "#fff" }
+    : {
+        "--av-bg": `hsl(${hue} 70% 91%)`,
+        "--av-ink": `hsl(${hue} 62% 27%)`,
+        "--av-bg-dark": `hsl(${hue} 32% 26%)`,
+        "--av-ink-dark": `hsl(${hue} 85% 86%)`,
+      };
   return (
     <span
       aria-hidden="true"
-      className="inline-flex shrink-0 select-none items-center justify-center rounded-full font-semibold"
-      style={{
-        width: size,
-        height: size,
-        fontSize: Math.round(size * 0.38),
-        background: owner
-          ? "var(--sr-red-deep)"
-          : `light-dark(hsl(${hue} 70% 91%), hsl(${hue} 32% 26%))`,
-        color: owner ? "#fff" : `light-dark(hsl(${hue} 62% 27%), hsl(${hue} 85% 86%))`,
-      }}
+      className="sr-avatar inline-flex shrink-0 select-none items-center justify-center rounded-full font-semibold"
+      style={{ width: size, height: size, fontSize: Math.round(size * 0.38), ...colours } as CSSProperties}
     >
       {initials(name)}
     </span>
@@ -45,7 +46,30 @@ export function RelativeTime({ iso, className }: { iso: string; className?: stri
   );
 }
 
-/** A native modal dialog: Escape and the backdrop close it, focus is trapped by the browser. */
+// Background scroll lock. iOS Safari keeps scrolling a page behind a dialog whatever `overflow` says, so the body is
+// pinned where it is and put back on close.
+let locks = 0;
+let lockedAt = 0;
+
+function lockScroll(): () => void {
+  locks += 1;
+  if (locks === 1) {
+    lockedAt = window.scrollY;
+    Object.assign(document.body.style, { position: "fixed", top: `-${lockedAt}px`, left: "0", right: "0" });
+  }
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    locks -= 1;
+    if (locks > 0) return;
+    Object.assign(document.body.style, { position: "", top: "", left: "", right: "" });
+    window.scrollTo({ top: lockedAt, behavior: "instant" });
+  };
+}
+
+/** A native modal dialog: Escape, the close button and the backdrop close it, focus is trapped by the browser. On
+ *  phones it's a sheet above the keyboard that scrolls inside. */
 export function Dialog({
   open,
   onClose,
@@ -60,12 +84,45 @@ export function Dialog({
   wide?: boolean;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
+  const titleId = useId();
+
   useEffect(() => {
     const d = ref.current;
     if (!d) return;
     if (open && !d.open) d.showModal();
     if (!open && d.open) d.close();
+    if (!open) return;
+
+    const unlock = lockScroll();
+    const vv = window.visualViewport;
+    const fit = () => {
+      // Pinch-zoomed: leave the sheet where it is and let people pan around it.
+      if (!vv || vv.scale > 1.02) return;
+      d.style.setProperty("--vv-height", `${vv.height}px`);
+      d.style.setProperty("--vv-top", `${vv.offsetTop}px`);
+      d.toggleAttribute("data-keyboard", window.innerHeight - vv.height > 120);
+    };
+    // Once the keyboard is up, bring the field being typed in into the part that's left.
+    let timer = 0;
+    const onFocus = (e: FocusEvent) => {
+      const field = e.target;
+      if (!(field instanceof HTMLElement) || !field.matches("textarea, input:not([type=radio]):not([type=checkbox])")) return;
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => field.scrollIntoView({ block: "center" }), 320);
+    };
+    fit();
+    vv?.addEventListener("resize", fit);
+    vv?.addEventListener("scroll", fit);
+    d.addEventListener("focusin", onFocus);
+    return () => {
+      unlock();
+      window.clearTimeout(timer);
+      vv?.removeEventListener("resize", fit);
+      vv?.removeEventListener("scroll", fit);
+      d.removeEventListener("focusin", onFocus);
+    };
   }, [open]);
+
   return (
     <dialog
       ref={ref}
@@ -77,21 +134,26 @@ export function Dialog({
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
-      aria-labelledby="sr-dialog-title"
-      className={`m-auto w-[calc(100%-2rem)] ${wide ? "max-w-lg" : "max-w-md"} rounded-3xl border border-line bg-surface p-0 text-text shadow-[0_24px_80px_rgb(0_0_0/0.35)] backdrop:bg-black/55 backdrop:backdrop-blur-[2px]`}
+      aria-labelledby={titleId}
+      className={`sr-dialog ${wide ? "max-w-lg" : "max-w-md"} border border-line bg-surface p-0 text-text shadow-[0_24px_80px_rgb(0_0_0/0.35)]`}
     >
       {open && (
-        <div className="p-5 sm:p-6">
-          <div className="mb-4 flex items-start justify-between gap-4">
-            <h2 id="sr-dialog-title" className="text-lg font-semibold leading-snug">
+        <>
+          <div className="flex shrink-0 items-center justify-between gap-4 px-5 pb-2 pt-4 sm:px-6 sm:pt-5">
+            <h2 id={titleId} className="text-lg font-semibold leading-snug">
               {title}
             </h2>
-            <button type="button" onClick={onClose} className={btn("quiet", "sm", "-mr-2 -mt-1 w-9 px-0")} aria-label="Close">
+            <button
+              type="button"
+              onClick={onClose}
+              className="-mr-2.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-text-2 hover:bg-fill hover:text-text focus-visible:outline-2 focus-visible:outline-sr-red"
+              aria-label="Close"
+            >
               <CloseIcon size={18} />
             </button>
           </div>
-          {children}
-        </div>
+          <div className="sr-dialog-body px-5 pb-5 pt-1 sm:px-6 sm:pb-6">{children}</div>
+        </>
       )}
     </dialog>
   );

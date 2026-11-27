@@ -46,6 +46,7 @@ struct PlayerScreen: View {
 
     init(presentation: PlayerPresentation) {
         var initial = PlayerInitialState()
+        if presentation.startsPaused { initial.autoplay = false }
         if presentation.opensTranscript {
             // From a "transcript ready" notification: land on what it announced.
             initial.panel = .transcript
@@ -284,6 +285,7 @@ struct PlayerScreen: View {
                              onShare: { shareTarget = video },
                              onMore: { sheet = .actions(confirmingDelete: false) },
                              onEditTitle: { sheet = .title },
+                             onEditVideo: { router.edit(video.id) },
                              onStats: { sheet = .stats },
                              onSaveToPhotos: { photosTarget = video },
                              onToggleWatchLater: { chooseAction(.toggleWatchLater) },

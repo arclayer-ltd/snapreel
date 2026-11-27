@@ -68,7 +68,20 @@ enum AppLinks {
         let environment = AppEnvironment.shared
         guard let link = environment.library.links.values.first(where: { $0.slug == slug }),
               let video = environment.library.video(link.videoID), video.state.isReady else { return false }
-        environment.router.open(videoID: video.id)
+        let router = environment.router
+        guard let showing = router.player, showing.videoID != video.id else {
+            router.open(videoID: video.id)
+            return true
+        }
+        // The player shows another recording: close it (and its playback, saving how far that one got) and open
+        // this one in a new player. Swapping the video in the open player kept the old picture playing under the
+        // new title, and counted its watching for this recording (tester t26-link, S2).
+        PlaybackSession.shared.close()
+        router.closePlayer()
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 600_000_000)
+            router.open(videoID: video.id)
+        }
         return true
     }
 }
@@ -95,6 +108,8 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
     func application(_ application: UIApplication,
                      didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         UNUserNotificationCenter.current().delegate = self
+        // Share-link uploads that still need Snapreel (must be registered before launching ends).
+        UploadBackground.register()
         Task { @MainActor in
             RecordingLiveActivity.startObserving()
             if AppEnvironment.shared.debugScreenID == nil { CloudServices.start() }

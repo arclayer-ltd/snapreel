@@ -17,11 +17,11 @@ import {
 } from "react";
 import type { Reaction, Transcript, VideoKind } from "@/lib/contract";
 import { formatTime, spokenTime } from "@/lib/client/format";
+import { SITE_URL } from "@/lib/client/links";
 import { emojiName } from "./emoji";
 import {
   Back5Icon,
   CaptionsIcon,
-  CheckIcon,
   ExitFullscreenIcon,
   Forward5Icon,
   FullscreenIcon,
@@ -35,12 +35,18 @@ import {
   VolumeIcon,
 } from "./icons";
 import { usePlaybackStore } from "./playback";
-import styles from "./player.module.css";
+import "./player.css";
 import { Waveform } from "./Waveform";
 
 export const SPEEDS = [1, 1.25, 1.5, 2] as const;
 const SKIP = 5;
 const HIDE_AFTER_MS = 2600;
+/** Room for one 13px emoji on the scrubber, with a gap. */
+const MARK_WIDTH = 20;
+/** Waiting this long with nothing arriving means the connection or the signed link died: pick it up again. */
+const STALLED_AFTER_MS = 15_000;
+/** Automatic recoveries closer together than this show the message instead. */
+const RECOVER_EVERY_MS = 20_000;
 
 interface Cue {
   start: number;
@@ -66,8 +72,10 @@ export interface PlayerProps {
   variant?: "page" | "embed" | "preview";
   /** Shown under Replay when the video ends (the call-to-action). */
   endScreen?: ReactNode;
-  /** Float viewers' reactions up as playback passes them. */
+  /** Show viewers' reactions beside the reaction buttons as playback passes them. */
   floatReactions?: boolean;
+  /** Fetch a fresh signed address for the video (they last 2 hours). Resolves true if `src` will change. */
+  onRefresh?: () => Promise<boolean>;
   /** Overlay at the top of the picture (the embed's title). */
   topOverlay?: ReactNode;
 }
@@ -110,6 +118,7 @@ type WebkitVideo = HTMLVideoElement & {
   webkitSupportsPresentationMode?: (mode: string) => boolean;
   webkitSetPresentationMode?: (mode: string) => void;
   webkitPresentationMode?: string;
+  webkitDisplayingFullscreen?: boolean;
 };
 
 export function Player({
@@ -128,6 +137,7 @@ export function Player({
   variant = "page",
   endScreen,
   floatReactions = false,
+  onRefresh,
   topOverlay,
 }: PlayerProps) {
   const store = usePlaybackStore();
@@ -138,6 +148,11 @@ export function Player({
   const hideTimer = useRef<number | undefined>(undefined);
   const lastTap = useRef<{ at: number; x: number } | null>(null);
   const menuId = useId();
+  // What the viewer asked for, whatever the network is doing: it decides whether a recovery starts playing again.
+  const wantsPlay = useRef(false);
+  const resume = useRef<{ at: number; play: boolean } | null>(null);
+  const recoveredAt = useRef(-Infinity);
+  const autoStarted = useRef(false);
 
   const isAudio = kind === "audio" || width === 0 || height === 0;
   const ratio = isAudio ? 16 / 9 : width / height;
@@ -163,10 +178,10 @@ export function Player({
   const [menuOpen, setMenuOpen] = useState(false);
   const [scrub, setScrub] = useState<number | null>(null);
   const [hud, setHud] = useState<{ key: number; text: string } | null>(null);
-  const [bursts, setBursts] = useState<{ id: number; emoji: string; x: number }[]>([]);
   const [ripple, setRipple] = useState<{ key: number; side: "left" | "right" } | null>(null);
   const [autoMuted, setAutoMuted] = useState(false);
   const [failed, setFailed] = useState(false);
+  const [recovering, setRecovering] = useState(false);
 
   const cues = useMemo(() => vttCues ?? transcriptCues(transcript), [vttCues, transcript]);
   const hasCaptions = cues.length > 0;
@@ -174,8 +189,7 @@ export function Player({
   const activeCue = captionsOn ? cues.find((c) => shownTime >= c.start && shownTime < c.end) : undefined;
   const visible = controlsShown || !playing || menuOpen || scrub !== null || !started;
 
-  // Feature detection runs on the client only, so the server and first client render agree.
-  useEffect(() => {
+  const checkPip = useCallback(() => {
     const v = videoRef.current as WebkitVideo | null;
     setCanPip(
       !isAudio &&
@@ -183,16 +197,27 @@ export function Player({
         ((document.pictureInPictureEnabled && !v.disablePictureInPicture) ||
           !!v.webkitSupportsPresentationMode?.("picture-in-picture")),
     );
+  }, [isAudio]);
+
+  // Feature detection runs on the client only, so the server and first client render agree.
+  useEffect(() => {
+    const v = videoRef.current as WebkitVideo | null;
+    checkPip();
     setCanFullscreen(document.fullscreenEnabled || (!isAudio && typeof v?.webkitEnterFullscreen === "function"));
     setFinePointer(window.matchMedia("(pointer: fine)").matches);
     setCaptionsOn(readStoredCaptions());
-  }, [isAudio]);
+    try {
+      if (v && localStorage.getItem("sr_muted") === "on") v.muted = true;
+    } catch {}
+  }, [isAudio, checkPip]);
 
-  // Captions come from the WebVTT file when there is one, otherwise from the transcript.
+  // Captions come from the WebVTT file when there is one, otherwise from the transcript. The API gives the address on
+  // snapreel.video; asked for from this page's own address it works on www and preview addresses too.
+  const captionsSrc = captionsUrl?.startsWith(`${SITE_URL}/`) ? captionsUrl.slice(SITE_URL.length) : captionsUrl;
   useEffect(() => {
-    if (!captionsUrl) return;
+    if (!captionsSrc) return;
     let cancelled = false;
-    fetch(captionsUrl, { credentials: "same-origin" })
+    fetch(captionsSrc, { credentials: "same-origin" })
       .then((r) => (r.ok ? r.text() : Promise.reject(new Error(String(r.status)))))
       .then((text) => {
         if (!cancelled) setVttCues(parseVtt(text));
@@ -201,7 +226,11 @@ export function Player({
     return () => {
       cancelled = true;
     };
-  }, [captionsUrl]);
+  }, [captionsSrc]);
+
+  const onTrackWidth = useCallback((w: number) => {
+    trackWidthRef.current = w;
+  }, []);
 
   const flash = useCallback((text: string) => setHud({ key: Date.now(), text }), []);
 
@@ -216,27 +245,110 @@ export function Player({
   const play = useCallback(async () => {
     const v = videoRef.current;
     if (!v || !src) return;
+    wantsPlay.current = true;
     if (v.ended) v.currentTime = 0;
+    // Nothing to show yet: say so straight away instead of sitting there until "waiting" fires.
+    if (v.readyState < HTMLMediaElement.HAVE_FUTURE_DATA) setWaiting(true);
     try {
       await v.play();
     } catch (err) {
-      if (err instanceof DOMException && err.name === "NotAllowedError") {
-        v.muted = true;
-        setMuted(true);
+      if (!(err instanceof DOMException) || err.name !== "NotAllowedError") return;
+      v.muted = true;
+      try {
+        await v.play();
         setAutoMuted(true);
-        await v.play().catch(() => {});
+      } catch {
+        // Not even muted (Low Power Mode): wait for a tap, with the sound on.
+        v.muted = false;
+        wantsPlay.current = false;
+        setWaiting(false);
       }
     }
   }, [src]);
 
-  const pause = useCallback(() => videoRef.current?.pause(), []);
+  const pause = useCallback(() => {
+    wantsPlay.current = false;
+    videoRef.current?.pause();
+  }, []);
 
   const toggle = useCallback(() => {
     const v = videoRef.current;
     if (!v) return;
     if (v.paused || v.ended) void play();
-    else v.pause();
-  }, [play]);
+    else pause();
+  }, [play, pause]);
+
+  // Carries on from where it was after an expired link or a dropped connection.
+  const recover = useCallback(async () => {
+    const v = videoRef.current;
+    if (!v) return;
+    recoveredAt.current = performance.now();
+    resume.current = { at: lastTimeRef.current, play: wantsPlay.current };
+    setFailed(false);
+    setRecovering(true);
+    try {
+      const changes = (await onRefresh?.()) ?? false;
+      // A new address reloads by itself when React sets it; the same one needs telling.
+      if (!changes) v.load();
+    } catch {
+      resume.current = null;
+      setRecovering(false);
+      setFailed(true);
+    }
+  }, [onRefresh]);
+
+  const broke = useCallback(() => {
+    setWaiting(false);
+    if (navigator.onLine && performance.now() - recoveredAt.current > RECOVER_EVERY_MS) {
+      void recover();
+      return;
+    }
+    resume.current = null;
+    setRecovering(false);
+    setFailed(true);
+  }, [recover]);
+
+  // Back online after the message: carry on without being asked.
+  useEffect(() => {
+    if (!failed) return;
+    const onOnline = () => void recover();
+    window.addEventListener("online", onOnline);
+    return () => window.removeEventListener("online", onOnline);
+  }, [failed, recover]);
+
+  // Stuck: waiting while playing (or reconnecting), and not one more byte for a while.
+  const stuckable = (waiting && playing) || recovering;
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!stuckable || !v) return;
+    let id = 0;
+    const arm = () => {
+      window.clearTimeout(id);
+      id = window.setTimeout(broke, STALLED_AFTER_MS);
+    };
+    arm();
+    v.addEventListener("progress", arm);
+    return () => {
+      window.clearTimeout(id);
+      v.removeEventListener("progress", arm);
+    };
+  }, [stuckable, broke]);
+
+  // Coming back to the tab or the app: iOS pauses in the background without always saying so.
+  useEffect(() => {
+    const onVisible = () => {
+      const v = videoRef.current;
+      if (!v || document.visibilityState !== "visible") return;
+      setPlaying(!v.paused && !v.ended);
+      setTime(v.currentTime);
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("pageshow", onVisible);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("pageshow", onVisible);
+    };
+  }, []);
 
   const seekTo = useCallback(
     (t: number, andPlay = false) => {
@@ -270,16 +382,6 @@ export function Player({
     return () => store.attach(null);
   }, [store, seekTo, play, pause]);
 
-  // Reaction bursts asked for by the reaction bar.
-  useEffect(
-    () =>
-      store.onBurst((emoji) => {
-        const id = Date.now() + Math.random();
-        setBursts((b) => [...b.slice(-6), { id, emoji, x: 35 + Math.random() * 30 }]);
-      }),
-    [store],
-  );
-
   // Smooth time while playing: move the scrubber about once per pixel.
   useEffect(() => {
     if (!playing) return;
@@ -302,7 +404,9 @@ export function Player({
     (e: KeyboardEvent | ReactKeyboardEvent, scoped: boolean) => {
       if (e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey) return;
       const target = e.target instanceof Element ? e.target : null;
-      if (target?.closest("input, textarea, select, [contenteditable='true'], [role='slider'], [role='menu']")) return;
+      if (target?.closest("input, textarea, select, [contenteditable='true'], [role='menu']")) return;
+      // The seek bar moves itself with the arrows; m, c, f and the rest still work while it has focus.
+      if (target?.closest("[role='slider']") && /^(Arrow|Home|End|Page)/.test(e.key)) return;
       if (document.querySelector("dialog[open]")) return;
       const onControl = !!target?.closest("button, a, summary, [role='button']");
       const inPlayer = scoped || (!!target && !!containerRef.current?.contains(target));
@@ -362,26 +466,58 @@ export function Player({
     return () => window.removeEventListener("keydown", onKey);
   }, [handleKey, variant]);
 
-  // Full screen and picture in picture state.
+  // Full screen and picture in picture state. iPhone Safari has its own events for both, and its full screen player
+  // pauses on the way out and draws captions itself.
+  const captionsOnRef = useRef(false);
   useEffect(() => {
-    const v = videoRef.current;
+    captionsOnRef.current = captionsOn;
+  }, [captionsOn]);
+  useEffect(() => {
+    const v = videoRef.current as WebkitVideo | null;
     const onFs = () => setFullscreen(document.fullscreenElement === containerRef.current);
     const onPipIn = () => setPip(true);
     const onPipOut = () => setPip(false);
+    const onMode = () => setPip(v?.webkitPresentationMode === "picture-in-picture");
+    const setTracks = (mode: TextTrackMode) => {
+      for (const track of Array.from(v?.textTracks ?? [])) track.mode = mode;
+    };
+    let playedAt = -Infinity; // the last moment it was seen playing in the native player
+    let timer = 0;
+    const onNativeIn = () => setTracks(captionsOnRef.current ? "showing" : "hidden");
+    const onNativeTime = () => {
+      if (v?.webkitDisplayingFullscreen && !v.paused) playedAt = performance.now();
+    };
+    const onNativeOut = () => {
+      setTracks("hidden");
+      // Playing up to the moment Done was tapped: iOS pauses it, so start it again.
+      if (!v?.ended && performance.now() - playedAt < 900) {
+        timer = window.setTimeout(() => void v?.play().catch(() => {}), 250);
+      }
+    };
     document.addEventListener("fullscreenchange", onFs);
     v?.addEventListener("enterpictureinpicture", onPipIn);
     v?.addEventListener("leavepictureinpicture", onPipOut);
+    v?.addEventListener("webkitpresentationmodechanged", onMode);
+    v?.addEventListener("webkitbeginfullscreen", onNativeIn);
+    v?.addEventListener("webkitendfullscreen", onNativeOut);
+    v?.addEventListener("timeupdate", onNativeTime);
     return () => {
+      window.clearTimeout(timer);
       document.removeEventListener("fullscreenchange", onFs);
       v?.removeEventListener("enterpictureinpicture", onPipIn);
       v?.removeEventListener("leavepictureinpicture", onPipOut);
+      v?.removeEventListener("webkitpresentationmodechanged", onMode);
+      v?.removeEventListener("webkitbeginfullscreen", onNativeIn);
+      v?.removeEventListener("webkitendfullscreen", onNativeOut);
+      v?.removeEventListener("timeupdate", onNativeTime);
     };
   }, []);
 
-  // Autoplay once an upload has finished.
+  // Autoplay once an upload has finished (and only then: a refreshed address must not start a paused video).
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- starting playback is the point; play() may fall back to muted
-    if (autoStart && src) void play();
+    if (!autoStart || !src || autoStarted.current) return;
+    autoStarted.current = true;
+    void play();
   }, [autoStart, src, play]);
 
   // Lock Screen and headset controls.
@@ -409,11 +545,26 @@ export function Player({
       } else if (document.fullscreenEnabled && el) {
         await el.requestFullscreen({ navigationUI: "hide" });
       } else {
-        v?.webkitEnterFullscreen?.();
+        enterNative(v);
       }
     } catch {
-      v?.webkitEnterFullscreen?.();
+      enterNative(v);
     }
+  }
+
+  // iPhone: the native player only opens once the video's details have loaded.
+  function enterNative(v: WebkitVideo | null) {
+    if (!v?.webkitEnterFullscreen) return;
+    try {
+      if (v.readyState >= HTMLMediaElement.HAVE_METADATA) {
+        v.webkitEnterFullscreen();
+        return;
+      }
+    } catch {
+      // Falls through to the message.
+    }
+    void play();
+    flash("Still loading. Try full screen again in a moment");
   }
 
   async function togglePip() {
@@ -448,6 +599,10 @@ export function Player({
     if (!v) return;
     v.muted = !v.muted;
     if (!v.muted && v.volume === 0) v.volume = 0.6;
+    // Kept like captions; muting by the browser's autoplay rule isn't the viewer's choice, so it isn't kept.
+    try {
+      localStorage.setItem("sr_muted", v.muted ? "on" : "off");
+    } catch {}
     setAutoMuted(false);
     flash(v.muted ? "Muted" : "Sound on");
   }
@@ -498,6 +653,7 @@ export function Player({
   }
 
   const progress = duration > 0 ? shownTime / duration : 0;
+  const busy = recovering || (waiting && (playing || !started));
 
   // Audio has no picture to fit, so it gets a taller stage on phones for the waveform and controls.
   const audioShape = isAudio && variant !== "embed" && !fullscreen ? "aspect-[4/3] sm:aspect-video" : "";
@@ -506,7 +662,7 @@ export function Player({
       ? "h-full w-full"
       : variant === "preview"
         ? "w-full max-h-[56svh] rounded-2xl"
-        : "w-full max-h-[72svh] sm:rounded-2xl lg:max-h-[calc(100svh-11rem)]";
+        : "w-full max-h-[max(24rem,calc(100svh-9.5rem))] max-lg:landscape:max-h-[calc(100svh-4rem)] sm:rounded-2xl lg:max-h-[calc(100svh-11rem)]";
 
   return (
     <div
@@ -540,7 +696,8 @@ export function Player({
       <video
         ref={videoRef}
         className={`absolute inset-0 h-full w-full object-contain ${isAudio ? "opacity-0" : ""}`}
-        src={src ?? undefined}
+        // No poster (it can be missing): iOS only draws a first frame when asked for a moment after 0.
+        src={src ? (poster || isAudio ? src : `${src}#t=0.001`) : undefined}
         poster={poster ?? undefined}
         preload="metadata"
         playsInline
@@ -552,6 +709,15 @@ export function Player({
             store.update({ duration: d });
           }
           for (const track of Array.from(e.currentTarget.textTracks)) track.mode = "hidden";
+          checkPip();
+          e.currentTarget.playbackRate = rate;
+          const back = resume.current;
+          if (back) {
+            resume.current = null;
+            setRecovering(false);
+            if (back.at > 0) e.currentTarget.currentTime = back.at;
+            if (back.play) void play();
+          }
         }}
         onPlay={() => {
           setPlaying(true);
@@ -560,20 +726,32 @@ export function Player({
           store.update({ playing: true, started: true });
           poke();
         }}
-        onPause={() => {
+        onPause={(e) => {
+          // Paused from the Lock Screen, a headset or the native player too, but not by a reload or an error.
+          if (!resume.current && !e.currentTarget.error) wantsPlay.current = false;
           setPlaying(false);
           store.update({ playing: false });
         }}
         onWaiting={() => setWaiting(true)}
+        onSeeking={(e) => {
+          if (e.currentTarget.readyState < HTMLMediaElement.HAVE_FUTURE_DATA) setWaiting(true);
+        }}
+        onSeeked={(e) => {
+          if (e.currentTarget.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA) setWaiting(false);
+        }}
         onPlaying={() => setWaiting(false)}
         onCanPlay={() => setWaiting(false)}
         onEnded={() => {
+          wantsPlay.current = false;
+          setWaiting(false);
           setEnded(true);
           setPlaying(false);
           store.update({ playing: false });
         }}
         onTimeUpdate={(e) => {
           const v = e.currentTarget;
+          // A reload resets the time to 0 before anything is there: keep the place for the recovery.
+          if (v.readyState === HTMLMediaElement.HAVE_NOTHING) return;
           const t = v.currentTime;
           const prev = lastTimeRef.current;
           lastTimeRef.current = t;
@@ -586,7 +764,12 @@ export function Player({
         }}
         onProgress={(e) => {
           const v = e.currentTarget;
-          if (v.buffered.length) setBuffered(v.buffered.end(v.buffered.length - 1));
+          // The stretch around the playhead: after a seek there can be several.
+          let end = 0;
+          for (let i = 0; i < v.buffered.length; i++) {
+            if (v.buffered.start(i) <= v.currentTime + 0.5) end = Math.max(end, v.buffered.end(i));
+          }
+          setBuffered(end);
         }}
         onRateChange={(e) => setRate(e.currentTarget.playbackRate)}
         onVolumeChange={(e) => {
@@ -594,10 +777,10 @@ export function Player({
           setVolume(e.currentTarget.volume);
         }}
         onError={() => {
-          if (src) setFailed(true);
+          if (src) broke();
         }}
       >
-        {captionsUrl && <track kind="captions" src={captionsUrl} srcLang={transcript?.locale?.slice(0, 2) ?? "en"} label="Captions" />}
+        {captionsSrc && <track kind="captions" src={captionsSrc} srcLang={transcript?.locale?.slice(0, 2) ?? "en"} label="Captions" />}
       </video>
 
       {isAudio && (
@@ -632,38 +815,29 @@ export function Player({
         aria-hidden="true"
       />
 
-      {/* Captions */}
-      {activeCue && (
+      {/* Captions: low down while the controls are hidden; at the top while they show, so they never cover the play
+          button or the centre controls. None before the start or on the end screen. */}
+      {activeCue && started && !ended && (
         <div
-          className={`pointer-events-none absolute inset-x-0 z-20 flex justify-center px-4 transition-[bottom] duration-200 motion-reduce:transition-none ${
-            visible ? "bottom-[5.75rem]" : "bottom-5"
+          className={`pointer-events-none absolute inset-x-0 z-20 flex justify-center px-4 ${
+            visible ? (topOverlay ? "top-14" : "top-2") : "bottom-5"
           }`}
         >
-          <p className="max-w-[min(90%,46rem)] whitespace-pre-line rounded-lg bg-black/78 px-3 py-1.5 text-center text-[15px] font-medium leading-snug text-white sm:text-lg">
+          <p
+            className={`max-w-[min(90%,46rem)] whitespace-pre-line rounded-lg bg-black/78 text-center font-medium leading-snug text-white ${
+              visible ? "px-2.5 py-1 text-[13px] sm:text-[15px]" : "px-3 py-1.5 text-[15px] sm:text-lg"
+            }`}
+          >
             {activeCue.text}
           </p>
         </div>
       )}
 
-      {/* Floating reactions */}
-      <div className="pointer-events-none absolute inset-0 z-20 overflow-hidden" aria-hidden="true">
-        {bursts.map((b) => (
-          <span
-            key={b.id}
-            className={styles.burst}
-            style={{ left: `${b.x}%` }}
-            onAnimationEnd={() => setBursts((all) => all.filter((x) => x.id !== b.id))}
-          >
-            {b.emoji}
-          </span>
-        ))}
-      </div>
-
       {/* Double-tap skip ripple */}
       {ripple && (
         <div
           key={ripple.key}
-          className={`${styles.ripple} pointer-events-none absolute top-1/2 z-20 flex h-28 w-28 items-center justify-center rounded-full bg-white/20 ${
+          className={`sr-ripple pointer-events-none absolute top-1/2 z-20 flex h-28 w-28 items-center justify-center rounded-full bg-white/20 ${
             ripple.side === "left" ? "left-[8%]" : "right-[8%]"
           }`}
           onAnimationEnd={() => setRipple(null)}
@@ -674,9 +848,9 @@ export function Player({
       )}
 
       {/* Centre transport, as in the app */}
-      {!ended && !failed && (
+      {!ended && !failed && !menuOpen && (
         <div
-          className={`pointer-events-none absolute inset-0 z-20 flex items-center justify-center gap-6 transition-opacity duration-200 motion-reduce:transition-none sm:gap-9 ${
+          className={`pointer-events-none absolute inset-0 z-20 flex items-center justify-center gap-6 pb-14 transition-opacity duration-200 motion-reduce:transition-none sm:gap-9 ${
             visible ? "opacity-100" : "opacity-0"
           }`}
         >
@@ -692,10 +866,10 @@ export function Player({
             className={`pointer-events-auto flex h-[68px] w-[68px] items-center justify-center rounded-full text-white shadow-[0_8px_30px_rgb(0_0_0/0.35)] backdrop-blur-md transition-transform duration-150 hover:scale-105 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white motion-reduce:transition-none ${
               started ? "bg-black/40" : "bg-[var(--accent-strong,#d32434)]"
             }`}
-            aria-label={playing ? "Pause" : started ? "Play" : `Play ${title}`}
+            aria-label={playing ? (busy ? "Pause (loading)" : "Pause") : started ? "Play" : `Play ${title}`}
           >
-            {waiting && playing ? (
-              <span className={`${styles.spinner} block h-8 w-8 rounded-full border-[3px] border-white/30 border-t-white`} />
+            {busy ? (
+              <span className={`sr-spinner block h-8 w-8 rounded-full border-[3px] border-white/30 border-t-white`} />
             ) : playing ? (
               <PauseIcon size={30} />
             ) : (
@@ -711,9 +885,9 @@ export function Player({
       )}
 
       {/* Buffering, when the controls are hidden */}
-      {waiting && playing && !visible && (
+      {busy && !visible && (
         <span
-          className={`${styles.spinner} pointer-events-none absolute left-1/2 top-1/2 z-20 -ml-5 -mt-5 block h-10 w-10 rounded-full border-[3px] border-white/25 border-t-white`}
+          className={`sr-spinner pointer-events-none absolute left-1/2 top-1/2 z-20 -ml-5 -mt-5 block h-10 w-10 rounded-full border-[3px] border-white/25 border-t-white`}
           aria-hidden="true"
         />
       )}
@@ -722,14 +896,14 @@ export function Player({
       {hud && (
         <div
           key={hud.key}
-          className={`${styles.hud} pointer-events-none absolute left-1/2 top-5 z-30 -translate-x-1/2 rounded-full bg-black/70 px-3.5 py-1.5 text-[13px] font-semibold`}
+          className={`sr-hud pointer-events-none absolute left-1/2 top-5 z-30 -translate-x-1/2 rounded-full bg-black/70 px-3.5 py-1.5 text-[13px] font-semibold`}
           onAnimationEnd={() => setHud(null)}
         >
           {hud.text}
         </div>
       )}
       <p className="sr-only" aria-live="polite">
-        {hud?.text ?? ""}
+        {hud?.text ?? (recovering ? "Reconnecting" : busy && playing ? "Loading" : "")}
       </p>
 
       {/* Muted autoplay */}
@@ -744,10 +918,10 @@ export function Player({
         </button>
       )}
 
-      {/* Bottom bar */}
+      {/* Bottom bar. Only the controls take taps: on a phone the shade above them reaches over the play button. */}
       <div
-        className={`absolute inset-x-0 bottom-0 z-30 bg-gradient-to-t from-black/75 via-black/35 to-transparent px-2 pb-1.5 pt-12 transition-opacity duration-200 motion-reduce:transition-none sm:px-3 sm:pb-2 ${
-          visible ? "opacity-100" : "pointer-events-none opacity-0"
+        className={`pointer-events-none absolute inset-x-0 bottom-0 z-30 bg-gradient-to-t from-black/75 via-black/40 to-transparent px-2 pb-1 pt-10 transition-opacity duration-200 motion-reduce:transition-none sm:px-3 sm:pb-2 ${
+          visible ? "opacity-100 *:pointer-events-auto" : "opacity-0"
         }`}
       >
         <Scrubber
@@ -755,7 +929,7 @@ export function Player({
           duration={duration}
           buffered={buffered}
           reactions={reactions}
-          onWidth={(w) => (trackWidthRef.current = w)}
+          onWidth={onTrackWidth}
           onScrub={(t) => {
             setScrub(t);
             poke();
@@ -765,17 +939,18 @@ export function Player({
             seekTo(t);
           }}
           onKeySeek={(t) => seekTo(t)}
+          onKeyToggle={toggle}
           tabbable={visible}
         />
-        <div className="mt-0.5 flex items-center gap-1">
-          <span className="px-1.5 text-[13px] font-medium tabular-nums text-white/90">
+        <div className="flex items-center gap-1">
+          <span className="whitespace-nowrap px-1.5 text-[13px] font-medium tabular-nums text-white/90">
             {formatTime(shownTime)} <span className="text-white/55">/ {formatTime(duration)}</span>
           </span>
           <div className="ml-auto flex items-center gap-0.5">
-            <div className="relative">
+            <div>
               <button
                 type="button"
-                className="flex h-9 items-center gap-1 rounded-full px-2.5 text-[13px] font-semibold tabular-nums text-white hover:bg-white/15 focus-visible:outline-2 focus-visible:outline-white"
+                className="flex h-11 items-center gap-1 rounded-full px-2 text-[13px] font-semibold tabular-nums text-white hover:bg-white/15 focus-visible:outline-2 focus-visible:outline-white"
                 aria-haspopup="menu"
                 aria-expanded={menuOpen}
                 aria-controls={menuId}
@@ -783,7 +958,7 @@ export function Player({
                 onClick={() => setMenuOpen((o) => !o)}
                 tabIndex={visible ? 0 : -1}
               >
-                <SpeedIcon size={16} />
+                <SpeedIcon size={16} className="max-[359px]:hidden" />
                 {rate}×
               </button>
               {menuOpen && <SpeedMenu id={menuId} rate={rate} onPick={setSpeed} onClose={() => setMenuOpen(false)} />}
@@ -826,33 +1001,39 @@ export function Player({
         </div>
       </div>
 
-      {/* End screen */}
-      {ended && (
-        <div className="absolute inset-0 z-40 flex flex-col items-center justify-center gap-4 bg-black/60 p-6 text-center backdrop-blur-sm">
+      {/* End screen: the last frame stays, dimmed, and the scrubber stays in reach (it sits above this). */}
+      {ended && !failed && (
+        <div className="absolute inset-0 z-[25] flex flex-wrap content-center items-center justify-center gap-3 bg-black/55 px-6 pb-20 pt-4 text-center">
           <button
             type="button"
             onClick={() => seekTo(0, true)}
-            className="flex flex-col items-center gap-2 rounded-2xl px-4 py-2 text-[15px] font-semibold text-white focus-visible:outline-2 focus-visible:outline-white"
+            className="inline-flex h-12 items-center gap-2 rounded-full bg-white px-5 text-[15px] font-semibold text-[#13141b] shadow-[0_8px_30px_rgb(0_0_0/0.35)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
           >
-            <span className="flex h-14 w-14 items-center justify-center rounded-full bg-white/15">
-              <ReplayIcon size={26} />
-            </span>
-            Watch again
+            <ReplayIcon size={20} />
+            {isAudio ? "Play again" : "Watch again"}
           </button>
           {endScreen}
         </div>
       )}
 
-      {/* Playback failed (usually an expired signed link) */}
+      {/* Playback failed, and picking it up again by itself didn't work */}
       {failed && (
-        <div className="absolute inset-0 z-40 flex flex-col items-center justify-center gap-3 bg-black/75 p-6 text-center">
-          <p className="max-w-xs text-[15px] font-medium">This video stopped loading. Reload the page to pick it up again.</p>
+        <div
+          role="alert"
+          className="absolute inset-0 z-40 flex flex-col items-center justify-center gap-3 bg-black/75 p-6 text-center"
+        >
+          <p className="max-w-xs text-pretty text-[15px] font-medium">
+            The video stopped loading. Check your connection, then {time > 0 ? `carry on from ${formatTime(time)}` : "try again"}.
+          </p>
           <button
             type="button"
-            onClick={() => location.reload()}
-            className="rounded-full bg-white px-4 py-2 text-sm font-semibold text-[#13141b] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+            onClick={() => {
+              wantsPlay.current = true;
+              void recover();
+            }}
+            className="h-11 rounded-full bg-white px-5 text-[15px] font-semibold text-[#13141b] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
           >
-            Reload
+            Try again
           </button>
         </div>
       )}
@@ -905,7 +1086,7 @@ function ControlButton({
       aria-pressed={pressed}
       tabIndex={tabbable ? 0 : -1}
       title={label}
-      className="flex h-9 w-9 items-center justify-center rounded-full text-white hover:bg-white/15 focus-visible:outline-2 focus-visible:outline-white sm:h-10 sm:w-10"
+      className="flex h-11 w-10 shrink-0 items-center justify-center rounded-full text-white hover:bg-white/15 focus-visible:outline-2 focus-visible:outline-white"
       style={{ ["--cc-cut" as string]: "#07080c" }}
     >
       {children}
@@ -940,7 +1121,7 @@ function SpeedMenu({
       id={id}
       role="menu"
       aria-label="Playback speed"
-      className="absolute bottom-11 right-0 z-50 w-44 overflow-hidden rounded-xl border border-white/10 bg-[#1c1e27] py-1 shadow-[0_12px_40px_rgb(0_0_0/0.5)]"
+      className="absolute bottom-[4.75rem] right-2 z-50 flex gap-0.5 rounded-full border border-white/10 bg-[#1c1e27] p-1 shadow-[0_12px_40px_rgb(0_0_0/0.5)]"
       onKeyDown={(e) => {
         const items = Array.from(ref.current?.querySelectorAll<HTMLButtonElement>("[role='menuitemradio']") ?? []);
         const i = items.indexOf(document.activeElement as HTMLButtonElement);
@@ -948,27 +1129,28 @@ function SpeedMenu({
           e.preventDefault();
           e.stopPropagation();
           onClose();
-        } else if (e.key === "ArrowDown") {
+        } else if (e.key === "ArrowDown" || e.key === "ArrowRight") {
           e.preventDefault();
           items[(i + 1) % items.length]?.focus();
-        } else if (e.key === "ArrowUp") {
+        } else if (e.key === "ArrowUp" || e.key === "ArrowLeft") {
           e.preventDefault();
           items[(i - 1 + items.length) % items.length]?.focus();
         }
       }}
     >
-      <p className="px-3.5 pb-1 pt-2 text-xs font-medium text-white/55">Speed</p>
       {SPEEDS.map((r) => (
         <button
           key={r}
           type="button"
           role="menuitemradio"
           aria-checked={r === rate}
+          aria-label={r === 1 ? "Normal speed" : `${r} times`}
           onClick={() => onPick(r)}
-          className="flex w-full items-center justify-between px-3.5 py-2.5 text-left text-[15px] text-white hover:bg-white/10 focus-visible:bg-white/10 focus-visible:outline-none"
+          className={`flex h-11 min-w-12 items-center justify-center rounded-full px-2 text-[15px] tabular-nums focus-visible:outline-2 focus-visible:outline-white ${
+            r === rate ? "bg-white font-semibold text-[#13141b]" : "text-white hover:bg-white/10"
+          }`}
         >
-          <span className={r === rate ? "font-semibold" : ""}>{r === 1 ? "Normal" : `${r}×`}</span>
-          {r === rate && <CheckIcon size={17} className="text-[var(--accent,#f04850)]" />}
+          {r}×
         </button>
       ))}
     </div>
@@ -984,6 +1166,7 @@ function Scrubber({
   onScrub,
   onCommit,
   onKeySeek,
+  onKeyToggle,
   tabbable,
 }: {
   time: number;
@@ -994,17 +1177,23 @@ function Scrubber({
   onScrub: (t: number | null) => void;
   onCommit: (t: number) => void;
   onKeySeek: (t: number) => void;
+  /** Space on the focused bar plays or pauses, as on the rest of the player, instead of scrolling the page. */
+  onKeyToggle: () => void;
   tabbable: boolean;
 }) {
   const trackRef = useRef<HTMLDivElement>(null);
   const dragging = useRef(false);
   const [hover, setHover] = useState<number | null>(null);
   const [active, setActive] = useState(false);
+  const [slots, setSlots] = useState(16);
 
   useEffect(() => {
     const el = trackRef.current;
     if (!el) return;
-    const ro = new ResizeObserver(([entry]) => onWidth(entry.contentRect.width));
+    const ro = new ResizeObserver(([entry]) => {
+      onWidth(entry.contentRect.width);
+      setSlots(Math.max(6, Math.min(50, Math.floor(entry.contentRect.width / MARK_WIDTH))));
+    });
     ro.observe(el);
     return () => ro.disconnect();
   }, [onWidth]);
@@ -1015,35 +1204,36 @@ function Scrubber({
     return f * duration;
   };
 
-  // Reactions grouped into 2% slots, most common emoji first.
+  // Reactions grouped into slots wide enough for one emoji each, so they never overlap; the most common shows.
   const marks = useMemo(() => {
     if (!duration) return [];
-    const slots = new Map<number, Map<string, number>>();
+    const groups = new Map<number, Map<string, number>>();
     for (const r of reactions) {
-      const slot = Math.min(49, Math.max(0, Math.floor((r.atS / duration) * 50)));
-      const m = slots.get(slot) ?? new Map<string, number>();
+      const slot = Math.min(slots - 1, Math.max(0, Math.floor((r.atS / duration) * slots)));
+      const m = groups.get(slot) ?? new Map<string, number>();
       m.set(r.emoji, (m.get(r.emoji) ?? 0) + 1);
-      slots.set(slot, m);
+      groups.set(slot, m);
     }
-    return [...slots.entries()].map(([slot, m]) => {
+    return [...groups.entries()].map(([slot, m]) => {
       const sorted = [...m.entries()].sort((a, b) => b[1] - a[1]);
       const count = sorted.reduce((n, [, c]) => n + c, 0);
       return { slot, emoji: sorted[0][0], count, label: sorted.map(([e, c]) => `${c} ${emojiName(e)}`).join(", ") };
     });
-  }, [reactions, duration]);
+  }, [reactions, duration, slots]);
 
   const played = duration > 0 ? Math.min(1, time / duration) : 0;
   const loaded = duration > 0 ? Math.min(1, buffered / duration) : 0;
 
   return (
     <div className="relative px-1.5">
+      {/* On the line itself, as in the app, so they never stand over the picture. */}
       {marks.length > 0 && (
-        <div className="pointer-events-none relative mx-0 h-5" aria-hidden="true">
+        <div className="pointer-events-none absolute inset-x-1.5 inset-y-0 z-10" aria-hidden="true">
           {marks.map((m) => (
             <span
               key={m.slot}
-              className="absolute bottom-0 -translate-x-1/2 text-[13px] leading-none drop-shadow-[0_1px_2px_rgb(0_0_0/0.6)]"
-              style={{ left: `${(m.slot + 0.5) * 2}%` }}
+              className="absolute top-1/2 -translate-x-1/2 -translate-y-1/2 text-[13px] leading-none drop-shadow-[0_1px_2px_rgb(0_0_0/0.8)]"
+              style={{ left: `${((m.slot + 0.5) / slots) * 100}%` }}
               title={m.label}
             >
               {m.emoji}
@@ -1060,7 +1250,7 @@ function Scrubber({
         aria-valuemax={Math.round(duration)}
         aria-valuenow={Math.round(time)}
         aria-valuetext={`${spokenTime(time)} of ${spokenTime(duration)}`}
-        className="group/scrub relative flex h-6 cursor-pointer touch-none items-center focus-visible:outline-none"
+        className="group/scrub relative flex h-8 cursor-pointer touch-none items-center focus-visible:outline-none"
         onPointerDown={(e) => {
           e.currentTarget.setPointerCapture(e.pointerId);
           dragging.current = true;
@@ -1084,6 +1274,12 @@ function Scrubber({
         }}
         onPointerLeave={() => setHover(null)}
         onKeyDown={(e) => {
+          if (e.key === " " || e.key === "k") {
+            e.preventDefault();
+            e.stopPropagation();
+            onKeyToggle();
+            return;
+          }
           const big = duration * 0.1;
           let t: number | null = null;
           if (e.key === "ArrowLeft" || e.key === "ArrowDown") t = time - SKIP;

@@ -1,0 +1,13 @@
+{"samples": [
+ {"name": "short", "pack": "small", "about": "12 s screen recording, tall, with speech"},
+ {"name": "landscape", "pack": "small", "about": "20 s wide video, with speech"},
+ {"name": "square", "pack": "small", "about": "10 s square video"},
+ {"name": "silent", "pack": "small", "about": "15 s tall video with no sound track"},
+ {"name": "turned", "pack": "small", "about": "12 s video stored sideways, as iPhone cameras do"},
+ {"name": "hevc60", "pack": "small", "about": "15 s wide HEVC at 60 frames a second"},
+ {"name": "picture", "pack": "small", "about": "a photo, not a video"},
+ {"name": "4min", "pack": "small", "about": "4:13 screen recording, tall, with speech"},
+ {"name": "9min", "pack": "small", "about": "9:00 wide video, with speech"},
+ {"name": "30min", "pack": "long", "about": "30:00 wide video, with speech"},
+ {"name": "big", "pack": "big", "about": "10:00 wide video of more than 1 GB"}
+]}

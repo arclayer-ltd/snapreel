@@ -17,7 +17,7 @@ Product rules (owner decisions, 20 November 2026):
 |---|---|
 | Website, watch pages, dashboard, API | `https://snapreel.video` (Vercel project `snapreel-push`, team `dev-34969213`). Next.js app in `web/` |
 | Supabase | Project "Snapreel" (SourceBD org, us-east-1). The URL and publishable key go in the table below once created. Both are public values |
-| Storage uploads (TUS) | `https://<ref>.storage.supabase.co/storage/v1/upload/resumable` |
+| Storage uploads | `https://<ref>.storage.supabase.co/storage/v1`: `/s3` (multipart), `/object/videos/…` (small files), `/upload/resumable` (TUS, the fallback) |
 | Lock Screen relay (unchanged; builds 31+ call it) | `POST /api/live-activity`, `GET /api/health` |
 
 | Key | Value |
@@ -123,19 +123,27 @@ A blocked viewer can't comment or react on any of that owner's videos.
 ## Storage layout
 
 `videos/{userId}/{videoId}/`:
-- `video.mp4`: H.264 and AAC, faststart. Made on the phone at 1280 (Free) or 1920 (Pro) on the long side.
+- `video.mp4`: H.264 and AAC, index first (faststart). Made on the phone at 1280 (Free) or 1920 (Pro) on the long side,
+  about 5 Mbit/s for a camera picture at 1080p and half that for a screen recording; copied as it is when it is already
+  that small. Frame times may be uneven and the sound may end before the picture.
 - `poster.jpg`: 1280 on the long side.
-- `preview.mp4`: 3 s, silent, 480 px wide, for email and link previews.
+- `preview.mp4`: 3 s, silent, 480 px wide, for email and link previews. May be missing, and so may the poster: a link
+  needs only its video.
 
 Viewers get signed URLs valid for 2 hours, issued after the access checks. Captions (WebVTT) are made by the server from `videos.transcript` at `/api/public/v/{slug}/captions.vtt`.
 
-**Upload** uses TUS 1.0.0 with chunks of exactly 6 MB. Headers:
-- `Authorization: Bearer <user token>`
-- `apikey`
-- `x-upsert: true`
-- `Upload-Metadata`: bucketName, objectName, contentType, cacheControl=3600
+**Upload**, since build 48 (docs/pro/BACKEND.md, "Uploads", has the measurements and the failure table):
+- Files up to 6 MB: `POST /object/videos/{path}` with `Authorization: Bearer <user token>`, `apikey`, `x-upsert: true`.
+- The video: S3 multipart on `/s3/videos/{path}` in 5 MB pieces, in any order, up to three at once (all of them handed to
+  iOS when the app leaves the screen). Every request is a presigned URL (Signature V4 in the query): access key = project
+  ref, secret = the public `anon` key, session token = the user's access token. The row-level security rules apply. A piece's
+  ETag is its MD5, so the list for `CompleteMultipartUpload` is made on the phone (`Content-Type: application/xml`).
+- Fallback when S3 refuses the key, and builds up to 47: TUS 1.0.0 with chunks of exactly 6 MB, `Upload-Metadata`
+  bucketName, objectName, contentType, cacheControl=3600, and **`x-upsert: true` on the `POST` and on every `PATCH`**.
 
-When all three files are up, the app sends `PATCH /api/videos/{id} {status: "ready"}`. The server checks the objects exist before it accepts.
+`POST /api/videos/{id}/progress` every 15 seconds or so keeps the watch page's percentage. When the files are up, the app
+sends `PATCH /api/videos/{id} {status: "ready", sizeBytes}`. The server checks the video is stored, isn't empty and has that
+size before it accepts.
 
 ## API (Next.js route handlers in `web/app/api/`)
 
@@ -147,10 +155,11 @@ Bodies are JSON with camelCase keys. Errors look like `{error: "<code>", message
 |---|---|---|
 | `GET /api/me` | | `{user: {id, email, displayName, emailAlerts, brandColor}, plan: {tier: "free"\|"pro", productId, expiresAt}, usage: {activeLinks, linkLimit, maxDurationS, quality}}` |
 | `PATCH /api/me` | `{displayName?, brandColor?, emailAlerts?}` (`brandColor` is Pro; `null` clears it) | the same as `GET` |
-| `POST /api/videos` | `{localId, title, kind, durationS, width, height, sizeBytes, transcript?}` | 201 `{id, slug, url, status, upload: {bucket, videoPath, posterPath, previewPath}, limits: {maxDurationS, maxLongSide}}`. If the `localId` is already shared, returns the existing link with 200; a link whose upload never finished is set back to `uploading` (same upload paths) so the app can upload again |
+| `POST /api/videos` | `{localId, title, kind, durationS, width, height, sizeBytes, transcript?}` | 201 `{id, slug, url, status, upload: {bucket, videoPath, posterPath, previewPath}, limits: {maxDurationS, maxLongSide}}`. If the `localId` is already shared, returns the existing link with 200; a link whose upload never finished is set back to `uploading` (same upload paths) so the app can upload again, unless its video is already stored in full: then it becomes `ready` and nothing needs sending |
 | `GET /api/videos` | | `[VideoSummary]` |
 | `GET /api/videos/{id}` | | `VideoDetail` |
-| `PATCH /api/videos/{id}` | any of `{title, status, uploadedBytes, access, password, expiresAt, allowDownload, allowComments, allowReactions, cta, transcript}` | `VideoDetail`. `{status: "ready"}` before all three files are up: 409 `{error: "upload_incomplete", missing: ["video.mp4", …]}`. Password (4–128 characters), a non-null `expiresAt`, `allowDownload: true` and a non-null `cta` are Pro (402 `pro_feature`); `null`/`false` always works |
+| `PATCH /api/videos/{id}` | any of `{title, status, sizeBytes, uploadedBytes, access, password, expiresAt, allowDownload, allowComments, allowReactions, cta, transcript}` | `VideoDetail`. `{status: "ready"}` without a stored video, or with a `sizeBytes` that isn't the stored one: 409 `{error: "upload_incomplete", missing: ["video.mp4", …], storedBytes}` (a missing poster or preview alone is accepted). Password (4–128 characters), a non-null `expiresAt`, `allowDownload: true` and a non-null `cta` are Pro (402 `pro_feature`); `null`/`false` always works |
+| `POST /api/videos/{id}/progress` | `{uploadedBytes, totalBytes?}` | 204. Upload progress for the watch page while `status` is `uploading`; ignored otherwise. One cheap update, instead of `uploadedBytes` in `PATCH` after every chunk (builds up to 47) |
 | `DELETE /api/videos/{id}` | | 204. Stops sharing, deletes the files, keeps nothing |
 | `GET /api/videos/{id}/insights` | | `{views, uniqueViewers, avgPercent, completionRate, dropoff: [100 ints], countries: [{code, count}], viewers: [{name, anonymous, country, device, firstSeenAt, lastSeenAt, percent}]}`. Free gets `views` and `uniqueViewers`; the rest is `null`. `avgPercent`, `completionRate` and `viewers[].percent` are 0–100; `dropoff[i]` is how many counted views watched the i-th 1% of the video |
 | `GET /api/videos/{id}/activity` | | `{comments: [Comment], reactions: [Reaction]}`, including comments the word filter held (`held: true`) |
@@ -160,6 +169,7 @@ Bodies are JSON with camelCase keys. Errors look like `{error: "<code>", message
 | `POST /api/devices` | `{token, environment: "production"\|"sandbox", appVersion}` | 204 |
 | `DELETE /api/devices/{token}` | | 204 |
 | `POST /api/purchases/verify` | `{signedTransaction}` (StoreKit 2 JWS) | `{plan}`. The server checks the x5c chain to Apple Root CA G3, the bundle ID, and that `appAccountToken` equals the user ID |
+| `POST /api/auth/handoff` | | `{url, expiresInS}`. Bearer only (the app's "Open the web dashboard"). `url` is `https://snapreel.video/login/handoff?t=…`, which signs the browser in as this account and opens `/app`: single use (a Supabase magic-link token, used up by `verifyOtp`), sealed with AES-256-GCM under a key derived from `SUPABASE_SECRET_KEY`, valid 120 s. No email is sent. 409 `no_email` for an account without an email |
 | `POST /api/account/delete` | `{appleAuthorizationCode?, appleClientId?}` | 204. Deletes everything, including the auth user. Sign in with Apple is revoked when the app sends a fresh `appleAuthorizationCode` (from an `ASAuthorizationAppleIDCredential`; `appleClientId` defaults to the bundle ID) |
 
 Shapes:
@@ -233,6 +243,7 @@ Each one also gets an email from Resend if the user hasn't turned email off. Tha
 - `/v/preview/locked` and `/v/preview/generic`: 1200×630 PNG link-preview images for password videos and videos with no poster.
 - `/app`: dashboard. `/app/v/{id}` is a video's insights, comments and settings. `/app/account` is account and plan.
 - `/login`: email code and Sign in with Apple. Apple on the web returns to `/login/callback?next=…`, which exchanges the code for the cookie session; add `https://snapreel.video/login/callback` (and `http://localhost:3000/login/callback`) to Supabase Auth redirect URLs.
+- `/login/handoff?t=…&next=/app`: the app's one-time sign-in link (`POST /api/auth/handoff`). Sets the cookie session and goes to `next`; an expired, used or changed link goes to `/login?error=handoff`.
 - `/`, `/pricing`, `/help`, `/help/{slug}`, `/privacy`, `/terms`, `/support`: the marketing site.
 
 ## Who owns which files (parallel sessions)

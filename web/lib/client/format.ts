@@ -92,7 +92,13 @@ export function countryName(code: string | null): string {
 /** Initials for an avatar: "Priya Shah" to "PS". */
 export function initials(name: string | null): string {
   if (!name) return "?";
-  const parts = name.trim().split(/\s+/).filter(Boolean);
+  // Letters and digits only: "Robin <b>Test</b>" is "RT", not "R<".
+  const parts = name
+    .replace(/<[^>]*>/g, " ")
+    .split(/\s+/)
+    .map((w) => w.replace(/[^\p{L}\p{N}]/gu, ""))
+    .filter(Boolean);
+  if (!parts.length) return "?";
   const letters = parts.length > 1 ? parts[0][0] + parts[parts.length - 1][0] : parts[0]?.slice(0, 2) ?? "?";
   return letters.toUpperCase();
 }

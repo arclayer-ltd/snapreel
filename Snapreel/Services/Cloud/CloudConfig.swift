@@ -14,6 +14,12 @@ enum CloudConfig {
     static let supabaseURLString = "https://jaajkutdglblwtpfcgag.supabase.co"
     /// `SUPABASE_PUBLISHABLE_KEY` from docs/pro/API.md ("sb_publishable_…").
     static let publishableKey = "sb_publishable_TMSX2mDy_fE7eYhJggL8hg_tMU_Eq91"
+    /// The project's public `anon` key. Storage's S3 endpoint signs session-token requests with it (it doesn't take
+    /// publishable keys yet: github.com/supabase/storage/issues/750). Public like the key above, and it grants
+    /// nothing by itself: the session token decides what a request may touch. If Supabase ever switches it off,
+    /// uploads fall back to TUS by themselves.
+    static let anonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImphYWprdXRkZ2xibHd0cGZjZ2FnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTUxMjk5MDQsImV4cCI6MjExMDcwNTkwNH0.YNJmE8g8pFi2OkKKmcEvCiT2rvbFFwRiaMcLe9c4QoM"
+    static let s3Region = "us-east-1"
 
     // MARK: snapreel.video
 
@@ -43,12 +49,21 @@ enum CloudConfig {
     /// GoTrue: `<SUPABASE_URL>/auth/v1`.
     static var authURL: URL? { supabaseURL?.appendingPathComponent("auth/v1") }
 
-    /// TUS uploads go straight to Supabase Storage's own host:
-    /// `https://<ref>.storage.supabase.co/storage/v1/upload/resumable`.
-    static var tusURL: URL? {
-        guard let host = supabaseURL?.host, let ref = host.split(separator: ".").first else { return nil }
-        return URL(string: "https://\(ref).storage.supabase.co/storage/v1/upload/resumable")
+    /// The project's id, the first part of its host.
+    static var projectRef: String? {
+        supabaseURL?.host?.split(separator: ".").first.map(String.init)
     }
+
+    /// Uploads go straight to Supabase Storage's own host: `https://<ref>.storage.supabase.co/storage/v1`.
+    static var storageURL: URL? {
+        projectRef.flatMap { URL(string: "https://\($0).storage.supabase.co/storage/v1") }
+    }
+
+    /// The fallback transport: TUS 1.0.0.
+    static var tusURL: URL? { storageURL?.appendingPathComponent("upload/resumable") }
+
+    /// Storage's S3 endpoint, for multipart uploads signed with the person's own session token.
+    static var s3URL: URL? { storageURL?.appendingPathComponent("s3") }
 
     // MARK: Plans
 
@@ -68,6 +83,10 @@ enum CloudConfig {
     /// The server refuses files over 2 GB.
     static let maxFileBytes: Int64 = 2 * 1_024 * 1_024 * 1_024
 
+    /// One multipart piece: S3's smallest, so a dropped connection costs little.
+    static let pieceSize: Int64 = 5 * 1_024 * 1_024
+    /// Files up to this size go up in one request.
+    static let singleLimit: Int64 = 6 * 1_024 * 1_024
     /// TUS chunks must be exactly this size, except the last.
     static let chunkSize = 6 * 1_024 * 1_024
 

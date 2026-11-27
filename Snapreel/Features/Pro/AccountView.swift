@@ -12,6 +12,7 @@ struct AccountView: View {
     @State private var deleteStep: DeleteAccountSheet.Step?
     @State private var restoreMessage: String?
     @State private var isRestoring = false
+    @State private var isOpeningDashboard = false
 
     var body: some View {
         ScrollView {
@@ -30,6 +31,8 @@ struct AccountView: View {
             .padding(.top, Space.s)
             .padding(.bottom, Space.xxl)
         }
+        // Sign out can sit at the bottom edge; a tap there is a tap, not the start of the home gesture.
+        .defersSystemGestures(on: .bottom)
         .background(Color.srCanvas.ignoresSafeArea())
         .navigationTitle("Account")
         .navigationBarTitleDisplayMode(.inline)
@@ -39,7 +42,7 @@ struct AccountView: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Your recordings stay on this iPhone and your links keep working. Sign in again to see their views and comments.")
+            Text(signOutMessage)
         }
         .sheet(item: $deleteStep) { step in
             DeleteAccountSheet(initialStep: step, onClose: { deleteStep = nil })
@@ -52,6 +55,15 @@ struct AccountView: View {
             await auth.refreshMe()
             await store.refreshEntitlements()
         }
+    }
+
+    /// Says so when an upload is still going: it waits until this account signs in again.
+    private var signOutMessage: String {
+        let base = "Your recordings stay on this iPhone and your links keep working. Sign in again to see their views and comments."
+        let going = Uploader.shared.jobs.values.filter(\.isActive).count
+        guard going > 0 else { return base }
+        let uploads = going == 1 ? "1 upload is still going. It stops" : "\(going) uploads are still going. They stop"
+        return "\(uploads) now and carry on when you sign in again with this account. " + base
     }
 
     // MARK: Signed out
@@ -119,15 +131,14 @@ struct AccountView: View {
                     .font(.srSubheadline)
                     .foregroundStyle(Color.srTextSecondary)
                     .fixedSize(horizontal: false, vertical: true)
-                Button("Manage subscription") { store.manageSubscriptions() }
-                    .buttonStyle(.srSecondaryCompact)
             } else {
                 let used = auth.me?.usage.activeLinks ?? library.links.count
                 let limit = auth.me?.usage.linkLimit ?? CloudConfig.freeLinkLimit
                 Text("\(used) of \(limit) links · videos up to 5 minutes · 720p")
                     .font(.srSubheadline)
                     .foregroundStyle(Color.srTextSecondary)
-                LinkProgressBar(fraction: Double(used) / Double(max(1, limit)))
+                LinkProgressBar(fraction: Double(used) / Double(max(1, limit)), label: "Links used",
+                                valueText: "\(used) of \(limit)")
                 Button("Get Snapreel Pro") { ProPresenter.paywall(.settings) }
                     .buttonStyle(.srPrimaryCompact)
                     .padding(.top, Space.xxs)
@@ -153,20 +164,15 @@ struct AccountView: View {
             SettingsLinkRow(page: .sharedLinks, systemImage: "link", title: "Shared links",
                             value: library.links.isEmpty ? "None" : "\(library.links.count)")
             SettingsDivider()
-            SettingsActionRow(systemImage: "safari.fill", title: "Open the web dashboard") {
-                ShareLinks.openInSafari(CloudConfig.dashboardURL)
+            SettingsActionRow(systemImage: "safari.fill",
+                              title: isOpeningDashboard ? "Opening the web dashboard…" : "Open the web dashboard") {
+                openDashboard()
             }
         }
     }
 
     private var subscriptionGroup: some View {
         SettingsGroup(title: "Subscription", footnote: restoreMessage) {
-            if !auth.isPro {
-                SettingsActionRow(systemImage: "sparkles", title: "Snapreel Pro") {
-                    ProPresenter.paywall(.settings)
-                }
-                SettingsDivider()
-            }
             SettingsActionRow(systemImage: "creditcard.fill", title: "Manage subscription") {
                 store.manageSubscriptions()
             }
@@ -195,15 +201,42 @@ struct AccountView: View {
         }
     }
 
+    private func openDashboard() {
+        guard !isOpeningDashboard else { return }
+        isOpeningDashboard = true
+        Task { @MainActor in
+            let url = await Self.dashboardLink()
+            isOpeningDashboard = false
+            ShareLinks.openInSafari(url)
+        }
+    }
+
+    /// The dashboard signed in, through a one-time link from snapreel.video. Plain `/app` (which asks to sign in) when
+    /// the link doesn't come within a few seconds, or isn't snapreel.video's.
+    static func dashboardLink(within seconds: Double = 6) async -> URL {
+        let link = Task { try? await APIClient.shared.webSignInLink() }
+        let timer = Task {
+            try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+            link.cancel()
+        }
+        defer { timer.cancel() }
+        guard let url = await link.value, url.scheme == "https", url.host == CloudConfig.siteURL.host else {
+            return CloudConfig.dashboardURL
+        }
+        return url
+    }
+
     private func restore() {
         guard !isRestoring else { return }
         isRestoring = true
         Task { @MainActor in
             do {
                 let found = try await store.restore()
-                restoreMessage = found ? "Snapreel Pro was restored." : "No subscription was found for this Apple Account."
+                restoreMessage = found || auth.me?.isPro == true
+                    ? "Snapreel Pro was restored."
+                    : "No subscription was found for this Apple Account."
             } catch {
-                restoreMessage = "Restore didn't finish. Check your connection and try again."
+                restoreMessage = PurchaseService.restoreProblem(error) ?? "Restore was cancelled, so nothing changed."
             }
             isRestoring = false
         }
@@ -437,6 +470,8 @@ struct DeleteAccountSheet: View {
     }
 
     private func delete() {
+        // A second tap of a double tap: the first is already deleting.
+        guard step == .confirm || step == .failed, understood else { return }
         failure = nil
         withAnimation(Motion.standard) { step = .deleting }
         Task { @MainActor in
@@ -447,7 +482,8 @@ struct DeleteAccountSheet: View {
                 Haptics.success()
                 withAnimation(Motion.standard) { step = .done }
             } catch {
-                failure = (error as? CloudError)?.message ?? CloudError.offline.message
+                let reason = (error as? CloudError)?.message ?? CloudError.offline.message
+                failure = "Your account wasn't deleted. \(reason)"
                 withAnimation(Motion.standard) { step = .failed }
             }
         }

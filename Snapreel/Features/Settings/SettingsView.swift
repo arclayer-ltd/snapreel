@@ -85,9 +85,11 @@ struct SettingsView: View {
             .background(Color.srCanvas.ignoresSafeArea())
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
+            // The plan may have changed since it was last read (on the web, on another iPhone).
+            .task { await auth.refreshMe() }
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Done") { dismiss() }
+                    Button("Done") { close() }
                         .font(.srHeadline)
                 }
             }
@@ -109,7 +111,7 @@ struct SettingsView: View {
             .buttonStyle(SettingsRowStyle())
             SettingsDivider()
             SettingsActionRow(systemImage: "sparkles", title: "Snapreel Pro",
-                              value: auth.isPro ? "Active" : "Try it free") {
+                              value: auth.isPro ? "Active" : "Try it free", showsChevron: true) {
                 ProPresenter.paywall(.settings)
             }
             if auth.isSignedIn {
@@ -159,16 +161,20 @@ struct SettingsView: View {
     /// "Uploading 45%", "Upload stopped" or the number of links.
     private var sharedLinksValue: String {
         var stopped = false
+        var working = false
         var uploading: Double?
         for id in uploader.jobs.keys {
             switch links.state(for: id) {
             case .failed: stopped = true
-            case .uploading(let value): uploading = uploading ?? value
+            case .uploading(let value), .waitingForNetwork(let value): uploading = uploading ?? value
+            case .creating, .preparing, .finishing: working = true
             default: break
             }
         }
-        if stopped { return "Upload stopped" }
+        // What is going on now first; an older upload that stopped shows once nothing else is.
         if let uploading { return "Uploading \(Int((uploading * 100).rounded()))%" }
+        if working { return "Uploading" }
+        if stopped { return "Upload stopped" }
         return library.links.isEmpty ? "None" : "\(library.links.count)"
     }
 
@@ -215,9 +221,18 @@ struct SettingsView: View {
         return "\(enabled) of \(total) on"
     }
 
+    /// Presented through UIKit (`SettingsSheet`); elsewhere (screenshots) the usual way.
+    private func close() {
+        if SettingsSheet.shared.isPresented {
+            SettingsSheet.shared.isPresented = false
+        } else {
+            dismiss()
+        }
+    }
+
     /// Closes Settings, then shows the guided tour over the tabs again.
     private func replayTour() {
-        dismiss()
+        close()
         Task { @MainActor in
             try? await Task.sleep(nanoseconds: 450_000_000)
             withAnimation(Motion.standard) { settings.hasCompletedTour = false }
@@ -299,12 +314,16 @@ struct SettingsActionRow: View {
     let systemImage: String
     let title: String
     var value: String? = nil
+    /// For a row that opens a page of its own (Snapreel Pro).
+    var showsChevron = false
     let action: @MainActor () -> Void
 
-    init(systemImage: String, title: String, value: String? = nil, action: @escaping @MainActor () -> Void) {
+    init(systemImage: String, title: String, value: String? = nil, showsChevron: Bool = false,
+         action: @escaping @MainActor () -> Void) {
         self.systemImage = systemImage
         self.title = title
         self.value = value
+        self.showsChevron = showsChevron
         self.action = action
     }
 
@@ -313,7 +332,7 @@ struct SettingsActionRow: View {
             Haptics.tap()
             action()
         } label: {
-            ListRow(systemImage: systemImage, title: title, value: value, showsChevron: false)
+            ListRow(systemImage: systemImage, title: title, value: value, showsChevron: showsChevron)
                 .padding(.horizontal, Space.m)
                 .padding(.vertical, 3)
         }

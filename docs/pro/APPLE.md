@@ -93,6 +93,55 @@ Product IDs can never be reused, even after deletion.
 
 Both are READY_TO_SUBMIT and are submitted together with the first app version that sells Pro.
 
+### How a purchase works
+
+Written 2026-11-25, when the flow was rebuilt (`Snapreel/Services/Cloud/PurchaseService.swift`, `PurchaseBackend.swift`,
+`Snapreel/Features/Pro/PaywallView.swift`, `web/lib/server/appstore.ts`, `subscription-rules.ts`).
+
+In the app:
+1. One tap takes the purchase before anything slow happens; further taps do nothing until it ends. Signed out, the
+   sign-in sheet comes first, and the purchase goes on once that sheet has gone.
+2. What this Apple Account already has is checked. The same plan isn't bought again, and another Snapreel account's
+   subscription isn't bought on top of.
+3. Apple's sheet, with the user's ID as `appAccountToken`. An answer of "cancelled" or an error is checked against
+   `Transaction.currentEntitlements`: an interrupted purchase (Apple asking for a password or new terms) is answered as
+   cancelled and can still go through, then or later.
+4. The entitlement switches Pro on at once on this iPhone. The signed transaction goes to the server, and is finished
+   only when the server has it. Until then it is sent again: after 2 s, 4 s, 8 s … 5 min, when Snapreel comes to the
+   foreground, after signing in and at the next launch.
+
+Every ending is shown: bought, waiting for approval, cancelled, failed (with the reason), already yours, paid but not
+confirmed yet, on another Snapreel account, signed out, refused, nothing to restore, renewal couldn't be charged, and an
+App Store that doesn't answer (after 20 s, with a way to stop waiting).
+
+On the server, `POST /api/purchases/verify {signedTransaction, move?}` answers:
+
+| Answer | When | The app |
+|---|---|---|
+| 200 `{plan}` | stored, or older than what's stored | finishes the transaction |
+| 403 `other_account` `{hint, canMove}` | the subscription is on another Snapreel account; `hint` is its masked address | says whose, offers to sign in there, or to move it here |
+| 409 `already_pro` | moving it to an account with its own running subscription | says so |
+| 400 `invalid_signature`, `wrong_app`, `unknown_product` | never Apple's for this app | keeps the transaction, says to update or write to support |
+| 401, 5xx, no answer | | keeps the transaction, tries again |
+
+Whose a subscription is, in order: the account that just bought it (`transactionReason` PURCHASE, a period not seen
+before); the account that has it on record; the account in `appAccountToken`, if that still exists; else whoever presents
+it (offer code, bought on the App Store's own page, or the old account was deleted). `move: true` moves a running one,
+after the app has asked. A notification follows the same order.
+
+What replaces what: an older period never overwrites a newer one, a transaction signed before a refund doesn't undo it,
+grace ends only when Apple says so, sandbox never replaces production, and a second Apple Account's subscription takes
+over only if it lasts longer. Database errors end in a 500, which the app and Apple retry.
+
+Tests:
+- `SnapreelTests/Purchases/` (StoreKit test store, `Snapreel.storekit`), run by the Unit tests step of `ios.yml`;
+- `node scripts/purchase-selftest.mjs` (rules) and `--db` (the same functions against the database, throwaway users);
+- `node scripts/jws-selftest.mjs` (signatures); `scripts/pro-smoke.sh` (forged transactions refused by a deployment).
+
+Billing grace period (App Store Connect › Subscriptions › Billing Grace Period): **off**, in production and sandbox (read
+2026-11-25). The app and server handle it. Owner's choice: turning on 16 days keeps Pro on while Apple retries a failed
+card, and saves subscribers; without it Pro stops on the renewal date and comes back when Apple collects.
+
 ### App Store Connect app settings
 
 | What | Value |

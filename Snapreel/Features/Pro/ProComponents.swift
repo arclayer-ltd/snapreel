@@ -63,7 +63,8 @@ struct SharedBadge: View {
     private var label: String {
         switch state {
         case .creating, .preparing: return "Preparing link"
-        case .uploading(let value), .waitingForNetwork(let value): return "Uploading \(Int((value * 100).rounded()))%"
+        case .uploading(let value): return "Uploading \(Int((value * 100).rounded()))%"
+        case .waitingForNetwork(let value): return "Waiting · \(Int((value * 100).rounded()))%"
         case .finishing: return "Finishing upload"
         case .failed: return "Upload stopped"
         case .ready, .notShared: return link.sharedLabel
@@ -73,7 +74,8 @@ struct SharedBadge: View {
     private var icon: String {
         switch state {
         case .failed: return "exclamationmark.triangle.fill"
-        case .uploading, .waitingForNetwork, .creating, .preparing, .finishing: return "arrow.up.circle.fill"
+        case .waitingForNetwork: return "wifi.slash"
+        case .uploading, .creating, .preparing, .finishing: return "arrow.up.circle.fill"
         case .ready, .notShared: return "link"
         }
     }
@@ -131,6 +133,9 @@ struct ProUpsellCard: View {
 struct LinkProgressBar: View {
     let fraction: Double
     var onStage = false
+    var label = "Upload progress"
+    /// Read out instead of a percentage ("3 of 25").
+    var valueText: String? = nil
 
     var body: some View {
         GeometryReader { proxy in
@@ -143,9 +148,69 @@ struct LinkProgressBar: View {
         .frame(height: 6)
         .animation(Motion.standard, value: fraction)
         .accessibilityElement()
-        .accessibilityLabel("Upload progress")
-        .accessibilityValue("\(Int((fraction * 100).rounded())) percent")
+        .accessibilityLabel(label)
+        .accessibilityValue(valueText ?? "\(Int((fraction * 100).rounded())) percent")
     }
+}
+
+/// What an upload's numbers say, the same in the share-link sheet and the uploads list.
+enum UploadText {
+    /// "Preparing 42%".
+    static func preparing(_ progress: UploadProgress?) -> String {
+        guard let progress, let prepared = progress.prepared else { return "Preparing the video" }
+        if progress.isPaused { return "Preparing paused at \(percent(prepared))" }
+        return "Preparing \(percent(prepared))"
+    }
+
+    /// "12 MB of about 73 MB sent · About 3 min left": what is ready goes up while the rest is being made.
+    static func preparingDetail(_ progress: UploadProgress?) -> String? {
+        guard let progress else { return nil }
+        var parts: [String] = []
+        if progress.sentBytes > 0, progress.totalBytes > 0 { parts.append(progress.bytesLabel + " sent") }
+        if !progress.isPaused, let seconds = progress.preparingSecondsLeft { parts.append(UploadProgress.timeLeft(seconds)) }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
+    /// "45 MB of 73 MB · About 2 min left".
+    static func uploadingDetail(_ progress: UploadProgress?) -> String? {
+        guard let progress, progress.totalBytes > 0 else { return nil }
+        return [progress.bytesLabel, progress.timeLabel].compactMap { $0 }.joined(separator: " · ")
+    }
+
+    static func waitingDetail(_ progress: UploadProgress?) -> String? {
+        guard let progress, progress.totalBytes > 0 else { return nil }
+        return progress.bytesLabel + " sent"
+    }
+
+    /// "Can't reach snapreel.video": what went wrong while Snapreel waits to try again.
+    static func retryTitle(_ retry: UploadRetry) -> String {
+        switch retry.reason {
+        case .unreachable: return "Can't reach snapreel.video"
+        case .serverTrouble: return "snapreel.video isn't answering properly"
+        }
+    }
+
+    /// "Trying again in 30 s. Check your connection; what is sent is kept."
+    static func retryDetail(_ retry: UploadRetry, now: Date) -> String {
+        var when = "Trying again now"
+        if let at = retry.at {
+            let seconds = Int(at.timeIntervalSince(now).rounded(.up))
+            if seconds >= 60 {
+                when = "Trying again in \(Int((Double(seconds) / 60).rounded(.up))) min"
+            } else if seconds >= 1 {
+                when = "Trying again in \(seconds) s"
+            }
+        }
+        switch retry.reason {
+        case .unreachable: return "\(when). Check your connection; what is sent is kept."
+        case .serverTrouble: return "\(when) by itself. What is sent is kept."
+        }
+    }
+
+    /// Under every stopped upload: the recording is safe, and what to do.
+    static let failureHelp = "Your recording is safe on this iPhone. If the upload keeps stopping, write to support@snapreel.video."
+
+    private static func percent(_ value: Double) -> String { "\(Int((min(1, max(0, value)) * 100).rounded()))%" }
 }
 
 /// Text helpers for the Pro screens.

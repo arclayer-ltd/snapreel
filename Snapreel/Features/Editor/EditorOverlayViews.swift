@@ -10,6 +10,27 @@ enum EditOverlayMetrics {
     static func unit(_ frame: CGSize) -> CGFloat { max(1, min(frame.width, frame.height) / 100) }
 }
 
+/// As wide as its content, at most `limit`: the box of a short text is as small as it looks, so
+/// taps and drags next to it reach what is there.
+private struct EditMaxWidthLayout: Layout {
+    let limit: CGFloat
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        subviews.first?.sizeThatFits(ProposedViewSize(width: limit, height: nil)) ?? .zero
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        subviews.first?.place(at: CGPoint(x: bounds.midX, y: bounds.midY), anchor: .center,
+                              proposal: ProposedViewSize(width: limit, height: nil))
+    }
+}
+
+private extension View {
+    func editMaxWidth(_ limit: CGFloat) -> some View {
+        EditMaxWidthLayout(limit: limit) { self }
+    }
+}
+
 struct EditTextOverlayView: View {
     let item: EditText
     /// The picture's size, in points (preview) or pixels (export).
@@ -21,7 +42,9 @@ struct EditTextOverlayView: View {
         let label = Text(item.text.isEmpty ? " " : item.text)
             .font(.system(size: fontSize, weight: .bold))
             .multilineTextAlignment(.center)
-            .lineLimit(6)
+            .lineLimit(8)
+            // A long text gets smaller to fit, never cut off with "…" (testers, 26 Nov).
+            .minimumScaleFactor(0.35)
 
         switch item.style {
         case .plain:
@@ -29,16 +52,14 @@ struct EditTextOverlayView: View {
                 .foregroundStyle(item.color.color)
                 .shadow(color: .black.opacity(item.color == .black ? 0 : 0.45), radius: unit * 0.6, y: unit * 0.2)
                 .padding(unit)
-                .frame(maxWidth: frame.width * 0.9)
-                .fixedSize(horizontal: false, vertical: true)
+                .editMaxWidth(frame.width * 0.9)
         case .box:
             label
                 .foregroundStyle(item.color.contrasting)
                 .padding(.horizontal, fontSize * 0.45)
                 .padding(.vertical, fontSize * 0.2)
                 .background(RoundedRectangle(cornerRadius: fontSize * 0.3, style: .continuous).fill(item.color.color))
-                .frame(maxWidth: frame.width * 0.9)
-                .fixedSize(horizontal: false, vertical: true)
+                .editMaxWidth(frame.width * 0.9)
         case .outline:
             let edge: Color = item.color == .black ? .white : Color(hex: 0x13141B)
             let width = max(1, fontSize * 0.07)
@@ -49,8 +70,7 @@ struct EditTextOverlayView: View {
                 .shadow(color: edge, radius: 0, x: 0, y: width)
                 .shadow(color: edge, radius: 0, x: 0, y: -width)
                 .padding(unit)
-                .frame(maxWidth: frame.width * 0.9)
-                .fixedSize(horizontal: false, vertical: true)
+                .editMaxWidth(frame.width * 0.9)
         case .bar:
             label
                 .foregroundStyle(item.color == .black ? Color.white : item.color.color)
@@ -142,6 +162,14 @@ struct EditCaptionOverlayView: View {
     /// Captions sit low in the picture, centred.
     static let center = CGPoint(x: 0.5, y: 0.84)
 
+    /// About two lines of a caption in a picture of this shape; longer sentences are shown in
+    /// pieces (three lines fit, so wide letters are never cut off).
+    static func charactersPerCaption(_ frame: CGSize) -> Int {
+        let unit = EditOverlayMetrics.unit(frame)
+        let line = (frame.width * 0.88 - 5 * unit) / (5 * unit * 0.54)
+        return max(20, min(110, Int(line * 2 * 0.92)))
+    }
+
     var body: some View {
         let unit = EditOverlayMetrics.unit(frame)
         let fontSize = 5 * unit
@@ -156,8 +184,7 @@ struct EditCaptionOverlayView: View {
                 .shadow(color: .black.opacity(0.9), radius: 0, x: 0, y: max(1, unit * 0.25))
                 .shadow(color: .black.opacity(0.6), radius: unit * 0.8)
                 .padding(unit)
-                .frame(maxWidth: frame.width * 0.88)
-                .fixedSize(horizontal: false, vertical: true)
+                .editMaxWidth(frame.width * 0.88)
         case .box:
             label
                 .foregroundStyle(Color.white)
@@ -165,8 +192,7 @@ struct EditCaptionOverlayView: View {
                 .padding(.vertical, fontSize * 0.25)
                 .background(RoundedRectangle(cornerRadius: fontSize * 0.3, style: .continuous)
                     .fill(Color.black.opacity(0.72)))
-                .frame(maxWidth: frame.width * 0.88)
-                .fixedSize(horizontal: false, vertical: true)
+                .editMaxWidth(frame.width * 0.88)
         case .bar:
             label
                 .foregroundStyle(Color(hex: 0x13141B))
@@ -181,39 +207,73 @@ struct EditCaptionOverlayView: View {
 
 // MARK: - Export
 
-/// Renders the overlays once, as pictures the frame pipeline places over each frame.
+/// Draws the overlays as pictures the exporter places over the frames: a few seconds' worth at a
+/// time, each once, so a long video with hundreds of captions never holds all of them.
 @MainActor
-enum EditOverlayRasterizer {
-    static func images(recipe: EditRecipe, transcript: Transcript?, size: CGSize) -> [EditOverlayImage] {
-        var result: [EditOverlayImage] = []
+final class EditOverlayRasterizer {
+    private struct Entry {
+        let start: Double
+        let end: Double
+        let center: CGPoint
+        let draw: @MainActor () -> CIImage?
+    }
+
+    private var entries: [Entry] = []
+    private var cache: [Int: CIImage] = [:]
+
+    /// Output times where an overlay (or a blur) appears or goes.
+    private(set) var times: [Double] = []
+
+    /// `managed`: the pictures go over HDR frames, which are drawn with colour management.
+    init(recipe: EditRecipe, transcript: Transcript?, size: CGSize, managed: Bool = false) {
+        guard size.width > 1, size.height > 1 else { return }
+        let width = size.width
         for item in recipe.texts {
-            if let image = rasterize(EditTextOverlayView(item: item, frame: size), width: size.width) {
-                result.append(EditOverlayImage(image: image, start: item.start, end: item.end, center: item.center))
-            }
+            entries.append(Entry(start: item.start, end: item.end, center: item.center) {
+                Self.rasterize(EditTextOverlayView(item: item, frame: size), width: width, managed: managed)
+            })
         }
         for item in recipe.stickers {
-            if let image = rasterize(EditStickerOverlayView(item: item, frame: size), width: size.width) {
-                result.append(EditOverlayImage(image: image, start: item.start, end: item.end, center: item.center))
-            }
+            entries.append(Entry(start: item.start, end: item.end, center: item.center) {
+                Self.rasterize(EditStickerOverlayView(item: item, frame: size), width: width, managed: managed)
+            })
         }
         if let captions = recipe.captions {
+            let limit = EditCaptionOverlayView.charactersPerCaption(size)
             for line in recipe.captionLines(from: transcript) where !line.isHidden {
-                let view = EditCaptionOverlayView(text: line.text, style: captions.style, frame: size)
-                if let image = rasterize(view, width: size.width) {
-                    result.append(EditOverlayImage(image: image, start: line.start, end: line.end,
-                                                   center: EditCaptionOverlayView.center))
+                for piece in line.pieces(limit: limit) {
+                    entries.append(Entry(start: piece.start, end: piece.end, center: EditCaptionOverlayView.center) {
+                        Self.rasterize(EditCaptionOverlayView(text: piece.text, style: captions.style, frame: size), width: width, managed: managed)
+                    })
                 }
             }
         }
+        let total = recipe.outputDuration
+        var moments = Set<Double>()
+        for entry in entries { moments.formUnion([entry.start, entry.end]) }
+        for blur in recipe.blurs { moments.formUnion([blur.start, blur.end]) }
+        times = moments.filter { $0 > 0 && $0 < total }.sorted()
+        if times.isEmpty, !moments.isEmpty { times = [0.001] }
+    }
+
+    func images(in range: ClosedRange<Double>) -> [EditOverlayImage] {
+        var result: [EditOverlayImage] = []
+        var kept: [Int: CIImage] = [:]
+        for (index, entry) in entries.enumerated() where entry.start <= range.upperBound + 0.1 && entry.end >= range.lowerBound - 0.1 {
+            guard let image = cache[index] ?? entry.draw() else { continue }
+            kept[index] = image
+            result.append(EditOverlayImage(image: image, start: entry.start, end: entry.end, center: entry.center))
+        }
+        cache = kept
         return result
     }
 
-    private static func rasterize<V: View>(_ view: V, width: CGFloat) -> CIImage? {
-        let renderer = ImageRenderer(content: view.environment(\.colorScheme, .dark))
+    private static func rasterize<V: View>(_ view: V, width: CGFloat, managed: Bool) -> CIImage? {
+        let renderer = ImageRenderer(content: view.environment(\.colorScheme, .dark).dynamicTypeSize(.large))
         renderer.scale = 1
         renderer.isOpaque = false
         renderer.proposedSize = ProposedViewSize(width: width, height: nil)
         guard let image = renderer.cgImage else { return nil }
-        return CIImage(cgImage: image)
+        return managed ? CIImage(cgImage: image) : CIImage(cgImage: image, options: [.colorSpace: NSNull()])
     }
 }

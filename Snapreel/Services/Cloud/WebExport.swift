@@ -1,77 +1,159 @@
 import AVFoundation
 import UIKit
 
-/// Makes the three files a share link needs from a recording (docs/pro/API.md, "Storage
-/// layout"):
-/// - `video.mp4`: H.264 and AAC laid out for streaming, at most 1280 (Free) or 1920 (Pro) on
-///   the long side. A recording that is already H.264 and small enough is only repackaged.
-///   Recordings are fragmented .mov files, which some browsers won't stream.
-/// - `poster.jpg`: a frame, 1280 on the long side.
-/// - `preview.mp4`: 3 seconds, silent, 480 px wide, for email and link previews.
-/// Voice recordings have no picture, so their poster and preview are a drawn card.
+/// The pieces of making a share link's files (docs/pro/API.md, "Storage layout") that `WebPreparer` puts together:
+/// the poster, the preview, sound, and Apple's exporter for anything the fast way can't do. Voice recordings have no
+/// picture, so their poster and preview are a drawn card.
 enum WebExport {
     enum Failure: LocalizedError {
         case cannotRead
         case cannotExport(String?)
         case tooLarge
+        case gone
 
         var errorDescription: String? {
             switch self {
             case .cannotRead: return "Snapreel couldn't read this recording."
             case .cannotExport(let reason): return reason ?? "Snapreel couldn't prepare the video for the web."
             case .tooLarge: return "This video is over 2 GB, the most a link can hold."
+            case .gone: return "This recording isn't on this iPhone any more."
             }
         }
     }
 
-    // MARK: Video
+    /// Preparing stopped because Snapreel left the screen; what is done is kept.
+    struct Interrupted: Error {}
 
-    /// Writes the web copy of `source` to `destination` (an .mp4).
-    static func exportVideo(from source: URL, to destination: URL, maxLongSide: Int) async throws {
-        try? FileManager.default.removeItem(at: destination)
-        let asset = AVURLAsset(url: source)
-        let videoTracks = try await asset.loadTracks(withMediaType: .video)
-        guard let track = videoTracks.first else {
-            try await exportAudio(asset, to: destination)
-            return
-        }
-        let natural = try await track.load(.naturalSize)
-        let transform = try await track.load(.preferredTransform)
-        let formats = try await track.load(.formatDescriptions)
-        let duration = try await asset.load(.duration)
-        let shown = CGRect(origin: .zero, size: natural).applying(transform).size
-        let width = abs(shown.width), height = abs(shown.height)
-        let isH264 = formats.first.map { CMFormatDescriptionGetMediaSubType($0) == kCMVideoCodecType_H264 } ?? false
-
-        if isH264 && max(width, height) <= CGFloat(maxLongSide) + 1 {
-            // Already web-sized: repackage into a streamable MP4 without re-encoding.
-            if (try? await run(asset, preset: AVAssetExportPresetPassthrough, to: destination)) != nil { return }
-            try? FileManager.default.removeItem(at: destination)
-        }
-
-        let scale = min(1, CGFloat(maxLongSide) / max(width, height, 1))
-        let render = CGSize(width: even(width * scale), height: even(height * scale))
-        let composition = AVMutableVideoComposition()
-        composition.renderSize = render
-        composition.frameDuration = CMTime(value: 1, timescale: 30)
-        let instruction = AVMutableVideoCompositionInstruction()
-        instruction.timeRange = CMTimeRange(start: .zero, duration: duration)
-        let layer = AVMutableVideoCompositionLayerInstruction(assetTrack: track)
-        layer.setTransform(transform.concatenating(CGAffineTransform(scaleX: scale, y: scale)), at: .zero)
-        instruction.layerInstructions = [layer]
-        composition.instructions = [instruction]
-        try await run(asset, preset: AVAssetExportPresetHighestQuality, to: destination, videoComposition: composition)
+    /// Hardware encoding taken away (Snapreel left the screen, a call came in).
+    static func isInterruption(_ error: Error) -> Bool {
+        let ns = error as NSError
+        if ns.domain == AVFoundationErrorDomain,
+           ns.code == AVError.operationInterrupted.rawValue || ns.code == AVError.sessionWasInterrupted.rawValue
+            || ns.code == AVError.mediaServicesWereReset.rawValue { return true }
+        // VideoToolbox: invalid session, not available now.
+        if ns.domain == NSOSStatusErrorDomain, ns.code == -12903 || ns.code == -12915 || ns.code == -16408 { return true }
+        if let underlying = ns.userInfo[NSUnderlyingErrorKey] as? Error { return isInterruption(underlying) }
+        return false
     }
 
+    /// The transform that shows a picture upright at the origin, scaled.
+    static func upright(_ transform: CGAffineTransform, size: CGSize, scale: Double) -> CGAffineTransform {
+        let shown = CGRect(origin: .zero, size: size).applying(transform)
+        return transform.concatenating(CGAffineTransform(translationX: -shown.minX, y: -shown.minY))
+            .concatenating(CGAffineTransform(scaleX: scale, y: scale))
+    }
+
+    // MARK: Sound
+
     /// Voice recordings: the AAC track in an MP4, so the watch page's player can play it.
-    private static func exportAudio(_ asset: AVAsset, to destination: URL) async throws {
-        if (try? await run(asset, preset: AVAssetExportPresetPassthrough, to: destination)) != nil { return }
+    static func exportAudio(_ asset: AVAsset, to destination: URL) async throws {
+        try? FileManager.default.removeItem(at: destination)
+        if (try? await run(asset, preset: AVAssetExportPresetPassthrough, to: destination)) != nil,
+           FileFacts.size(destination) > 0 { return }
         try? FileManager.default.removeItem(at: destination)
         // Not AAC already: encode it. M4A is an MP4 file, so it keeps the .mp4 name.
         let m4a = destination.deletingPathExtension().appendingPathExtension("m4a")
         try? FileManager.default.removeItem(at: m4a)
         try await run(asset, preset: AVAssetExportPresetAppleM4A, to: m4a, fileType: .m4a)
         try FileManager.default.moveItem(at: m4a, to: destination)
+    }
+
+    /// Mixes a video's sound down to one AAC track in its own file. Returns where it starts in the recording, in
+    /// seconds, or nil when there is no sound in it.
+    static func encodeSound(_ asset: AVAsset, tracks: [AVAssetTrack], to url: URL) async throws -> Double? {
+        let cancelled = WebPreparer.CancelFlag()
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { (done: CheckedContinuation<Double?, Error>) in
+                DispatchQueue.global(qos: .userInitiated).async {
+                    do { done.resume(returning: try encodeSoundNow(asset, tracks: tracks, to: url, cancelled)) } catch { done.resume(throwing: error) }
+                }
+            }
+        } onCancel: {
+            cancelled.set()
+        }
+    }
+
+    private static func encodeSoundNow(_ asset: AVAsset, tracks: [AVAssetTrack], to url: URL, _ cancelled: WebPreparer.CancelFlag) throws -> Double? {
+        let part = url.appendingPathExtension("part")
+        try? FileManager.default.removeItem(at: part)
+        try? FileManager.default.removeItem(at: url)
+        let reader = try AVAssetReader(asset: asset)
+        let output = AVAssetReaderAudioMixOutput(audioTracks: tracks, audioSettings: [
+            AVFormatIDKey: kAudioFormatLinearPCM,
+            AVSampleRateKey: 44_100,
+            AVNumberOfChannelsKey: 2,
+            AVLinearPCMBitDepthKey: 16,
+            AVLinearPCMIsFloatKey: false,
+            AVLinearPCMIsBigEndianKey: false,
+            AVLinearPCMIsNonInterleaved: false,
+        ])
+        output.alwaysCopiesSampleData = false
+        guard reader.canAdd(output) else { throw Failure.cannotRead }
+        reader.add(output)
+        guard reader.startReading() else { throw reader.error ?? Failure.cannotRead }
+        let writer = try AVAssetWriter(outputURL: part, fileType: .m4a)
+        let input = AVAssetWriterInput(mediaType: .audio, outputSettings: [
+            AVFormatIDKey: kAudioFormatMPEG4AAC,
+            AVSampleRateKey: 44_100,
+            AVNumberOfChannelsKey: 2,
+            AVEncoderBitRateKey: 128_000,
+        ])
+        input.expectsMediaDataInRealTime = false
+        guard writer.canAdd(input) else { throw Failure.cannotExport(nil) }
+        writer.add(input)
+        guard writer.startWriting() else { throw writer.error ?? Failure.cannotExport(nil) }
+        var offset: Double?
+        while true {
+            try cancelled.check()
+            let more: Bool = try autoreleasepool {
+                guard let buffer = output.copyNextSampleBuffer() else { return false }
+                let time = CMSampleBufferGetPresentationTimeStamp(buffer)
+                if offset == nil {
+                    offset = time.seconds
+                    writer.startSession(atSourceTime: time)
+                }
+                while !input.isReadyForMoreMediaData {
+                    try cancelled.check()
+                    guard writer.status == .writing else { throw writer.error ?? Failure.cannotExport(nil) }
+                    usleep(1_500)
+                }
+                guard input.append(buffer) else { throw writer.error ?? Failure.cannotExport(nil) }
+                return true
+            }
+            if !more { break }
+        }
+        guard reader.status == .completed else { throw reader.error ?? Failure.cannotRead }
+        guard offset != nil else {
+            writer.cancelWriting()
+            return nil
+        }
+        input.markAsFinished()
+        let done = DispatchSemaphore(value: 0)
+        writer.finishWriting { done.signal() }
+        done.wait()
+        guard writer.status == .completed else { throw writer.error ?? Failure.cannotExport(nil) }
+        try FileManager.default.moveItem(at: part, to: url)
+        return offset
+    }
+
+    // MARK: Apple's exporter
+
+    /// The whole web copy with `AVAssetExportSession`, kept under about `limit` bytes.
+    static func exportWhole(_ asset: AVURLAsset, to destination: URL, maxLongSide: Int, limit: Int64,
+                            progress: @escaping (Double) -> Void) async throws {
+        try? FileManager.default.removeItem(at: destination)
+        let preset = maxLongSide > 1_280 ? AVAssetExportPreset1920x1080 : AVAssetExportPreset1280x720
+        try await run(asset, preset: preset, to: destination, limit: max(limit, 2_000_000), progress: progress)
+    }
+
+    /// Stands in for a poster or preview that couldn't be made.
+    static func writeStandIn(_ kind: UploadJob.Part.Kind, to url: URL, title: String) {
+        let card = audioCard(title: title, duration: 0, size: CGSize(width: 1_280, height: 720), caption: "Snapreel")
+        switch kind {
+        case .poster: try? card.jpegData(compressionQuality: 0.85)?.write(to: url, options: .atomic)
+        case .preview: try? StillClip.writeSync(card, seconds: 3, width: 480, to: url)
+        case .video: break
+        }
     }
 
     // MARK: Poster
@@ -95,49 +177,103 @@ enum WebExport {
     // MARK: Preview
 
     /// The first 3 seconds, silent, 480 px wide. Voice recordings get 3 seconds of `card`.
-    static func writePreview(from source: URL, isAudio: Bool, card: UIImage, to destination: URL) async throws {
+    static func writePreview(from source: URL, isAudio: Bool, card: UIImage?, to destination: URL) async throws {
         try? FileManager.default.removeItem(at: destination)
-        if isAudio {
-            try await StillClip.write(card, seconds: 3, width: 480, to: destination)
-            return
-        }
         let asset = AVURLAsset(url: source)
-        guard let track = try await asset.loadTracks(withMediaType: .video).first else {
+        var track: AVAssetTrack?
+        if !isAudio { track = try await asset.loadTracks(withMediaType: .video).first }
+        guard let track else {
+            guard let card else { return }
             try await StillClip.write(card, seconds: 3, width: 480, to: destination)
             return
         }
-        let duration = try await asset.load(.duration)
         let natural = try await track.load(.naturalSize)
         let transform = try await track.load(.preferredTransform)
+        let duration = try await asset.load(.duration)
+        let shown = CGRect(origin: .zero, size: natural).applying(transform).size
+        let scale = 480 / max(abs(shown.width), 1)
+        let size = CGSize(width: 480, height: even(abs(shown.height) * scale))
         let length = CMTime(seconds: min(3, max(0.5, duration.seconds)), preferredTimescale: 600)
 
-        let composition = AVMutableComposition()
-        guard let silent = composition.addMutableTrack(withMediaType: .video,
-                                                       preferredTrackID: kCMPersistentTrackID_Invalid) else {
-            throw Failure.cannotRead
-        }
-        try silent.insertTimeRange(CMTimeRange(start: .zero, duration: length), of: track, at: .zero)
-        silent.preferredTransform = transform
-
-        let shown = CGRect(origin: .zero, size: natural).applying(transform).size
-        let width = abs(shown.width), height = abs(shown.height)
-        let scale = 480 / max(width, 1)
-        let video = AVMutableVideoComposition()
-        video.renderSize = CGSize(width: 480, height: even(height * scale))
-        video.frameDuration = CMTime(value: 1, timescale: 30)
+        let composition = AVMutableVideoComposition()
+        composition.renderSize = size
+        composition.frameDuration = CMTime(value: 1, timescale: 24)
+        composition.colorPrimaries = AVVideoColorPrimaries_ITU_R_709_2
+        composition.colorTransferFunction = AVVideoTransferFunction_ITU_R_709_2
+        composition.colorYCbCrMatrix = AVVideoYCbCrMatrix_ITU_R_709_2
         let instruction = AVMutableVideoCompositionInstruction()
-        instruction.timeRange = CMTimeRange(start: .zero, duration: length)
-        let layer = AVMutableVideoCompositionLayerInstruction(assetTrack: silent)
-        layer.setTransform(transform.concatenating(CGAffineTransform(scaleX: scale, y: scale)), at: .zero)
+        instruction.timeRange = CMTimeRange(start: .zero, duration: duration)
+        let layer = AVMutableVideoCompositionLayerInstruction(assetTrack: track)
+        layer.setTransform(upright(transform, size: natural, scale: scale), at: .zero)
         instruction.layerInstructions = [layer]
-        video.instructions = [instruction]
-        try await run(composition, preset: AVAssetExportPresetHighestQuality, to: destination, videoComposition: video)
+        composition.instructions = [instruction]
+
+        try await withCheckedThrowingContinuation { (done: CheckedContinuation<Void, Error>) in
+            DispatchQueue.global(qos: .utility).async {
+                do {
+                    try writeClip(asset, track, composition, size: size, length: length, to: destination)
+                    done.resume()
+                } catch {
+                    try? FileManager.default.removeItem(at: destination)
+                    done.resume(throwing: error)
+                }
+            }
+        }
+    }
+
+    private static func writeClip(_ asset: AVAsset, _ track: AVAssetTrack, _ composition: AVVideoComposition,
+                                  size: CGSize, length: CMTime, to url: URL) throws {
+        let reader = try AVAssetReader(asset: asset)
+        reader.timeRange = CMTimeRange(start: .zero, duration: length)
+        let output = AVAssetReaderVideoCompositionOutput(videoTracks: [track], videoSettings: [
+            kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange,
+        ])
+        output.videoComposition = composition
+        output.alwaysCopiesSampleData = false
+        guard reader.canAdd(output) else { throw Failure.cannotRead }
+        reader.add(output)
+        let writer = try AVAssetWriter(outputURL: url, fileType: .mp4)
+        writer.shouldOptimizeForNetworkUse = true
+        let input = AVAssetWriterInput(mediaType: .video, outputSettings: [
+            AVVideoCodecKey: AVVideoCodecType.h264,
+            AVVideoWidthKey: Int(size.width),
+            AVVideoHeightKey: Int(size.height),
+            AVVideoCompressionPropertiesKey: [
+                AVVideoAverageBitRateKey: 700_000,
+                AVVideoExpectedSourceFrameRateKey: 24,
+                AVVideoProfileLevelKey: AVVideoProfileLevelH264MainAutoLevel,
+            ] as [String: Any],
+        ])
+        input.expectsMediaDataInRealTime = false
+        guard writer.canAdd(input) else { throw Failure.cannotExport(nil) }
+        writer.add(input)
+        guard reader.startReading() else { throw reader.error ?? Failure.cannotRead }
+        guard writer.startWriting() else { throw writer.error ?? Failure.cannotExport(nil) }
+        writer.startSession(atSourceTime: .zero)
+        var frames = 0
+        while let frame = output.copyNextSampleBuffer() {
+            while !input.isReadyForMoreMediaData {
+                guard writer.status == .writing else { throw writer.error ?? Failure.cannotExport(nil) }
+                usleep(1_500)
+            }
+            guard input.append(frame) else { throw writer.error ?? Failure.cannotExport(nil) }
+            frames += 1
+        }
+        guard reader.status == .completed, frames > 0 else {
+            writer.cancelWriting()
+            throw reader.error ?? Failure.cannotRead
+        }
+        input.markAsFinished()
+        let done = DispatchSemaphore(value: 0)
+        writer.finishWriting { done.signal() }
+        done.wait()
+        guard writer.status == .completed else { throw writer.error ?? Failure.cannotExport(nil) }
     }
 
     // MARK: Drawing
 
     /// A voice recording's card: brand red with a waveform and the title.
-    static func audioCard(title: String, duration: Double, size: CGSize) -> UIImage {
+    static func audioCard(title: String, duration: Double, size: CGSize, caption: String? = nil) -> UIImage {
         let format = UIGraphicsImageRendererFormat()
         format.scale = 1
         return UIGraphicsImageRenderer(size: size, format: format).image { context in
@@ -167,7 +303,7 @@ enum WebExport {
                                                 width: size.width * 0.84, height: titleFont.lineHeight * 1.2),
                                      withAttributes: [.font: titleFont, .foregroundColor: UIColor.white,
                                                       .paragraphStyle: paragraph])
-            let caption = "Voice recording · \(Format.clock(duration))"
+            let caption = caption ?? "Voice recording · \(Format.clock(duration))"
             let captionFont = UIFont.systemFont(ofSize: size.height * 0.04, weight: .semibold)
             (caption as NSString).draw(in: CGRect(x: 0, y: size.height * 0.81, width: size.width,
                                                   height: captionFont.lineHeight * 1.2),
@@ -183,8 +319,8 @@ enum WebExport {
         max(2, (value / 2).rounded() * 2)
     }
 
-    private static func run(_ asset: AVAsset, preset: String, to destination: URL,
-                            fileType: AVFileType = .mp4, videoComposition: AVVideoComposition? = nil) async throws {
+    private static func run(_ asset: AVAsset, preset: String, to destination: URL, fileType: AVFileType = .mp4,
+                            limit: Int64 = CloudConfig.maxFileBytes, progress: ((Double) -> Void)? = nil) async throws {
         guard let session = AVAssetExportSession(asset: asset, presetName: preset) else {
             throw Failure.cannotExport(nil)
         }
@@ -192,23 +328,36 @@ enum WebExport {
         session.outputURL = destination
         session.outputFileType = fileType
         session.shouldOptimizeForNetworkUse = true
-        session.fileLengthLimit = CloudConfig.maxFileBytes
-        if let videoComposition { session.videoComposition = videoComposition }
-        // The session is only read again inside its own completion handler.
+        session.fileLengthLimit = limit
+        // The session is only read again inside its own completion handler and the progress timer.
         let box = WebExportSessionBox(session: session)
-        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-            box.session.exportAsynchronously {
-                if box.session.status == .completed {
-                    continuation.resume()
-                } else {
-                    let error = box.session.error
-                    if let error, DiskSpace.isOutOfSpace(error) {
-                        continuation.resume(throwing: Failure.cannotExport("Your iPhone is too full to prepare the video."))
-                    } else {
-                        continuation.resume(throwing: Failure.cannotExport(nil))
+        let ticker = Task {
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 500_000_000)
+                progress?(Double(box.session.progress))
+            }
+        }
+        defer { ticker.cancel() }
+        try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+                box.session.exportAsynchronously {
+                    switch box.session.status {
+                    case .completed: continuation.resume()
+                    case .cancelled: continuation.resume(throwing: CancellationError())
+                    default:
+                        let error = box.session.error
+                        if let error, DiskSpace.isOutOfSpace(error) {
+                            continuation.resume(throwing: Failure.cannotExport("Your iPhone is too full to prepare the video."))
+                        } else if let error, isInterruption(error) {
+                            continuation.resume(throwing: error)
+                        } else {
+                            continuation.resume(throwing: Failure.cannotExport(nil))
+                        }
                     }
                 }
             }
+        } onCancel: {
+            box.session.cancelExport()
         }
     }
 }
@@ -226,7 +375,7 @@ enum StillClip {
         }.value
     }
 
-    private static func writeSync(_ image: UIImage, seconds: Int, width: Int, to url: URL) throws {
+    static func writeSync(_ image: UIImage, seconds: Int, width: Int, to url: URL) throws {
         try? FileManager.default.removeItem(at: url)
         guard let cgImage = image.cgImage else { throw WebExport.Failure.cannotRead }
         let height = max(2, Int((CGFloat(width) * image.size.height / max(1, image.size.width) / 2).rounded()) * 2)
@@ -249,7 +398,10 @@ enum StillClip {
         writer.startSession(atSourceTime: .zero)
         let fps: Int32 = 10
         for index in 0...(Int(fps) * seconds) {
-            while !input.isReadyForMoreMediaData { usleep(2_000) }
+            while !input.isReadyForMoreMediaData {
+                guard writer.status == .writing else { throw writer.error ?? WebExport.Failure.cannotExport(nil) }
+                usleep(2_000)
+            }
             guard let pool = adaptor.pixelBufferPool else { break }
             var buffer: CVPixelBuffer?
             CVPixelBufferPoolCreatePixelBuffer(nil, pool, &buffer)

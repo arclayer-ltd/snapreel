@@ -12,7 +12,7 @@ import { MANAGE_SUBSCRIPTIONS_URL } from "@/lib/client/links";
 import { signOut } from "@/lib/client/supabase";
 import { CheckIcon, ExternalIcon, LogOutIcon, SparkIcon, TrashIcon } from "@/components/player/icons";
 import { Avatar, Dialog, Spinner, btn } from "@/components/player/ui";
-import { inkFor, isHexColour } from "@/components/player/ui-classes";
+import { isHexColour } from "@/components/player/ui-classes";
 import { Card, LockedHint, ProBadge, SwitchRow, inputClass } from "./kit";
 
 export function AccountPanel({ initial }: { initial: Me }) {
@@ -24,26 +24,33 @@ export function AccountPanel({ initial }: { initial: Me }) {
   const [saving, setSaving] = useState<"name" | "colour" | "alerts" | null>(null);
   const [saved, setSaved] = useState<"name" | "colour" | "alerts" | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [failedOn, setFailedOn] = useState<"name" | "colour" | "alerts" | null>(null);
   const [signingOut, setSigningOut] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [alertsWanted, setAlertsWanted] = useState<boolean | null>(null);
   const [understood, setUnderstood] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const pro = me.plan.tier === "pro";
   const nameChanged = name.trim() !== (me.user.displayName ?? "");
-  const colourChanged = isHexColour(colour) && colour.toLowerCase() !== (me.user.brandColor ?? "").toLowerCase();
+  // Snapreel red is what an unset colour looks like, so picking it again isn't a change.
+  const colourChanged = isHexColour(colour) && colour.toLowerCase() !== (me.user.brandColor ?? "#d32434").toLowerCase();
 
   async function update(which: "name" | "colour" | "alerts", body: Parameters<typeof ownerApi.updateMe>[0]) {
     setSaving(which);
     setSaved(null);
     setError(null);
+    setFailedOn(null);
     try {
       const next = await ownerApi.updateMe(body);
       setMe(next);
       setSaved(which);
+      // So the other pages show the new name and settings without a reload.
+      router.refresh();
     } catch (err) {
       setError(errorMessage(err, "That change wasn't saved. Try again."));
+      setFailedOn(which);
     } finally {
       setSaving(null);
     }
@@ -52,8 +59,9 @@ export function AccountPanel({ initial }: { initial: Me }) {
   async function doSignOut() {
     setSigningOut(true);
     await signOut();
-    router.replace("/login");
-    router.refresh();
+    // A full page load, not a client navigation: the router keeps earlier pages' state (the sign-in page's
+    // last code and spinner among them), and nothing of the signed-in session should survive in memory.
+    window.location.replace("/login");
   }
 
   async function deleteAccount() {
@@ -62,8 +70,7 @@ export function AccountPanel({ initial }: { initial: Me }) {
     try {
       await ownerApi.deleteAccount();
       await signOut().catch(() => {});
-      router.replace("/login?deleted=1");
-      router.refresh();
+      window.location.replace("/login?deleted=1");
     } catch (err) {
       setDeleting(false);
       setDeleteError(errorMessage(err, "Your account wasn't deleted. Try again, or email support@snapreel.video."));
@@ -81,12 +88,6 @@ export function AccountPanel({ initial }: { initial: Me }) {
           <p className="truncate text-[15px] text-text-2">{me.user.email}</p>
         </div>
       </div>
-
-      {error && (
-        <p role="alert" className="rounded-2xl bg-red-soft px-4 py-3 text-sm text-red-text">
-          {error}
-        </p>
-      )}
 
       <Card title="Plan" id="plan">
         {pro ? (
@@ -175,13 +176,18 @@ export function AccountPanel({ initial }: { initial: Me }) {
                 }}
                 maxLength={60}
                 autoComplete="name"
+                enterKeyHint="done"
                 className={inputClass}
               />
-              <button type="submit" disabled={!nameChanged || !name.trim() || saving === "name"} className={btn("secondary", "md", "min-w-[5rem]")}>
-                {saving === "name" ? <Spinner size={16} /> : saved === "name" && !nameChanged ? <CheckIcon size={18} /> : "Save"}
+              <button type="submit" disabled={!nameChanged || !name.trim() || saving === "name"} aria-label="Save name" className={btn("secondary", "md", "min-w-[5rem]")}>
+                {saving === "name" ? <Spinner size={16} /> : "Save"}
               </button>
             </div>
-            <p className="mt-1 text-xs text-text-3">Viewers see it on your watch pages and next to your replies.</p>
+            <SaveNote
+              saved={saved === "name" && !nameChanged}
+              error={failedOn === "name" ? error : null}
+              idle={name.trim() ? "Viewers see it on your watch pages and next to your replies." : "Add a name so viewers know who sent the video."}
+            />
           </div>
           <div>
             <p className="mb-1.5 text-sm font-medium">Email</p>
@@ -194,9 +200,18 @@ export function AccountPanel({ initial }: { initial: Me }) {
         <SwitchRow
           title="Email me about activity"
           description="New viewers, comments and reactions on your links. Your iPhone gets notifications either way."
-          checked={me.user.emailAlerts}
+          // Moves at once; goes back if it didn't save.
+          checked={alertsWanted ?? me.user.emailAlerts}
           disabled={saving === "alerts"}
-          onChange={(v) => void update("alerts", { emailAlerts: v })}
+          onChange={(v) => {
+            setAlertsWanted(v);
+            void update("alerts", { emailAlerts: v }).finally(() => setAlertsWanted(null));
+          }}
+        />
+        <SaveNote
+          saved={saved === "alerts"}
+          error={failedOn === "alerts" ? error : null}
+          idle={saving === "alerts" ? "Saving…" : ""}
         />
       </Card>
 
@@ -226,26 +241,33 @@ export function AccountPanel({ initial }: { initial: Me }) {
               spellCheck={false}
               className={`${inputClass.replace("w-full", "w-32")} font-mono uppercase`}
             />
-            <span
-              className="inline-flex h-11 items-center rounded-full px-4 text-[15px] font-semibold"
-              style={isHexColour(colour) ? { background: colour, color: inkFor(colour) } : undefined}
-              aria-hidden="true"
-            >
-              Preview
+            {/* How it looks on a watch page: a progress bar, not a button (it isn't one). */}
+            <span className="flex items-center gap-2 text-[13px] text-text-2" aria-hidden="true">
+              <span className="relative h-1.5 w-16 overflow-hidden rounded-full bg-fill">
+                <span className="absolute inset-y-0 left-0 w-2/3 rounded-full" style={isHexColour(colour) ? { background: colour } : undefined} />
+              </span>
+              <span
+                className="h-3.5 w-3.5 rounded-full shadow-[0_1px_3px_rgb(0_0_0/0.3)]"
+                style={isHexColour(colour) ? { background: colour } : undefined}
+              />
             </span>
             <button
               type="button"
               disabled={!colourChanged || saving === "colour"}
               onClick={() => void update("colour", { brandColor: colour.toLowerCase() })}
+              aria-label="Save colour"
               className={btn("secondary", "md", "ml-auto min-w-[5rem]")}
             >
-              {saving === "colour" ? <Spinner size={16} /> : saved === "colour" && !colourChanged ? <CheckIcon size={18} /> : "Save"}
+              {saving === "colour" ? <Spinner size={16} /> : "Save"}
             </button>
             {me.user.brandColor && (
               <button type="button" onClick={() => void update("colour", { brandColor: null })} className={btn("quiet", "sm")}>
                 Use Snapreel red
               </button>
             )}
+            <div className="w-full">
+              <SaveNote saved={saved === "colour" && !colourChanged} error={failedOn === "colour" ? error : null} idle="" />
+            </div>
           </div>
         ) : (
           <LockedHint>Your own colour, and no &ldquo;Made with Snapreel&rdquo; badge, come with Snapreel Pro. Upgrade in the Snapreel app on your iPhone.</LockedHint>
@@ -301,12 +323,12 @@ export function AccountPanel({ initial }: { initial: Me }) {
           {!pro && (
             <p className="text-sm">If you ever bought Snapreel Pro, cancel it separately in the App Store: deleting your account doesn&rsquo;t.</p>
           )}
-          <label className="flex cursor-pointer items-start gap-3 pt-1 text-text">
+          <label className="flex min-h-11 cursor-pointer items-start gap-3 py-2 text-text">
             <input
               type="checkbox"
               checked={understood}
               onChange={(e) => setUnderstood(e.target.checked)}
-              className="mt-1 h-4 w-4 accent-[#d32434]"
+              className="mt-0.5 h-5 w-5 shrink-0 accent-[#d32434]"
             />
             <span className="text-sm">I understand my links stop working and this can&rsquo;t be undone.</span>
           </label>
@@ -316,15 +338,37 @@ export function AccountPanel({ initial }: { initial: Me }) {
             {deleteError}
           </p>
         )}
-        <div className="mt-6 flex justify-end gap-2">
-          <button type="button" className={btn("ghost")} onClick={() => setDeleteOpen(false)}>
+        <div className="mt-4 flex justify-end gap-2">
+          <button type="button" className={btn("ghost", "md", "max-sm:flex-1")} onClick={() => setDeleteOpen(false)}>
             Cancel
           </button>
-          <button type="button" className={btn("primary", "md", "min-w-[9rem]")} disabled={!understood || deleting} onClick={deleteAccount}>
+          <button type="button" className={btn("primary", "md", "min-w-[9rem] max-sm:flex-1")} disabled={!understood || deleting} onClick={deleteAccount}>
             {deleting ? <Spinner size={16} /> : "Delete account"}
           </button>
         </div>
       </Dialog>
     </div>
+  );
+}
+
+/** What happened to a change, right under the field that was changed. */
+function SaveNote({ saved, error, idle }: { saved: boolean; error: string | null; idle: string }) {
+  if (error) {
+    return (
+      <p role="alert" className="mt-1.5 text-sm text-red-text">
+        {error}
+      </p>
+    );
+  }
+  return (
+    <p role="status" className={`mt-1.5 min-h-5 text-sm ${saved ? "font-medium text-text" : "text-text-2"}`}>
+      {saved ? (
+        <span className="inline-flex items-center gap-1.5">
+          <CheckIcon size={16} className="text-red-text" /> Saved
+        </span>
+      ) : (
+        idle
+      )}
+    </p>
   );
 }

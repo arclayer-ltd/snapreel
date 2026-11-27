@@ -79,10 +79,13 @@ struct VideoCard: View {
                 .foregroundColor(Color.srText)
                 .lineLimit(2)
                 .multilineTextAlignment(.leading)
-            Text(verbatim: metaText)
-                .font(.srFootnote)
-                .foregroundStyle(Color.srTextSecondary)
-                .lineLimit(1)
+            // Once a minute, so "22m ago" moves on.
+            TimelineView(.everyMinute) { _ in
+                Text(verbatim: metaText)
+                    .font(.srFootnote)
+                    .foregroundStyle(Color.srTextSecondary)
+                    .lineLimit(1)
+            }
             statusLine
         }
         .padding(.top, 1)
@@ -331,10 +334,12 @@ struct VideoRailCard: View {
             .accessibilityLabel(accessibilitySummary)
             .accessibilityHint("Plays the recording")
             HStack(alignment: .center, spacing: Space.xxs) {
-                Text(verbatim: footnote)
-                    .font(.srFootnote)
-                    .foregroundStyle(Color.srTextSecondary)
-                    .lineLimit(1)
+                TimelineView(.everyMinute) { _ in
+                    Text(verbatim: footnote)
+                        .font(.srFootnote)
+                        .foregroundStyle(Color.srTextSecondary)
+                        .lineLimit(1)
+                }
                 Spacer(minLength: 0)
                 LibraryMoreButton(video: video, actions: actions)
                     .padding(.trailing, -6)

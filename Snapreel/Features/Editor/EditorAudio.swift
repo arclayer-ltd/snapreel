@@ -9,9 +9,12 @@ final class VoiceOverRecorder {
     private var recorder: AVAudioRecorder?
     private var fileName: String?
 
-    func start(url: URL) throws {
+    /// Gets the microphone ready (this takes a moment), so `record` starts at once.
+    func prepare(url: URL) throws {
+        cancel()
         let session = AVAudioSession.sharedInstance()
-        try session.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker])
+        // Headphones keep working: the video plays muted, but the take is played back over them.
+        try session.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker, .allowBluetoothA2DP])
         try session.setActive(true)
         let settings: [String: Any] = [
             AVFormatIDKey: kAudioFormatMPEG4AAC,
@@ -21,12 +24,12 @@ final class VoiceOverRecorder {
         ]
         let recorder = try AVAudioRecorder(url: url, settings: settings)
         recorder.isMeteringEnabled = true
-        guard recorder.prepareToRecord(), recorder.record() else {
-            throw CocoaError(.fileWriteUnknown)
-        }
+        guard recorder.prepareToRecord() else { throw CocoaError(.fileWriteUnknown) }
         self.recorder = recorder
         self.fileName = url.lastPathComponent
     }
+
+    func record() -> Bool { recorder?.record() ?? false }
 
     /// Input level, 0...1.
     var level: Float {
@@ -39,8 +42,12 @@ final class VoiceOverRecorder {
     /// Stops and returns the take's file and length.
     func stop() -> (fileName: String, duration: Double)? {
         guard let recorder, let fileName else { return nil }
-        let length = recorder.currentTime
+        // After a call has stopped it, its own clock is back at zero; the file knows its length.
+        var length = recorder.currentTime
         recorder.stop()
+        if length < 0.1, let file = try? AVAudioFile(forReading: recorder.url), file.fileFormat.sampleRate > 0 {
+            length = Double(file.length) / file.fileFormat.sampleRate
+        }
         self.recorder = nil
         self.fileName = nil
         try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback)
@@ -76,11 +83,17 @@ enum NoiseReducer {
         guard !tracks.isEmpty else { throw Failure.noSound }
         let duration = try await asset.load(.duration).seconds
         let job = NoiseJob(asset: asset, tracks: tracks, duration: duration, destination: destination)
-        try await Task.detached(priority: .userInitiated) {
+        let work = Task.detached(priority: .userInitiated) {
             try job.run { fraction in
                 Task { @MainActor in progress(fraction) }
             }
-        }.value
+        }
+        // Closing the editor stops it.
+        try await withTaskCancellationHandler {
+            try await work.value
+        } onCancel: {
+            work.cancel()
+        }
     }
 
     /// The asset and its tracks, handed to one background task that alone uses them.
@@ -116,9 +129,19 @@ enum NoiseReducer {
             let threshold = min(max(floor * 3, 0.0015), max(median * 0.6, 0.0015))
             report(0.3)
 
-            // Pass 2: filter, gate and write.
-            let partial = destination.deletingLastPathComponent().appendingPathComponent("partial-" + destination.lastPathComponent)
-            try? FileManager.default.removeItem(at: partial)
+            // Pass 2: filter, gate and write. Each run has its own file, so two never mix.
+            let partial = destination.deletingLastPathComponent()
+                .appendingPathComponent("partial-\(UUID().uuidString)-" + destination.lastPathComponent)
+            defer { try? FileManager.default.removeItem(at: partial) }
+            try write(to: partial, levels: levels, threshold: threshold, totalSamples: totalSamples, report: report)
+            // The file is closed (its header is written) before anyone can open it.
+            try? FileManager.default.removeItem(at: destination)
+            try FileManager.default.moveItem(at: partial, to: destination)
+            report(1)
+        }
+
+        private func write(to partial: URL, levels: [Float], threshold: Float, totalSamples: Double,
+                           report: (Double) -> Void) throws {
             let settings: [String: Any] = [
                 AVFormatIDKey: kAudioFormatMPEG4AAC,
                 AVSampleRateKey: NoiseReducer.sampleRate,
@@ -160,15 +183,14 @@ enum NoiseReducer {
                 written += Double(samples.count)
                 if written - lastReport > NoiseReducer.sampleRate * 5 {
                     lastReport = written
-                    report(0.3 + 0.7 * min(1, written / totalSamples))
+                    report(0.3 + 0.7 * min(0.99, written / totalSamples))
                 }
             }
-            try? FileManager.default.removeItem(at: destination)
-            try FileManager.default.moveItem(at: partial, to: destination)
-            report(1)
         }
 
-        /// Mono float samples of all the sound tracks mixed, in order.
+        /// Mono float samples of all the sound tracks mixed, from the recording's first moment and
+        /// without gaps: silence stands in where there is no sound, so the cleaned sound is on the
+        /// recording's own clock.
         private func read(_ body: ([Float]) throws -> Void) throws {
             let reader = try AVAssetReader(asset: asset)
             let output = AVAssetReaderAudioMixOutput(audioTracks: tracks, audioSettings: [
@@ -184,7 +206,22 @@ enum NoiseReducer {
             guard reader.canAdd(output) else { throw Failure.unreadable }
             reader.add(output)
             guard reader.startReading() else { throw reader.error ?? Failure.unreadable }
+            defer { reader.cancelReading() }
+            var position = 0
             while let buffer = output.copyNextSampleBuffer() {
+                try Task.checkCancellation()
+                let time = CMSampleBufferGetPresentationTimeStamp(buffer).seconds
+                if time.isFinite {
+                    var gap = Int((time * NoiseReducer.sampleRate).rounded()) - position
+                    if gap > 2 {
+                        position += gap
+                        while gap > 0 {
+                            let count = min(gap, 8_192)
+                            try body([Float](repeating: 0, count: count))
+                            gap -= count
+                        }
+                    }
+                }
                 guard let block = CMSampleBufferGetDataBuffer(buffer) else { continue }
                 let length = CMBlockBufferGetDataLength(block)
                 guard length >= 4 else { continue }
@@ -194,6 +231,7 @@ enum NoiseReducer {
                     return CMBlockBufferCopyDataBytes(block, atOffset: 0, dataLength: length, destination: base)
                 }
                 guard status == noErr else { continue }
+                position += samples.count
                 try body(samples)
             }
             if reader.status == .failed { throw reader.error ?? Failure.unreadable }

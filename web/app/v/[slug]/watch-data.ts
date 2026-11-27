@@ -8,10 +8,12 @@ import { getSessionUser } from "@/app/app/_lib/session";
 import type { PublicVideo } from "@/lib/contract";
 import { formatTime } from "@/lib/client/format";
 import { SITE_URL } from "@/lib/client/links";
-import { getPublicVideo } from "@/lib/server/queries";
+import { buildPublicVideo, resolvePublicVideo } from "@/lib/server/queries";
 
 export type WatchError = "password" | "expired" | "removed" | "not_found";
-export type WatchResult = PublicVideo | { error: WatchError };
+/** `viewerIsOwner`: the signed-in owner is looking at their own link (no name asked, views not counted). */
+export type WatchVideo = PublicVideo & { viewerIsOwner: boolean };
+export type WatchResult = WatchVideo | { error: WatchError };
 
 const SLUG = /^[A-Za-z0-9]{4,32}$/;
 
@@ -21,11 +23,12 @@ export const loadPublicVideo = cache(async (slug: string): Promise<WatchResult> 
   const store = await cookies();
   const unlockCookie = store.get(`sr_unlock_${slug}`)?.value ?? null;
   const viewer = await getSessionUser();
-  const result = await getPublicVideo(slug, { unlockCookie, viewerUserId: viewer?.id ?? null });
-  return result as WatchResult;
+  const resolved = await resolvePublicVideo(slug, { unlockCookie, viewerUserId: viewer?.id ?? null });
+  if ("error" in resolved) return resolved;
+  return { ...(await buildPublicVideo(resolved.video)), viewerIsOwner: resolved.isOwner };
 });
 
-const ERROR_TITLES: Record<WatchError, string> = {
+export const ERROR_TITLES: Record<WatchError, string> = {
   password: "Password-protected video",
   expired: "This link has expired",
   removed: "This video isn’t shared any more",

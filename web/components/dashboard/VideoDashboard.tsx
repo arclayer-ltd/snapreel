@@ -4,12 +4,12 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { Activity, Insights, Me, PublicVideo, VideoDetail } from "@/lib/contract";
 import { errorMessage, ownerApi } from "@/lib/client/api";
 import { formatDate, formatTime, formatUntil, isPast } from "@/lib/client/format";
 import { watchUrl } from "@/lib/client/links";
-import { ChevronLeftIcon, ClockIcon, ExternalIcon, LockIcon, TrashIcon, UploadIcon } from "@/components/player/icons";
+import { AlertIcon, ChevronLeftIcon, ClockIcon, ExternalIcon, LockIcon, TrashIcon, UploadIcon } from "@/components/player/icons";
 import { PlaybackContext, PlaybackStore } from "@/components/player/playback";
 import { Player } from "@/components/player/Player";
 import { CopyLinkButton, Dialog, Spinner, btn } from "@/components/player/ui";
@@ -41,6 +41,26 @@ export function VideoDashboard({
   const [stopping, setStopping] = useState(false);
   const [stopError, setStopError] = useState<string | null>(null);
   const pro = me.plan.tier === "pro";
+
+  // While it's uploading the page asks again by itself, and takes the new state when it arrives.
+  const [seen, setSeen] = useState(initial);
+  if (seen !== initial) {
+    setSeen(initial);
+    if (initial.status !== video.status) setVideo(initial);
+  }
+  const uploading = video.status === "uploading";
+  useEffect(() => {
+    if (!uploading) return;
+    const look = () => {
+      if (document.visibilityState === "visible") router.refresh();
+    };
+    const id = window.setInterval(look, 15_000);
+    document.addEventListener("visibilitychange", look);
+    return () => {
+      window.clearInterval(id);
+      document.removeEventListener("visibilitychange", look);
+    };
+  }, [uploading, router]);
   const url = watchUrl(video.slug);
   const expired = video.expiresAt ? isPast(video.expiresAt) : false;
 
@@ -49,6 +69,9 @@ export function VideoDashboard({
     setStopError(null);
     try {
       await ownerApi.deleteVideo(video.id);
+      try {
+        sessionStorage.setItem("sr_flash", `“${video.title}” isn’t shared any more. Its link has stopped working.`);
+      } catch {}
       router.replace("/app");
       router.refresh();
     } catch (err) {
@@ -68,7 +91,7 @@ export function VideoDashboard({
     <PlaybackContext value={store}>
       <Link
         href="/app"
-        className="-ml-2 inline-flex h-9 items-center gap-1 rounded-full px-2 text-sm font-semibold text-text-2 hover:bg-fill hover:text-text focus-visible:outline-2 focus-visible:outline-sr-red"
+        className="-ml-2 inline-flex h-11 items-center gap-1 rounded-full px-2 text-sm font-semibold text-text-2 hover:bg-fill hover:text-text focus-visible:outline-2 focus-visible:outline-sr-red"
       >
         <ChevronLeftIcon size={17} />
         All links
@@ -99,11 +122,16 @@ export function VideoDashboard({
           </p>
         </div>
         <div className="flex w-full flex-wrap gap-2 sm:w-auto">
-          <CopyLinkButton url={url} variant="primary" size="md" className="max-sm:flex-1" />
-          <a href={`/v/${video.slug}`} target="_blank" rel="noopener" className={btn("secondary", "md", "max-sm:flex-1")}>
-            Open
-            <ExternalIcon size={17} />
-          </a>
+          {/* A failed upload has nothing to watch yet: no link to hand out until the phone sends it again. */}
+          {video.status !== "failed" && (
+            <>
+              <CopyLinkButton url={url} variant="primary" size="md" className="max-sm:flex-1" />
+              <a href={`/v/${video.slug}`} target="_blank" rel="noopener" className={btn("secondary", "md", "max-sm:flex-1")}>
+                Open
+                <ExternalIcon size={17} />
+              </a>
+            </>
+          )}
           <button type="button" onClick={() => setConfirmStop(true)} className={btn("quiet", "md", "text-red-text max-sm:w-full")}>
             <TrashIcon size={17} />
             Stop sharing
@@ -123,7 +151,7 @@ export function VideoDashboard({
                 role="tab"
                 aria-selected={tab === t.id}
                 onClick={() => setTab(t.id)}
-                className={`h-9 flex-1 rounded-full text-sm font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-sr-red motion-reduce:transition-none ${
+                className={`h-11 flex-1 rounded-full text-sm font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-sr-red motion-reduce:transition-none ${
                   tab === t.id ? "bg-surface text-text shadow-sm" : "text-text-2"
                 }`}
               >
@@ -133,10 +161,21 @@ export function VideoDashboard({
           </div>
 
           <div className={shown("insights")}>
-            <InsightsPanel video={video} insights={insights} pro={pro} />
+            <InsightsPanel
+              video={video}
+              insights={insights}
+              pro={pro}
+              activityCount={activity.comments.length + activity.reactions.length}
+            />
           </div>
           <div className={shown("activity")}>
-            <ActivityPanel initial={activity} allowComments={video.allowComments} />
+            <ActivityPanel
+              initial={activity}
+              allowComments={video.allowComments}
+              videoId={video.id}
+              slug={video.slug}
+              ownerName={me.user.displayName}
+            />
           </div>
         </div>
         <div className={`lg:sticky lg:top-24 ${shown("settings")}`}>
@@ -163,10 +202,10 @@ export function VideoDashboard({
           </p>
         )}
         <div className="mt-6 flex justify-end gap-2">
-          <button type="button" className={btn("ghost")} onClick={() => setConfirmStop(false)}>
+          <button type="button" className={btn("ghost", "md", "max-sm:flex-1")} onClick={() => setConfirmStop(false)}>
             Keep sharing
           </button>
-          <button type="button" className={btn("primary", "md", "min-w-[8.5rem]")} onClick={stopSharing} disabled={stopping}>
+          <button type="button" className={btn("primary", "md", "min-w-[8.5rem] max-sm:flex-1")} onClick={stopSharing} disabled={stopping}>
             {stopping ? <Spinner size={16} /> : "Stop sharing"}
           </button>
         </div>
@@ -205,7 +244,7 @@ function Preview({
   }
   const message =
     video.status === "uploading"
-      ? "Still uploading from your iPhone. Keep Snapreel open until it finishes."
+      ? "Still uploading from your iPhone. This page updates by itself."
       : video.status === "failed"
         ? "This upload didn't finish. Open Snapreel on your iPhone to send it again."
         : expired
@@ -218,7 +257,13 @@ function Preview({
       )}
       <div className="relative flex max-w-sm flex-col items-center gap-3 px-6 text-center">
         <span className="flex h-12 w-12 items-center justify-center rounded-full bg-white/15">
-          {video.status === "uploading" ? <UploadIcon size={22} /> : <ClockIcon size={22} />}
+          {video.status === "uploading" ? (
+            <UploadIcon size={22} />
+          ) : video.status === "failed" ? (
+            <AlertIcon size={22} />
+          ) : (
+            <ClockIcon size={22} />
+          )}
         </span>
         <p className="text-[15px] font-medium">{message}</p>
       </div>

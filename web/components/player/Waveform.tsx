@@ -3,7 +3,7 @@
 // Audio-only recordings: a speech-like waveform drawn from the title (so it's stable), lit up to the
 // playhead and gently moving while it plays. No Web Audio, so it never mutes cross-origin audio.
 import { useMemo } from "react";
-import styles from "./player.module.css";
+import "./player.css";
 
 function seeded(seed: string) {
   let h = 2166136261;
@@ -46,7 +46,7 @@ export function Waveform({
         return (
           <span
             key={i}
-            className={`${styles.waveBar} ${playing && near ? styles.waveLive : ""} block w-[3px] rounded-full sm:w-1`}
+            className={`sr-wave-bar ${playing && near ? "sr-wave-live" : ""} block w-[3px] rounded-full sm:w-1`}
             style={{
               height: `${h * 100}%`,
               backgroundColor: played ? "var(--accent, #f04850)" : "rgb(255 255 255 / 0.28)",

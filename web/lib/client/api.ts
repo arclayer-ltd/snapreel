@@ -22,7 +22,6 @@ import type {
   ViewOptOut,
 } from "@/lib/contract";
 import { PREVIEW } from "@/lib/client/preview-data";
-import { accessToken } from "@/lib/client/supabase";
 
 export class ApiError extends Error {
   constructor(
@@ -54,6 +53,8 @@ async function request<T>(method: Method, path: string, opts: { body?: unknown; 
   const headers: Record<string, string> = { accept: "application/json" };
   if (opts.body !== undefined) headers["content-type"] = "application/json";
   if (opts.auth) {
+    // Loaded only for owner calls: viewers on a watch page never need the Supabase client (about 74 KB gzipped).
+    const { accessToken } = await import("@/lib/client/supabase");
     const token = await accessToken();
     if (!token) throw new ApiError(401, "signed_out", "You're signed out. Sign in again to carry on.");
     headers.authorization = `Bearer ${token}`;
@@ -89,6 +90,9 @@ export const publicApi = {
   unlock: (slug: string, password: string) => request<void>("POST", pub(slug, "/unlock"), { body: { password } }),
   activity: (slug: string) => request<Activity>("GET", pub(slug, "/activity")),
   comment: (slug: string, body: NewComment) => request<Comment>("POST", pub(slug, "/comments"), { body }),
+  /** Takes back a comment written in this browser (or by this signed-in account). */
+  deleteComment: (slug: string, id: string) =>
+    request<void>("DELETE", pub(slug, `/comments/${encodeURIComponent(id)}`)),
   react: (slug: string, body: NewReaction) => request<Reaction>("POST", pub(slug, "/reactions"), { body }),
   report: (slug: string, body: NewReport) => request<void>("POST", pub(slug, "/report"), { body }),
   view: (slug: string, body: ViewEvent) => request<{ viewId: string }>("POST", pub(slug, "/view"), { body }),
@@ -137,6 +141,10 @@ export const ownerApi = {
   approveComment: (id: string) => request<Comment>("POST", `/api/comments/${encodeURIComponent(id)}/approve`, { auth: true }),
   block: (target: { commentId: string } | { reactionId: string }) =>
     request<void>("POST", "/api/blocks", { body: target, auth: true }),
+  blockedIn: (videoId: string) =>
+    request<{ commentIds: string[]; reactionIds: string[] }>("GET", `/api/blocks?videoId=${encodeURIComponent(videoId)}`, { auth: true }),
+  unblock: (target: { commentId: string } | { reactionId: string }) =>
+    request<void>("DELETE", "/api/blocks", { body: target, auth: true }),
   deleteAccount: () => request<void>("POST", "/api/account/delete", { auth: true }),
 };
 

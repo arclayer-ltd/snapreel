@@ -1,5 +1,40 @@
 import SwiftUI
 
+/// The Settings sheet, presented through UIKit (`ProPresenter.openSettings`).
+///
+/// Tester t26 and the rig (iOS 16.4): once Settings had closed twice, the gear on every tab root was still drawn
+/// but no longer a button (the accessibility tree turned it into "Other"), until the app went to the background or
+/// the tab was switched. Redrawing the toolbar, keeping this state off the router, and presenting through UIKit
+/// instead of SwiftUI's `.sheet` each left it the same. What a tab switch does brings it back, so after Settings
+/// has gone the shown tab gets the same nudge (`AppRouter.nudgeTabs`).
+@MainActor
+final class SettingsSheet: ObservableObject {
+    static let shared = SettingsSheet()
+
+    /// Setting it opens or closes the sheet.
+    @Published var isPresented = false {
+        didSet {
+            guard isPresented != oldValue, !isSettling else { return }
+            if isPresented {
+                ProPresenter.openSettings(path: path)
+            } else {
+                ProPresenter.closeSettings { AppEnvironment.shared.router.nudgeTabs() }
+            }
+        }
+    }
+    /// Read once when the sheet opens.
+    var path: [SettingsPage] = []
+    private var isSettling = false
+
+    /// The sheet went (a swipe down, or it couldn't be shown).
+    func didClose() {
+        isSettling = true
+        isPresented = false
+        isSettling = false
+        AppEnvironment.shared.router.nudgeTabs()
+    }
+}
+
 enum AppTab: String, CaseIterable, Identifiable, Hashable {
     case home
     case library
@@ -68,6 +103,8 @@ struct PlayerPresentation: Equatable {
     var opensTranscript = false
     /// Opens on the Comments tab (from a comment on the recording's share link).
     var opensComments = false
+    /// Opens without playing (back from the editor, onto the page it was opened from).
+    var startsPaused = false
     /// Changes each time `play` is called so the player can react to a new request for the same video.
     var token = UUID()
 }
@@ -76,6 +113,8 @@ struct PlayerPresentation: Equatable {
 struct EditorLaunch: Identifiable, Equatable {
     let id = UUID()
     var videoID: UUID
+    /// Opened from this video's page: closing the editor goes back to it.
+    var returnsTo: UUID?
 }
 
 /// App-wide navigation state. Views use `@EnvironmentObject var router: AppRouter`.
@@ -93,9 +132,30 @@ final class AppRouter: ObservableObject {
     @Published var minimizedRecorder: RecorderModel?
     @Published var player: PlayerPresentation?
     @Published var editor: EditorLaunch?
-    @Published var isSettingsPresented = false
+    /// Whether the Settings sheet is up. Kept in `SettingsSheet`, not published here: every tab root watches the
+    /// router, and redrawing their toolbars while the sheet came and went left the gear dead on iOS 16.
+    var isSettingsPresented: Bool {
+        get { SettingsSheet.shared.isPresented }
+        set { SettingsSheet.shared.isPresented = newValue }
+    }
+    /// For a moment after a sheet closed: the shown tab is drawn as if it had just been switched to, which gives its
+    /// navigation bar's buttons their taps back (see `SettingsSheet`).
+    @Published private(set) var isNudgingTabs = false
+
+    func nudgeTabs() {
+        guard !isNudgingTabs else { return }
+        isNudgingTabs = true
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 60_000_000)
+            isNudgingTabs = false
+        }
+    }
+
     /// Pages pushed when Settings opens (empty = the root). Set through `openSettings(_:)`.
-    @Published var settingsPath: [SettingsPage] = []
+    var settingsPath: [SettingsPage] {
+        get { SettingsSheet.shared.path }
+        set { SettingsSheet.shared.path = newValue }
+    }
     @Published var toast: ToastMessage?
 
     /// Selecting the Record tab opens the recorder instead of switching tabs.
@@ -136,7 +196,8 @@ final class AppRouter: ObservableObject {
         recorder = RecorderLaunch(mode: nil, resumesMinimized: true)
     }
 
-    func play(_ videoID: UUID, at time: Double? = nil, opensTranscript: Bool = false, opensComments: Bool = false) {
+    func play(_ videoID: UUID, at time: Double? = nil, opensTranscript: Bool = false, opensComments: Bool = false,
+              startsPaused: Bool = false) {
         if minimizedRecorder != nil {
             // Playing would take the microphone's audio session away from the recording.
             showToast("Stop your recording to play this", systemImage: "mic.fill")
@@ -144,7 +205,7 @@ final class AppRouter: ObservableObject {
         }
         withAnimation(Motion.standard) {
             player = PlayerPresentation(videoID: videoID, startAt: time, opensTranscript: opensTranscript,
-                                        opensComments: opensComments)
+                                        opensComments: opensComments, startsPaused: startsPaused)
         }
     }
 
@@ -155,6 +216,7 @@ final class AppRouter: ObservableObject {
             showToast("Stop your recording to edit", systemImage: "mic.fill")
             return
         }
+        let fromPage = player.map { !$0.isMinimized && $0.videoID == videoID } ?? false
         let waits = afterClosing || recorder != nil || (player.map { !$0.isMinimized } ?? false)
         if player != nil {
             PlaybackSession.shared.close()
@@ -162,18 +224,28 @@ final class AppRouter: ObservableObject {
         }
         recorder = nil
         isSettingsPresented = false
+        let launch = EditorLaunch(videoID: videoID, returnsTo: fromPage ? videoID : nil)
         guard waits else {
-            editor = EditorLaunch(videoID: videoID)
+            editor = launch
             return
         }
         Task { @MainActor in
             try? await Task.sleep(nanoseconds: 650_000_000)
-            self.editor = EditorLaunch(videoID: videoID)
+            self.editor = launch
         }
     }
 
+    /// Closes the editor. Opened from a video's page, it goes back to that page (paused), not to
+    /// the list the page was opened from.
     func closeEditor() {
+        let back = editor?.returnsTo
         editor = nil
+        guard let back else { return }
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 650_000_000)
+            guard self.editor == nil, self.player == nil, self.recorder == nil else { return }
+            self.play(back, startsPaused: true)
+        }
     }
 
     /// Closes the editor and plays a recording (a saved edit's "Open").

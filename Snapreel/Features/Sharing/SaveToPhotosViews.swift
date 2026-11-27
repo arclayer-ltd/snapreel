@@ -104,17 +104,31 @@ struct PhotosQuestionSheet: View {
         var secondary: String?
     }
 
+    private var spaceMessage: String {
+        let free = DiskSpace.available
+        let needs = "Photos needs about \(Format.bytes(video.fileSize)) to keep its own copy"
+        let has = free > 0 ? ", and this iPhone has \(Format.bytes(free)) free" : ""
+        return "\(needs)\(has). Free up some space, or delete recordings you no longer need, then try again."
+    }
+
     private var quotedTitle: String { "\u{201C}\(video.title)\u{201D}" }
 
     private var copy: Copy {
         switch stage {
-        case .permission, .saving, .saved:
+        case .permission, .preparing, .saving, .saved:
             return Copy(systemImage: "photo.on.rectangle",
                         title: "Save to your Photos",
                         message: "Next, your iPhone will ask if Snapreel can add to Photos. Choose Allow to keep a copy of \(quotedTitle) there.",
                         note: "Snapreel can only add what you choose. It can't see or change anything already in your library.",
                         primary: "Continue",
                         secondary: "Not now")
+        case .alreadySaved(let times):
+            let before = times == 1 ? "before" : "\(times) times before"
+            return Copy(systemImage: "photo.on.rectangle.angled",
+                        title: "Already in Photos",
+                        message: "You've saved \(quotedTitle) to Photos \(before). Saving again adds another copy there.",
+                        primary: "Save another copy",
+                        secondary: "Cancel")
         case .denied:
             return Copy(systemImage: "hand.raised.fill",
                         title: "Photos access is off",
@@ -130,7 +144,7 @@ struct PhotosQuestionSheet: View {
         case .failed(.outOfSpace):
             return Copy(systemImage: "externaldrive.fill.badge.exclamationmark",
                         title: "Not enough space",
-                        message: "Photos needs about \(Format.bytes(video.fileSize)) free to keep its own copy. Free up some space on your iPhone, then try again.",
+                        message: spaceMessage,
                         primary: "Try again",
                         secondary: "Close")
         case .failed(.missingFile):
@@ -155,8 +169,10 @@ struct PhotosVideoChip: View {
 
     var body: some View {
         HStack(spacing: Space.s) {
-            VideoThumbnail(video: video, cornerRadius: Radius.s, showsDuration: false)
-                .frame(width: 64)
+            // A portrait recording gets a portrait box, so it isn't a thin strip in a wide one.
+            VideoThumbnail(video: video, cornerRadius: Radius.s, showsDuration: false,
+                           aspectRatio: video.isPortrait ? 3 / 4 : 16 / 9)
+                .frame(width: video.isPortrait ? 42 : 64)
             VStack(alignment: .leading, spacing: 2) {
                 Text(video.title)
                     .font(.srSubheadlineStrong)
@@ -176,33 +192,48 @@ struct PhotosVideoChip: View {
 
 // MARK: - Status card
 
-/// Floating card along the bottom edge: "Saving to Photos…" with a spinner, then
-/// "Saved to Photos" with Open Photos. Follows the appearance like the screen under it, with a
-/// hairline and a shadow so it lifts off lists and the player alike.
+/// Floating card along the bottom edge while a recording is prepared, shared or saved: what is
+/// happening, for which recording, how far it is and one button. Follows the appearance like the
+/// screen under it, with a hairline and a shadow so it lifts off lists and the player alike.
 @MainActor
-struct PhotosStatusCard: View {
+struct SharingStatusCard: View {
     let video: Video
-    let isSaved: Bool
-    let onOpenPhotos: @MainActor () -> Void
+    let title: String
+    let detail: String
+    /// 0...1; nil while there is nothing to measure.
+    var progress: Double?
+    /// A bar under the text: filled to `progress`, or moving when there is none.
+    var showsBar = false
+    var isDone = false
+    var actionTitle: String?
+    var actionHint: String?
+    var action: (@MainActor () -> Void)?
+
+    @Environment(\.dynamicTypeSize) private var typeSize
+
+    static func detail(progress: Double?, of video: Video) -> String {
+        guard let progress else { return video.title }
+        return "\(Int((min(1, max(0, progress)) * 100).rounded(.down)))% \u{00B7} \(video.title)"
+    }
 
     var body: some View {
-        HStack(spacing: Space.s) {
-            thumbnail
-            VStack(alignment: .leading, spacing: 2) {
-                Text(isSaved ? "Saved to Photos" : "Saving to Photos\u{2026}")
-                    .font(.srSubheadlineStrong)
-                    .foregroundStyle(Color.srText)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
-                Text(video.title)
-                    .font(.srFootnote)
-                    .foregroundStyle(Color.srTextSecondary)
-                    .lineLimit(1)
+        VStack(spacing: Space.s) {
+            HStack(spacing: Space.s) {
+                thumbnail
+                words
+                // At the largest text sizes the button goes under the words, which then keep the width.
+                if !isLarge, let actionTitle, let action {
+                    actionButton(actionTitle, action)
+                }
             }
-            .accessibilityElement(children: .combine)
-            Spacer(minLength: Space.xs)
-            trailing
+            if isLarge, let actionTitle, let action {
+                actionButton(actionTitle, action)
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+            }
+            if showsBar { SharingProgressBar(progress: progress) }
         }
+        // Its natural height: an overlay's proposal would squeeze the thumbnail and the title.
+        .fixedSize(horizontal: false, vertical: true)
         .padding(Space.s)
         .frame(maxWidth: 440)
         .background(RoundedRectangle(cornerRadius: Radius.l, style: .continuous).fill(Color.srSurface))
@@ -211,11 +242,33 @@ struct PhotosStatusCard: View {
         .shadow(color: Color.black.opacity(0.22), radius: 18, x: 0, y: 8)
     }
 
+    private var isLarge: Bool { typeSize.isAccessibilitySize }
+
+    private var words: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title)
+                .font(.srSubheadlineStrong)
+                .foregroundStyle(Color.srText)
+                .lineLimit(isLarge ? 3 : 1)
+                .minimumScaleFactor(isLarge ? 1 : 0.8)
+            Text(detail)
+                .font(.srFootnote.monospacedDigit())
+                .foregroundStyle(Color.srTextSecondary)
+                .lineLimit(isLarge ? 2 : 1)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(title)
+        .accessibilityValue(detail)
+        // All the width the button leaves, so the title only shrinks when it has to.
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .layoutPriority(1)
+    }
+
     private var thumbnail: some View {
         VideoThumbnail(video: video, cornerRadius: Radius.s, showsDuration: false)
             .frame(width: 52)
             .overlay(alignment: .bottomTrailing) {
-                if isSaved {
+                if isDone {
                     Image(systemName: "checkmark.circle.fill")
                         .font(.system(size: 16, weight: .bold))
                         .symbolRenderingMode(.palette)
@@ -226,27 +279,96 @@ struct PhotosStatusCard: View {
             }
     }
 
-    @ViewBuilder private var trailing: some View {
-        if isSaved {
-            Button {
-                onOpenPhotos()
-            } label: {
-                Text("Open Photos")
-                    .font(.srSubheadlineStrong)
-                    .foregroundStyle(Color.srOnInverse)
-                    .lineLimit(1)
-                    .fixedSize()
-                    .padding(.horizontal, Space.s)
-                    .frame(height: 34)
-                    .background(Capsule().fill(Color.srInverse))
-            }
-            .buttonStyle(PressScaleStyle())
-            .accessibilityHint("Opens the Photos app")
-        } else {
-            ProgressView()
-                .tint(Color.srText)
-                .padding(.trailing, Space.xs)
-                .accessibilityHidden(true)
+    private func actionButton(_ label: String, _ action: @escaping @MainActor () -> Void) -> some View {
+        Button {
+            Haptics.tap()
+            action()
+        } label: {
+            Text(label)
+                .font(.srSubheadlineStrong)
+                .foregroundStyle(isDone ? Color.srOnInverse : Color.srText)
+                .lineLimit(1)
+                .fixedSize()
+                .padding(.horizontal, Space.s)
+                .frame(height: 34)
+                .background(Capsule().fill(isDone ? Color.srInverse : Color.srFill))
+                // A full-size target around the small capsule.
+                .padding(.vertical, 5)
+                .contentShape(Rectangle())
         }
+        .buttonStyle(PressScaleStyle())
+        .accessibilityHint(actionHint ?? "")
+    }
+}
+
+/// A thin bar: filled to `progress`, or a piece moving along it when the end isn't known.
+struct SharingProgressBar: View {
+    let progress: Double?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var isMoving = false
+
+    var body: some View {
+        GeometryReader { proxy in
+            ZStack(alignment: .leading) {
+                Capsule().fill(Color.srFill)
+                if let progress {
+                    Capsule().fill(Color.srRed)
+                        .frame(width: max(4, proxy.size.width * CGFloat(min(1, max(0, progress)))))
+                        .animation(.linear(duration: 0.2), value: progress)
+                } else {
+                    Capsule().fill(Color.srRed.opacity(reduceMotion ? 0.5 : 1))
+                        .frame(width: proxy.size.width * (reduceMotion ? 1 : 0.3))
+                        .offset(x: reduceMotion ? 0 : (isMoving ? proxy.size.width * 0.7 : 0))
+                        .animation(reduceMotion ? nil : .easeInOut(duration: 0.9).repeatForever(autoreverses: true),
+                                   value: isMoving)
+                }
+            }
+        }
+        .frame(height: 4)
+        .onAppear { isMoving = true }
+        .accessibilityHidden(true)
+    }
+}
+
+/// Slides a status card up from the bottom edge of a screen, or down from the top on a screen
+/// whose main buttons sit along the bottom (`sharingCardsAtTop()`).
+struct SharingCardOverlay<Card: View>: View {
+    let isPresented: Bool
+    let bottomInset: CGFloat
+    @ViewBuilder let card: () -> Card
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.sharingCardsAtTop) private var atTop
+
+    var body: some View {
+        ZStack(alignment: atTop ? .top : .bottom) {
+            if isPresented {
+                card()
+                    .padding(.horizontal, Space.gutter)
+                    .padding(atTop ? .top : .bottom, atTop ? Space.s : bottomInset)
+                    .transition(reduceMotion ? .opacity : .move(edge: atTop ? .top : .bottom).combined(with: .opacity))
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: atTop ? .top : .bottom)
+        .animation(reduceMotion ? nil : Motion.standard, value: isPresented)
+    }
+}
+
+private struct SharingCardsAtTopKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
+extension EnvironmentValues {
+    /// Sharing and Save to Photos cards come down from the top instead of up from the bottom.
+    var sharingCardsAtTop: Bool {
+        get { self[SharingCardsAtTopKey.self] }
+        set { self[SharingCardsAtTopKey.self] = newValue }
+    }
+}
+
+extension View {
+    /// Shows the cards of `.shareVideo` and `.saveToPhotos` applied inside this view along the top
+    /// edge, so they don't cover buttons along the bottom (the recorder review's Edit and Done).
+    func sharingCardsAtTop() -> some View {
+        environment(\.sharingCardsAtTop, true)
     }
 }

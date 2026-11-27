@@ -55,12 +55,18 @@ function Missing() {
 function DetailSkeleton() {
   return (
     <div aria-busy="true">
-      <div className="h-5 w-24 rounded bg-fill motion-safe:animate-pulse" />
-      <div className="mt-4 h-9 w-2/3 rounded-xl bg-fill motion-safe:animate-pulse" />
+      <div className="h-11 w-24 py-3">
+        <div className="h-5 rounded bg-fill motion-safe:animate-pulse" />
+      </div>
+      <div className="mt-2 h-9 w-2/3 rounded-xl bg-fill motion-safe:animate-pulse" />
       <div className="mt-3 h-4 w-1/2 rounded bg-fill motion-safe:animate-pulse" />
+      <div className="mt-4 flex gap-2 sm:hidden">
+        <div className="h-11 flex-1 rounded-full bg-fill motion-safe:animate-pulse" />
+        <div className="h-11 flex-1 rounded-full bg-fill motion-safe:animate-pulse" />
+      </div>
       <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_400px]">
         <div className="space-y-6">
-          <div className="aspect-video rounded-2xl bg-[#07080c]" />
+          <div className="h-[56svh] rounded-2xl bg-[#07080c] sm:aspect-video sm:h-auto" />
           <div className="h-64 rounded-3xl border border-line bg-surface" />
         </div>
         <div className="h-[32rem] rounded-3xl border border-line bg-surface" />

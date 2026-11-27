@@ -220,7 +220,8 @@ struct VideoDetail: Codable, Hashable, Identifiable {
 struct UpdateVideoRequest: Encodable {
     var title: String?
     var status: CloudVideoStatus?
-    var uploadedBytes: Int64?
+    /// With `status: .ready`: the size of the video that was sent.
+    var sizeBytes: Int64?
     var access: CloudAccess?
     var password: String?
     var expiresAt: Date?
@@ -232,7 +233,7 @@ struct UpdateVideoRequest: Encodable {
     var clearsCallToAction = false
 
     private enum CodingKeys: String, CodingKey {
-        case title, status, uploadedBytes, access, password, expiresAt, allowDownload, allowComments,
+        case title, status, sizeBytes, access, password, expiresAt, allowDownload, allowComments,
              allowReactions, cta
     }
 
@@ -240,7 +241,7 @@ struct UpdateVideoRequest: Encodable {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encodeIfPresent(title, forKey: .title)
         try container.encodeIfPresent(status, forKey: .status)
-        try container.encodeIfPresent(uploadedBytes, forKey: .uploadedBytes)
+        try container.encodeIfPresent(sizeBytes, forKey: .sizeBytes)
         try container.encodeIfPresent(access, forKey: .access)
         try container.encodeIfPresent(password, forKey: .password)
         if clearsExpiry {
@@ -259,10 +260,16 @@ struct UpdateVideoRequest: Encodable {
     }
 
     var isEmpty: Bool {
-        title == nil && status == nil && uploadedBytes == nil && access == nil && password == nil
+        title == nil && status == nil && sizeBytes == nil && access == nil && password == nil
             && expiresAt == nil && !clearsExpiry && allowDownload == nil && allowComments == nil
             && allowReactions == nil && cta == nil && !clearsCallToAction
     }
+}
+
+/// `POST /api/videos/{id}/progress`.
+struct UploadProgressRequest: Encodable {
+    var uploadedBytes: Int64
+    var totalBytes: Int64
 }
 
 // MARK: - Insights and activity
@@ -373,6 +380,11 @@ struct VerifyPurchaseResponse: Codable, Hashable {
     var plan: CloudPlan
 }
 
+/// `POST /api/auth/handoff`: a link that signs this account in on the website, once, for 2 minutes.
+struct WebSignInLinkResponse: Codable, Hashable {
+    var url: URL
+}
+
 struct BlockRequest: Encodable {
     var commentId: String?
     var reactionId: String?
@@ -383,6 +395,8 @@ struct APIErrorBody: Decodable {
     var error: String
     var message: String?
     var reason: CloudLimitReason?
+    /// 409 `upload_incomplete`: the files that aren't stored.
+    var missing: [String]?
 }
 
 /// The `sr` part of a push (`docs/pro/API.md`, "Push to the app").

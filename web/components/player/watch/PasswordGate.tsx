@@ -40,7 +40,7 @@ export function PasswordGate({ slug }: { slug: string }) {
   const working = busy || refreshing;
 
   return (
-    <div className="flex min-h-svh flex-col">
+    <div className="sr-safe-x flex min-h-svh flex-col">
       <WatchHeader logoUrl={null} ownerName={null} showBadge />
       <main className="flex flex-1 items-center justify-center px-4 py-10">
         <form
@@ -60,6 +60,8 @@ export function PasswordGate({ slug }: { slug: string }) {
             id={id}
             type="password"
             autoComplete="off"
+            autoCapitalize="none"
+            enterKeyHint="go"
             autoFocus
             value={password}
             onChange={(e) => setPassword(e.target.value)}

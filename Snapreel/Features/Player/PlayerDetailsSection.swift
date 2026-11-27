@@ -13,6 +13,9 @@ struct PlayerDetailsSection: View {
     let onShare: @MainActor () -> Void
     let onMore: @MainActor () -> Void
     let onEditTitle: @MainActor () -> Void
+    /// Opens the editor (owner, 25 Nov 2026: Edit video belongs in the row under the title; Edit title is
+    /// in the "..." sheet). Nil shows Edit title there instead.
+    var onEditVideo: (@MainActor () -> Void)? = nil
     let onStats: @MainActor () -> Void
     var onSaveToPhotos: (@MainActor () -> Void)? = nil
     var onToggleWatchLater: (@MainActor () -> Void)? = nil
@@ -79,7 +82,11 @@ struct PlayerDetailsSection: View {
     /// The everyday actions in reach without opening the menu: equal tiles that always fit the width.
     private var quickActions: some View {
         HStack(spacing: Space.xs) {
-            QuickActionChip(title: "Edit title", systemImage: "pencil") { onEditTitle() }
+            if let onEditVideo, video.state.isReady {
+                QuickActionChip(title: video.isAudioOnly ? "Edit recording" : "Edit video", systemImage: "scissors") { onEditVideo() }
+            } else {
+                QuickActionChip(title: "Edit title", systemImage: "pencil") { onEditTitle() }
+            }
             if let onSaveToPhotos, video.kind != .audio {
                 QuickActionChip(title: "Save to Photos", systemImage: "square.and.arrow.down") { onSaveToPhotos() }
             }
@@ -288,6 +295,14 @@ struct PlayerFactsCard: View {
     }
 
     private var kindValue: String {
+        if video.editedFrom != nil {
+            switch video.kind {
+            case .camera: return "Edit of a camera recording"
+            case .screen: return "Edit of a screen recording"
+            case .audio: return "Edit of an audio recording"
+            case .imported: return "Edit of a video from Photos"
+            }
+        }
         switch video.kind {
         case .camera: return "Camera recording"
         case .screen: return "Screen recording"

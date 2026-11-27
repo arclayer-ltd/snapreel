@@ -33,6 +33,8 @@ struct RecordingReviewView: View {
         }
         .shareVideo($shareTarget)
         .saveToPhotos($photosTarget)
+        // Over the top of the picture, not over Edit and Done.
+        .sharingCardsAtTop()
         .onAppear {
             if pendingShare {
                 pendingShare = false
@@ -69,6 +71,8 @@ struct RecordingReviewView: View {
                 }
                 .buttonStyle(.srPrimary)
             }
+            // At the largest sizes Edit was cut to "E" beside Done.
+            .dynamicTypeSize(...DynamicTypeSize.accessibility1)
         }
         .padding(.horizontal, Space.m)
         .padding(.top, Space.xs)
@@ -91,14 +95,15 @@ struct RecordingReviewView: View {
     }
 
     private func actions(_ video: Video) -> some View {
-        HStack(spacing: 0) {
+        HStack(alignment: .top, spacing: 0) {
             ReviewActionButton(systemImage: "trash", title: "Delete", tint: Color.srStageRed) {
                 confirmsDelete = true
             }
             ReviewActionButton(systemImage: "character.cursor.ibeam", title: "Title", tint: Color.srStageText) {
                 editsTitle = true
             }
-            // Both wait for a screen recording's sound mix themselves (`.shareVideo`, `.saveToPhotos`).
+            // Both wait for a screen recording's sound mix themselves, with a progress card
+            // (`.shareVideo`, `.saveToPhotos`).
             ReviewActionButton(systemImage: "square.and.arrow.up", title: "Share", tint: Color.srStageText) {
                 shareTarget = library.video(video.id)
             }
@@ -191,18 +196,26 @@ private struct ReviewActionButton: View {
                     .foregroundStyle(tint)
                     .frame(width: 52, height: 52)
                     .background(Circle().fill(Color.srStageControl))
+                // The same size under every button: a longer title takes a second line instead of shrinking.
                 Text(title)
                     .font(.srCaption)
                     .foregroundStyle(Color.srStageTextSecondary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.75)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+                    // Five to a row: past this size the words break apart. Holding a button shows
+                    // its name large instead.
+                    .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
             }
-            .frame(maxWidth: .infinity)
+            .frame(maxWidth: .infinity, alignment: .top)
         }
         .buttonStyle(PressScaleStyle())
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(title)
         .accessibilityAddTraits(.isButton)
+        .accessibilityShowsLargeContentViewer {
+            Label(title, systemImage: systemImage)
+        }
     }
 }
 
@@ -218,6 +231,8 @@ private struct ReviewPlayerView: View {
     let startAt: Double?
     @StateObject private var player: RecorderReviewPlayer
     @State private var isOnScreen = false
+    /// Plays by itself once: coming back from a share sheet or another screen leaves it as it was.
+    @State private var hasStarted = false
 
     init(video: Video, url: URL, autoplay: Bool, startAt: Double? = nil) {
         self.video = video
@@ -256,6 +271,8 @@ private struct ReviewPlayerView: View {
         .animation(Motion.quick, value: player.isPlaying)
         .onAppear {
             isOnScreen = true
+            guard !hasStarted else { return }
+            hasStarted = true
             if let startAt { player.seek(to: startAt) }
             guard autoplay else { return }
             if video.isAudioOnly {
@@ -313,6 +330,8 @@ private struct ReviewPlayerView: View {
     }
 }
 
+/// `isPlaying` follows what the player really does: iOS can pause it (another app's sound, a call,
+/// a share sheet's activity), and then the Play button comes back and VoiceOver says "paused".
 @MainActor
 final class RecorderReviewPlayer: ObservableObject {
     let player: AVPlayer
@@ -320,15 +339,41 @@ final class RecorderReviewPlayer: ObservableObject {
     @Published private(set) var position: Double = 0
     @Published private(set) var duration: Double
     private var timeObserver: Any?
+    private var statusObservation: NSKeyValueObservation?
+    /// Play was asked for and the player hasn't been paused since (it may still be loading).
+    private var wantsToPlay = false
 
     init(url: URL, duration: Double) {
         player = AVPlayer(url: url)
         player.actionAtItemEnd = .pause
         self.duration = duration
+        observeTime()
+        statusObservation = player.observe(\.timeControlStatus) { [weak self] _, _ in
+            Task { @MainActor in self?.syncWithPlayer() }
+        }
+    }
+
+    private func observeTime() {
+        guard timeObserver == nil else { return }
         timeObserver = player.addPeriodicTimeObserver(forInterval: CMTime(seconds: 0.25, preferredTimescale: 600),
                                                       queue: .main) { [weak self] time in
             let seconds = time.seconds
             Task { @MainActor in self?.update(position: seconds) }
+        }
+    }
+
+    /// Reads the player's own state, whenever it changes.
+    func syncWithPlayer() {
+        switch player.timeControlStatus {
+        case .playing:
+            isPlaying = true
+        case .waitingToPlayAtSpecifiedRate:
+            isPlaying = wantsToPlay
+        case .paused:
+            wantsToPlay = false
+            isPlaying = false
+        @unknown default:
+            isPlaying = player.rate != 0
         }
     }
 
@@ -347,16 +392,21 @@ final class RecorderReviewPlayer: ObservableObject {
             player.seek(to: .zero)
             position = 0
         }
+        observeTime()
+        wantsToPlay = true
         player.play()
         isPlaying = true
     }
 
     func pause() {
+        wantsToPlay = false
         player.pause()
         isPlaying = false
     }
 
     func toggle() {
+        // What the player does now, not what was last asked: one tap always does what the button shows.
+        syncWithPlayer()
         if isPlaying { pause() } else { play() }
     }
 
@@ -366,11 +416,13 @@ final class RecorderReviewPlayer: ObservableObject {
     }
 
     func reachedEnd() {
+        wantsToPlay = false
         isPlaying = false
         position = duration
     }
 
     func stop() {
+        wantsToPlay = false
         player.pause()
         isPlaying = false
         if let timeObserver {

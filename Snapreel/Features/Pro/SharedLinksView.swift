@@ -50,7 +50,7 @@ struct SharedLinksView: View {
 
     private var uploadsGroup: some View {
         SettingsGroup(title: "Uploads",
-                      footnote: "Uploads carry on in the background, and pick up where they stopped after a lost connection.") {
+                      footnote: "Uploads carry on when you leave Snapreel or lock your iPhone, and pick up where they stopped after a lost connection. Preparing a video needs Snapreel open.") {
             ForEach(Array(uploads.enumerated()), id: \.element) { index, id in
                 if index > 0 { SettingsDivider(inset: Space.m + 64 + Space.s) }
                 UploadRow(videoID: id)
@@ -112,7 +112,7 @@ private struct UploadRow: View {
                 Text(label(state))
                     .font(.srFootnote.monospacedDigit())
                     .foregroundStyle(isFailed(state) ? Color.srRedText : Color.srTextSecondary)
-                    .lineLimit(2)
+                    .lineLimit(3)
                 if let fraction = fraction(state) {
                     LinkProgressBar(fraction: fraction)
                 }
@@ -163,16 +163,32 @@ private struct UploadRow: View {
     private func fraction(_ state: LinkState) -> Double? {
         switch state {
         case .uploading(let value), .waitingForNetwork(let value): return value
+        case .preparing: return uploader.progress(for: videoID)?.prepared
         default: return nil
         }
+    }
+
+    /// "Can't reach snapreel.video · trying again in 30 s" while an upload waits to try again.
+    private func retryLine(_ progress: UploadProgress?) -> String? {
+        guard let retry = progress?.retry else { return nil }
+        return UploadText.retryTitle(retry) + ". " + UploadText.retryDetail(retry, now: Date())
     }
 
     private func label(_ state: LinkState) -> String {
         switch state {
         case .creating: return "Making the link…"
-        case .preparing: return "Preparing the video…"
-        case .uploading(let value): return "Uploading · \(Int((value * 100).rounded()))%"
-        case .waitingForNetwork(let value): return "Waiting for a connection · \(Int((value * 100).rounded()))%"
+        case .preparing:
+            let progress = uploader.progress(for: videoID)
+            return [UploadText.preparing(progress), retryLine(progress) ?? UploadText.preparingDetail(progress)]
+                .compactMap { $0 }.joined(separator: "\n")
+        case .uploading(let value):
+            let progress = uploader.progress(for: videoID)
+            if let retry = retryLine(progress) { return "Uploading · \(Int((value * 100).rounded()))%\n" + retry }
+            return ["Uploading · \(Int((value * 100).rounded()))%", progress?.bytesLabel, progress?.timeLabel]
+                .compactMap { $0 }.joined(separator: "\n")
+        case .waitingForNetwork(let value):
+            return ["Waiting for a connection · \(Int((value * 100).rounded()))%", UploadText.waitingDetail(uploader.progress(for: videoID))]
+                .compactMap { $0 }.joined(separator: "\n")
         case .finishing: return "Finishing…"
         case .ready: return "Uploaded · ready to watch"
         case .failed(let message): return message
@@ -205,10 +221,12 @@ private struct LinkRow: View {
                     .foregroundStyle(Color.srText)
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
-                Text(meta)
-                    .font(.srFootnote)
-                    .foregroundStyle(Color.srTextSecondary)
-                    .lineLimit(1)
+                TimelineView(.everyMinute) { _ in
+                    Text(meta)
+                        .font(.srFootnote)
+                        .foregroundStyle(Color.srTextSecondary)
+                        .lineLimit(1)
+                }
                 if library.video(link.videoID) == nil {
                     Text("Not on this iPhone")
                         .font(.srCaption)

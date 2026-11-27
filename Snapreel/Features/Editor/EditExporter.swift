@@ -1,0 +1,1186 @@
+import AVFoundation
+import CoreImage
+import UIKit
+
+/// What the saved file should be like. Chosen from the recording, so an edit is about as big as
+/// the part of the recording it keeps: a 9-minute screen recording is a couple of hundred
+/// megabytes, not a gigabyte that takes an hour to upload.
+struct EditExportSettings: Equatable {
+    /// Picture size in pixels; zero for a voice recording.
+    var size: CGSize
+    /// Bits a second of picture.
+    var videoBitRate: Double
+    /// Bits a second the saved picture may come to: below about this much the encoder doesn't go,
+    /// whatever it is asked for (seen on 26 Nov: 720p edits of plain screen recordings asked for
+    /// 0.5 Mbit/s came out at 1 to 1.2). The size shown before saving and the space check use it.
+    var mostBitRate: Double
+    static let audioBitRate = 128_000.0
+
+    init(recipe: EditRecipe, picture: CGSize?, sourceBitRate: Double, frameRate: Double, quality: ExportQuality) {
+        guard let picture else {
+            size = .zero
+            videoBitRate = 0
+            mostBitRate = 0
+            return
+        }
+        size = recipe.renderSize(source: picture, quality: quality)
+        let pixels = Double(size.width * size.height)
+        // Above 30 frames a second each frame differs less from the last, so it costs half as much.
+        let rate = min(60, max(24, frameRate))
+        let effective = min(rate, 30) + max(0, rate - 30) * 0.5
+        let usual = pixels * effective * 0.085
+        let least = pixels * effective * 0.04
+        guard sourceBitRate > 50_000 else {
+            videoBitRate = usual
+            mostBitRate = usual
+            return
+        }
+        // No point in spending much more than the recording itself did on the same picture.
+        let cropped = recipe.outputPictureSize(source: picture)
+        let share = min(1, pixels / max(1, Double(cropped.width * cropped.height)))
+        let area = min(1, Double(cropped.width * cropped.height) / max(1, Double(picture.width * picture.height)))
+        let played = recipe.segments.reduce(0) { $0 + $1.sourceLength }
+        let speed = max(0.5, min(2, played / max(0.1, recipe.outputDuration)))
+        let own = sourceBitRate * 1.3 * pow(share, 0.8) * pow(area, 0.7) * speed
+        videoBitRate = max(min(usual, own), max(500_000, pixels * 30 * 0.015))
+        mostBitRate = max(videoBitRate, least)
+    }
+}
+
+/// Everything one save needs, gathered on the main actor and then used by one background job.
+struct EditExportPlan {
+    let id: UUID
+    let recipe: EditRecipe
+    let source: EditSource
+    let build: EditBuild
+    let settings: EditExportSettings
+    /// Where finished pieces wait, so a save that is interrupted carries on where it was.
+    let workFolder: URL
+    let output: URL
+    /// The overlays on screen during an output range, as pictures.
+    let overlays: @MainActor (ClosedRange<Double>) -> [EditOverlayImage]
+    /// Output times where an overlay appears or goes.
+    let overlayTimes: [Double]
+
+    /// The picture is drawn again (cropped, turned, blurred, with something over it, or HDR).
+    var draws: Bool {
+        !recipe.crop.isFullFrame || recipe.quarterTurns % 4 != 0 || recipe.flipped || !recipe.blurs.isEmpty
+            || !overlayTimes.isEmpty || source.isHDR
+    }
+
+    /// Nothing changes but the end of the recording: the recording's own data is copied, which
+    /// takes seconds and loses nothing.
+    var copyRange: CMTimeRange? {
+        guard source.hasVideo, !draws, recipe.voiceClips.isEmpty, source.audioTracks.count <= 1 else { return nil }
+        let audio = recipe.audio
+        guard source.audioTracks.isEmpty
+                || (!audio.muted && audio.volume > 0.999 && !audio.fadeIn && !audio.fadeOut && !audio.reducesNoise) else { return nil }
+        let played = recipe.playedSegments
+        guard played.count == 1, let only = played.first, only.speed == 1, only.start < 0.001 else { return nil }
+        let upright = source.uprightSize
+        guard abs(settings.size.width - upright.width) < 2.5, abs(settings.size.height - upright.height) < 2.5 else { return nil }
+        // A picture that starts late or ends before the sound is held still, which needs encoding.
+        guard source.videoRange.start.seconds < 0.02, source.videoRange.end.seconds > min(only.end, source.duration) - 0.1 else { return nil }
+        // Edits are always H.264, which everything plays.
+        guard source.codec == kCMVideoCodecType_H264 else { return nil }
+        return CMTimeRange(start: .zero, end: CMTime(seconds: min(only.end, source.duration), preferredTimescale: 600))
+    }
+
+    private static let noID = UUID(uuidString: "00000000-0000-0000-0000-000000000000") ?? UUID()
+
+    /// The recording's turn for a picture that is stored unturned at another size.
+    var fileTransform: CGAffineTransform {
+        var turn = source.transform
+        turn.tx = 0
+        turn.ty = 0
+        let sideways = source.orientation.turnsSides
+        let stored = CGRect(x: 0, y: 0, width: sideways ? settings.size.height : settings.size.width,
+                            height: sideways ? settings.size.width : settings.size.height)
+        let turned = stored.applying(turn)
+        turn.tx = -turned.minX
+        turn.ty = -turned.minY
+        return turn
+    }
+
+    /// Changes when anything about the picture changes, so pieces of another edit are never reused.
+    var signature: String {
+        var recipe = self.recipe
+        recipe.updatedAt = .distantPast
+        recipe.audio = EditAudio()
+        recipe.voiceClips = []
+        recipe.thumbnailTime = nil
+        recipe.segments = recipe.segments.map { segment in
+            var plain = segment
+            plain.id = Self.noID
+            return plain
+        }
+        let data = (try? JSONEncoder.snapreelStable.encode(recipe)) ?? Data()
+        return "4|\(Int(settings.size.width))x\(Int(settings.size.height))|\(Int(settings.videoBitRate))|" + data.base64EncodedString()
+    }
+}
+
+private extension JSONEncoder {
+    static var snapreelStable: JSONEncoder {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        return encoder
+    }
+}
+
+enum EditExportFailure: Error {
+    case cancelled
+    /// iOS took the encoder away (another app, a call, the background); try again when active.
+    case interrupted
+    case failed(Error?)
+}
+
+/// Makes the edited file. The picture is encoded in pieces of a few seconds that stay on disk, so
+/// leaving Snapreel, a call or even the app closing costs a few seconds, never the whole save. It
+/// keeps the recording's own frame times (screen recordings are uneven, and re-timing them to an
+/// even rate makes scrolling judder), adds frames only where an overlay appears or goes, and
+/// writes sound that is exactly as long as the picture.
+///
+/// All the work happens on one background queue; `cancel`, `suspend` and `resume` can be called
+/// from anywhere.
+final class EditExporter: @unchecked Sendable {
+    static let pieceLength = 12.0
+    /// A still picture is repeated at least this often, so a player can seek in it.
+    private static let longestFrame = 1.0
+
+    private let plan: EditExportPlan
+    private let queue = DispatchQueue(label: "co.arclayer.snapreel.edit-export", qos: .userInitiated)
+    private let state = NSCondition()
+    private var isCancelled = false
+    private var isSuspended = false
+    /// Inside a piece of work that must stop before the app goes to the background.
+    private var isWorking = false
+    private var exportSession: AVAssetExportSession?
+    private let report: (Double) -> Void
+    /// What the save was doing, for the log when it fails (and for a test that sees it stall).
+    private var stage: String {
+        get { stageLock.lock(); defer { stageLock.unlock() }; return stageText }
+        set { stageLock.lock(); stageText = newValue; stageLock.unlock() }
+    }
+    private var stageText = "starting"
+    private let stageLock = NSLock()
+    /// While joining: where the join is, worked out only when it is needed.
+    private var joinStage: (() -> String)?
+    /// Why the last attempt failed, for tests and the log.
+    private(set) var failureNote: String?
+
+    init(plan: EditExportPlan, report: @escaping (Double) -> Void) {
+        self.plan = plan
+        self.report = report
+    }
+
+    /// What it is doing now, safe to read from any thread: "encoding piece 3 of 46", "joining".
+    var status: String {
+        state.lock()
+        let paused = isSuspended, cancelled = isCancelled
+        state.unlock()
+        return stage + (paused ? ", paused" : "") + (cancelled ? ", cancelled" : "")
+    }
+
+    // MARK: - Control
+
+    func cancel() {
+        state.lock()
+        isCancelled = true
+        exportSession?.cancelExport()
+        state.broadcast()
+        state.unlock()
+    }
+
+    /// Stops before the app goes to the background (drawing there isn't allowed). Waits for the
+    /// frame being drawn, for half a second at most.
+    func suspend() {
+        state.lock()
+        isSuspended = true
+        let deadline = Date().addingTimeInterval(0.5)
+        while isWorking, Date() < deadline {
+            if !state.wait(until: deadline) { break }
+        }
+        state.unlock()
+    }
+
+    func resume() {
+        state.lock()
+        isSuspended = false
+        state.broadcast()
+        state.unlock()
+    }
+
+    private var shouldStop: Bool {
+        state.lock()
+        defer { state.unlock() }
+        return isCancelled || isSuspended
+    }
+
+    private func checkStop() throws {
+        state.lock()
+        defer { state.unlock() }
+        if isCancelled { throw EditExportFailure.cancelled }
+        if isSuspended { throw EditExportFailure.interrupted }
+    }
+
+    /// Keeps the copy so `cancel` can stop it. True when it was cancelled already.
+    private func hold(_ session: AVAssetExportSession?) -> Bool {
+        state.lock()
+        defer { state.unlock() }
+        exportSession = session
+        return isCancelled
+    }
+
+    /// Blocks while suspended. Throws when cancelled.
+    private func waitUntilRunning() throws {
+        state.lock()
+        defer { state.unlock() }
+        while isSuspended && !isCancelled { state.wait() }
+        if isCancelled { throw EditExportFailure.cancelled }
+    }
+
+    private func working<T>(_ body: () throws -> T) throws -> T {
+        state.lock()
+        if isCancelled {
+            state.unlock()
+            throw EditExportFailure.cancelled
+        }
+        if isSuspended {
+            state.unlock()
+            throw EditExportFailure.interrupted
+        }
+        isWorking = true
+        state.unlock()
+        defer {
+            state.lock()
+            isWorking = false
+            state.broadcast()
+            state.unlock()
+        }
+        return try body()
+    }
+
+    // MARK: - Run
+
+    func run() async throws {
+        if let range = plan.copyRange, try await copy(range) { return }
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            queue.async { [self] in
+                do {
+                    try runOnQueue()
+                    continuation.resume()
+                } catch {
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
+    }
+
+    private func runOnQueue() throws {
+        var attempts = 0
+        while true {
+            do {
+                try waitUntilRunning()
+                stage = "starting"
+                joinStage = nil
+                let pieces = plan.build.videoTrackID == nil ? [] : try encodePieces()
+                // A retry writes the file without moving its index to the front: one less step that
+                // can fail (iOS 16 failed some saves there with -16364).
+                try join(pieces, fastStart: attempts == 0)
+                return
+            } catch EditExportFailure.cancelled {
+                throw EditExportFailure.cancelled
+            } catch {
+                // Away from the app, or iOS took the encoder: carry on from the last whole piece.
+                if shouldStop { continue }
+                note(error, attempt: attempts + 1)
+                if Self.isOutOfSpace(error) { throw error }
+                attempts += 1
+                guard attempts < 4 else { throw EditExportFailure.failed(error) }
+                Thread.sleep(forTimeInterval: 0.6 * Double(attempts))
+            }
+        }
+    }
+
+    private func note(_ error: Error, attempt: Int) {
+        var underlying: Error? = error
+        if case EditExportFailure.failed(let inner) = error { underlying = inner }
+        let detail = underlying.map { error -> String in
+            let ns = error as NSError
+            let inner = (ns.userInfo[NSUnderlyingErrorKey] as? NSError).map { " < \($0.domain) \($0.code)" } ?? ""
+            return "\(ns.domain) \(ns.code)\(inner) \(ns.localizedDescription)"
+        } ?? "no error"
+        failureNote = "\(joinStage?() ?? stage): \(detail)"
+        NSLog("Snapreel edit save, attempt %d failed while %@", attempt, failureNote ?? "")
+    }
+
+    private static func isOutOfSpace(_ error: Error) -> Bool {
+        if case EditExportFailure.failed(let underlying?) = error { return DiskSpace.isOutOfSpace(underlying) }
+        return DiskSpace.isOutOfSpace(error)
+    }
+
+    // MARK: - Copy
+
+    /// False when the copy couldn't be made (the edit is then encoded as usual).
+    private func copy(_ range: CMTimeRange) async throws -> Bool {
+        guard let session = AVAssetExportSession(asset: plan.source.asset, presetName: AVAssetExportPresetPassthrough),
+              session.supportedFileTypes.contains(.mp4) else { return false }
+        try? FileManager.default.removeItem(at: plan.output)
+        session.outputURL = plan.output
+        session.outputFileType = .mp4
+        session.timeRange = range
+        session.shouldOptimizeForNetworkUse = true
+        if hold(session) { throw EditExportFailure.cancelled }
+        let ticker = Task { [report] in
+            while !Task.isCancelled {
+                report(Double(session.progress))
+                try? await Task.sleep(nanoseconds: 150_000_000)
+            }
+        }
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            session.exportAsynchronously { continuation.resume() }
+        }
+        ticker.cancel()
+        if hold(nil) { throw EditExportFailure.cancelled }
+        if session.status == .completed { return true }
+        try? FileManager.default.removeItem(at: plan.output)
+        if let error = session.error, DiskSpace.isOutOfSpace(error) { throw EditExportFailure.failed(error) }
+        return false
+    }
+
+    // MARK: - Pieces
+
+    private struct Piece {
+        let index: Int
+        let start: CMTime
+        let end: CMTime
+        let url: URL
+    }
+
+    private static let scale: CMTimeScale = 90_000
+
+    private func allPieces() -> [Piece] {
+        let total = plan.build.duration
+        let length = CMTime(seconds: Self.pieceLength, preferredTimescale: Self.scale)
+        var result: [Piece] = []
+        var start = CMTime.zero
+        while start < total {
+            var end = start + length
+            // No tiny last piece.
+            if (total - end).seconds < 1 { end = total }
+            result.append(Piece(index: result.count, start: start, end: end,
+                                url: plan.workFolder.appendingPathComponent("piece-\(result.count).mov")))
+            start = end
+        }
+        // No separate one-frame piece for the last moment any more: the join gives the last frame
+        // the rest of the video itself. On iOS 16 a one-frame piece starting on a real frame made
+        // the joined file fail (-11800 / -16364; the testers' saves with text, and 9-minute edits).
+        return result
+    }
+
+    /// Encodes the pieces that aren't on disk yet.
+    private func encodePieces() throws -> [Piece] {
+        let fm = FileManager.default
+        try fm.createDirectory(at: plan.workFolder, withIntermediateDirectories: true)
+        let stamp = plan.workFolder.appendingPathComponent("edit.txt")
+        if (try? String(contentsOf: stamp, encoding: .utf8)) != plan.signature {
+            for file in (try? fm.contentsOfDirectory(at: plan.workFolder, includingPropertiesForKeys: nil)) ?? [] {
+                try? fm.removeItem(at: file)
+            }
+            try plan.signature.write(to: stamp, atomically: true, encoding: .utf8)
+        }
+        let pieces = allPieces()
+        // Pieces are made in order, so the first one missing is where to carry on. The last one is
+        // made again when whether an end frame follows it wasn't written down.
+        var first = pieces.firstIndex { !fm.fileExists(atPath: $0.url.path) } ?? pieces.count
+        let decided = fm.fileExists(atPath: endURL.path) || fm.fileExists(atPath: noEndURL.path)
+        if first == pieces.count, !decided, let last = pieces.last {
+            try? fm.removeItem(at: last.url)
+            first = pieces.count - 1
+        }
+        if first < pieces.count { try encode(pieces, from: first) }
+        return pieces + (fm.fileExists(atPath: endURL.path) ? [endPiece(after: pieces)] : [])
+    }
+
+    /// A last frame of its own at the very end, made only when the picture stood still to the end
+    /// (it ends before the sound, or a screen recording's last frame is long). The encoder may leave
+    /// out repeats of a picture that doesn't change, and the file's picture would end early.
+    /// Never when a frame of the recording falls on the end itself: on iOS 16 such a one-frame
+    /// piece made the joined file fail (-11800 / -16364).
+    private var endURL: URL { plan.workFolder.appendingPathComponent("piece-end.mov") }
+    private var noEndURL: URL { plan.workFolder.appendingPathComponent("no-end.txt") }
+    private static let endLength = CMTime(value: 1, timescale: 30)
+
+    private func endPiece(after pieces: [Piece]) -> Piece {
+        let total = plan.build.duration
+        return Piece(index: pieces.count, start: total - Self.endLength, end: total, url: endURL)
+    }
+
+    private func encode(_ pieces: [Piece], from first: Int) throws {
+        let total = plan.build.duration
+        let start = pieces[first].start
+        let frames = try FrameFeed(plan: plan, from: start)
+        var writer: PieceWriter?
+        defer {
+            frames.stop()
+            writer?.abandon()
+        }
+
+        var pieceIndex = first
+        var held: (buffer: CVPixelBuffer, time: CMTime)?
+        var drew = false
+        var events = plan.overlayTimes.filter { $0 > start.seconds + 0.001 }[...]
+        var lastReport = Date.distantPast
+
+        /// Writes the held frame at `time`, moving on to the next piece when it belongs there.
+        func emit(_ buffer: CVPixelBuffer, at time: CMTime) throws {
+            try checkStop()
+            while time >= pieces[pieceIndex].end, pieceIndex + 1 < pieces.count {
+                stage = "finishing piece \(pieceIndex + 1) of \(pieces.count)"
+                try writer?.finish()
+                writer = nil
+                pieceIndex += 1
+            }
+            if writer == nil {
+                stage = "starting piece \(pieceIndex + 1) of \(pieces.count)"
+                writer = try PieceWriter(piece: pieces[pieceIndex].url, start: pieces[pieceIndex].start,
+                                         end: pieces[pieceIndex].end, plan: plan)
+                let range = pieces[pieceIndex].start.seconds...pieces[pieceIndex].end.seconds
+                stage = "drawing texts and captions for piece \(pieceIndex + 1) of \(pieces.count)"
+                writer?.overlays = overlays(in: range)
+                stage = "encoding piece \(pieceIndex + 1) of \(pieces.count)"
+            }
+            guard let writer else { return }
+            try working { try writer.append(buffer, at: time) }
+            if Date().timeIntervalSince(lastReport) > 0.2 {
+                lastReport = Date()
+                report(0.94 * min(1, time.seconds / max(0.1, total.seconds)))
+            }
+        }
+
+        /// Everything to write between the held frame's own time and `next`: its repeats where an
+        /// overlay changes, where a piece starts, and so it never stands longer than a second.
+        func fill(until next: CMTime) throws {
+            guard let held else { return }
+            var cursor = CMTimeMaximum(held.time, start)
+            if !drew {
+                try emit(held.buffer, at: cursor)
+                drew = true
+            }
+            while true {
+                var following = cursor + CMTime(seconds: Self.longestFrame, preferredTimescale: Self.scale)
+                if let event = events.first {
+                    let time = CMTime(seconds: event, preferredTimescale: Self.scale)
+                    if time <= cursor {
+                        events = events.dropFirst()
+                        continue
+                    }
+                    following = CMTimeMinimum(following, time)
+                }
+                let boundary = pieces[pieceIndex].end
+                if pieceIndex + 1 < pieces.count, boundary > cursor { following = CMTimeMinimum(following, boundary) }
+                // A repeat right before the next frame would only make the picture stutter. A piece always
+                // starts with a frame, though: its file would otherwise start later than it should.
+                let startsPiece = pieceIndex + 1 < pieces.count && following == boundary
+                guard (next - following).seconds > (startsPiece ? 0 : 0.008) else { break }
+                try emit(held.buffer, at: following)
+                cursor = following
+            }
+        }
+
+        var more = true
+        while more {
+            try autoreleasepool {
+                try checkStop()
+                guard let next = try frames.next() else {
+                    more = false
+                    return
+                }
+                if let current = held {
+                    // Two frames at one moment (a cut): the later one stands.
+                    if next.time <= current.time {
+                        held = (next.buffer, current.time)
+                        return
+                    }
+                    try fill(until: next.time)
+                }
+                held = next
+                drew = false
+            }
+        }
+        try checkStop()
+        guard let last = held else { throw EditExportFailure.failed(nil) }
+        let endsStill = (total - last.time).seconds > 0.1
+        let endStart = total - Self.endLength
+        try fill(until: endsStill ? endStart : total)
+        // The last pieces, when the picture stands still to the end.
+        try writer?.finish()
+        writer = nil
+        if pieceIndex + 1 < pieces.count { throw EditExportFailure.failed(nil) }
+        let fm = FileManager.default
+        try? fm.removeItem(at: endURL)
+        try? fm.removeItem(at: noEndURL)
+        if endsStill {
+            stage = "encoding the last frame"
+            let end = try PieceWriter(piece: endURL, start: endStart, end: total, plan: plan)
+            end.overlays = overlays(in: endStart.seconds...total.seconds)
+            do {
+                try working { try end.append(last.buffer, at: endStart) }
+                try end.finish()
+            } catch {
+                end.abandon()
+                throw error
+            }
+        } else {
+            try "no end frame".write(to: noEndURL, atomically: true, encoding: .utf8)
+        }
+    }
+
+    private func overlays(in range: ClosedRange<Double>) -> [EditOverlayImage] {
+        guard !plan.overlayTimes.isEmpty else { return [] }
+        // Made on the main thread (they are SwiftUI views) a few at a time, so a long video with
+        // hundreds of captions never holds all of them in memory.
+        let make = plan.overlays
+        return DispatchQueue.main.sync { MainActor.assumeIsolated { make(range) } }
+    }
+
+    // MARK: - Join
+
+    /// The pieces, one after another without encoding them again, with the sound.
+    private func join(_ pieces: [Piece], fastStart: Bool = true) throws {
+        try working {}
+        stage = "joining \(pieces.count) pieces"
+        try? FileManager.default.removeItem(at: plan.output)
+        let writer = try AVAssetWriter(outputURL: plan.output, fileType: pieces.isEmpty ? .m4a : .mp4)
+        writer.shouldOptimizeForNetworkUse = fastStart
+        let total = plan.build.duration
+
+        var videoIn: AVAssetWriterInput?
+        let feed = PieceFeed(pieces: pieces.map { ($0.url, $0.start, $0.end) })
+        if !pieces.isEmpty {
+            guard let format = try feed.firstFormat() else { throw EditExportFailure.failed(nil) }
+            let input = AVAssetWriterInput(mediaType: .video, outputSettings: nil, sourceFormatHint: format)
+            input.expectsMediaDataInRealTime = false
+            input.mediaTimeScale = Self.scale
+            if !plan.draws { input.transform = plan.fileTransform }
+            guard writer.canAdd(input) else { throw EditExportFailure.failed(nil) }
+            writer.add(input)
+            videoIn = input
+        }
+        var audioIn: AVAssetWriterInput?
+        var sound: SoundFeed?
+        if !plan.build.audioTrackIDs.isEmpty || !plan.build.voiceTrackIDs.isEmpty {
+            sound = try SoundFeed(plan: plan)
+            let input = AVAssetWriterInput(mediaType: .audio, outputSettings: [
+                AVFormatIDKey: kAudioFormatMPEG4AAC,
+                AVSampleRateKey: SoundFeed.sampleRate,
+                AVNumberOfChannelsKey: 2,
+                AVEncoderBitRateKey: Int(EditExportSettings.audioBitRate),
+            ])
+            input.expectsMediaDataInRealTime = false
+            guard writer.canAdd(input) else { throw EditExportFailure.failed(nil) }
+            writer.add(input)
+            audioIn = input
+        }
+        guard writer.startWriting() else { throw EditExportFailure.failed(writer.error) }
+        writer.startSession(atSourceTime: .zero)
+        var finished = false
+        defer {
+            if !finished { writer.cancelWriting() }
+            sound?.stop()
+        }
+
+        var videoDone = videoIn == nil
+        var audioDone = audioIn == nil
+        var idle = 0
+        var lastReport = Date.distantPast
+        var pictureAt = 0.0
+        var soundAt = 0.0
+        func where_() -> String {
+            "joining \(pieces.count) pieces\(fastStart ? "" : " (index at the end)"), picture at \(String(format: "%.2f", pictureAt)) s\(videoDone ? " (done)" : ""), "
+                + "sound at \(String(format: "%.2f", soundAt)) s\(audioDone ? " (done)" : "") of \(String(format: "%.2f", total.seconds)) s, "
+                + feed.timingNote
+        }
+        joinStage = where_
+        while !(videoDone && audioDone) {
+            try checkStop()
+            if writer.status == .failed { throw EditExportFailure.failed(writer.error) }
+            var moved = false
+            if !videoDone, let videoIn, videoIn.isReadyForMoreMediaData {
+                try autoreleasepool {
+                    if let sample = try feed.next() {
+                        pictureAt = CMSampleBufferGetPresentationTimeStamp(sample).seconds
+                        guard videoIn.append(sample) else {
+                            joinStage = { where_() + ", picture refused" }
+                            throw EditExportFailure.failed(writer.error)
+                        }
+                        if Date().timeIntervalSince(lastReport) > 0.2 {
+                            lastReport = Date()
+                            let time = CMSampleBufferGetPresentationTimeStamp(sample).seconds
+                            report(0.94 + 0.05 * min(1, time / max(0.1, total.seconds)))
+                        }
+                    } else {
+                        videoIn.markAsFinished()
+                        videoDone = true
+                    }
+                }
+                moved = true
+            }
+            if !audioDone, let audioIn, let sound, audioIn.isReadyForMoreMediaData {
+                try autoreleasepool {
+                    if let sample = try sound.next() {
+                        soundAt = CMSampleBufferGetPresentationTimeStamp(sample).seconds
+                        guard audioIn.append(sample) else {
+                            joinStage = { where_() + ", sound refused" }
+                            throw EditExportFailure.failed(writer.error)
+                        }
+                        if videoIn == nil, Date().timeIntervalSince(lastReport) > 0.2 {
+                            lastReport = Date()
+                            report(min(0.99, CMSampleBufferGetPresentationTimeStamp(sample).seconds / max(0.1, total.seconds)))
+                        }
+                    } else {
+                        audioIn.markAsFinished()
+                        audioDone = true
+                    }
+                }
+                moved = true
+            }
+            if moved {
+                idle = 0
+            } else {
+                idle += 1
+                if idle > 15_000 {
+                    joinStage = { where_() + ", stalled" }
+                    throw EditExportFailure.failed(writer.error)
+                }
+                usleep(1_000)
+            }
+        }
+        joinStage = { "finishing the file, " + where_() }
+        stage = "finishing the joined file"
+        writer.endSession(atSourceTime: total)
+        let done = DispatchSemaphore(value: 0)
+        writer.finishWriting { done.signal() }
+        done.wait()
+        finished = true
+        guard writer.status == .completed else { throw EditExportFailure.failed(writer.error) }
+        NSLog("Snapreel edit save done: %@", where_())
+        try? FileManager.default.removeItem(at: plan.workFolder)
+    }
+}
+
+// MARK: - One piece of picture
+
+/// Encodes one piece. Until `finish` the file has another name, so a piece on disk is a whole one.
+private final class PieceWriter {
+    var overlays: [EditOverlayImage] = []
+    private let url: URL
+    private let partial: URL
+    private let start: CMTime
+    private let end: CMTime
+    private let writer: AVAssetWriter
+    private let input: AVAssetWriterInput
+    private let adaptor: AVAssetWriterInputPixelBufferAdaptor
+    private let pipeline: EditFramePipeline?
+    private var last = CMTime.negativeInfinity
+    private var isDone = false
+
+    init(piece url: URL, start: CMTime, end: CMTime, plan: EditExportPlan) throws {
+        self.url = url
+        self.start = start
+        self.end = end
+        partial = url.deletingPathExtension().appendingPathExtension("partial.mov")
+        try? FileManager.default.removeItem(at: partial)
+        writer = try AVAssetWriter(outputURL: partial, fileType: .mov)
+        let size = plan.settings.size
+        // A picture that isn't drawn again is encoded the way it is stored and turned by the file,
+        // like the recording itself.
+        let sideways = !plan.draws && plan.source.orientation.turnsSides
+        let width = sideways ? size.height : size.width
+        let height = sideways ? size.width : size.height
+        input = AVAssetWriterInput(mediaType: .video, outputSettings: [
+            AVVideoCodecKey: AVVideoCodecType.h264,
+            AVVideoWidthKey: Int(width),
+            AVVideoHeightKey: Int(height),
+            AVVideoScalingModeKey: AVVideoScalingModeResize,
+            AVVideoCompressionPropertiesKey: [
+                AVVideoAverageBitRateKey: Int(plan.settings.videoBitRate),
+                AVVideoProfileLevelKey: AVVideoProfileLevelH264HighAutoLevel,
+                AVVideoH264EntropyModeKey: AVVideoH264EntropyModeCABAC,
+                // No frames that depend on later ones: pieces join exactly at their edges.
+                AVVideoAllowFrameReorderingKey: false,
+                // Every 4 s: a key frame of a still screen costs as much as seconds of the rest.
+                AVVideoMaxKeyFrameIntervalDurationKey: 4,
+                AVVideoExpectedSourceFrameRateKey: plan.source.frameRate > 31 ? 60 : 30,
+            ] as [String: Any],
+        ])
+        input.expectsMediaDataInRealTime = false
+        input.mediaTimeScale = 90_000
+        // Drawn frames come from the adaptor's pool; others are handed over as they were read, at
+        // their own size (the encoder scales them).
+        adaptor = AVAssetWriterInputPixelBufferAdaptor(assetWriterInput: input, sourcePixelBufferAttributes: plan.draws ? [
+            kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange,
+            kCVPixelBufferWidthKey as String: Int(width),
+            kCVPixelBufferHeightKey as String: Int(height),
+            kCVPixelBufferIOSurfacePropertiesKey as String: [String: Any](),
+            kCVPixelBufferMetalCompatibilityKey as String: true,
+        ] : nil)
+        pipeline = plan.draws ? EditFramePipeline(recipe: plan.recipe, source: plan.source, renderSize: size, showsBlur: true) : nil
+        guard writer.canAdd(input) else { throw EditExportFailure.failed(nil) }
+        writer.add(input)
+        guard writer.startWriting() else { throw EditExportFailure.failed(writer.error) }
+        writer.startSession(atSourceTime: start)
+    }
+
+    func append(_ buffer: CVPixelBuffer, at time: CMTime) throws {
+        let time = CMTimeMaximum(time, start)
+        guard time > last, time < end else { return }
+        var waited = 0
+        while !input.isReadyForMoreMediaData {
+            if writer.status != .writing { throw EditExportFailure.failed(writer.error) }
+            waited += 1
+            if waited > 15_000 { throw EditExportFailure.failed(writer.error) }
+            usleep(1_000)
+        }
+        var frame = buffer
+        if let pipeline {
+            guard let pool = adaptor.pixelBufferPool else { throw EditExportFailure.failed(writer.error) }
+            var made: CVPixelBuffer?
+            CVPixelBufferPoolCreatePixelBuffer(nil, pool, &made)
+            guard let output = made else { throw EditExportFailure.failed(nil) }
+            pipeline.render(buffer, at: time.seconds, overlays: overlays, into: output)
+            frame = output
+        }
+        guard adaptor.append(frame, withPresentationTime: time) else { throw EditExportFailure.failed(writer.error) }
+        last = time
+    }
+
+    func finish() throws {
+        guard !isDone else { return }
+        isDone = true
+        input.markAsFinished()
+        writer.endSession(atSourceTime: end)
+        let done = DispatchSemaphore(value: 0)
+        writer.finishWriting { done.signal() }
+        done.wait()
+        guard writer.status == .completed, last.isNumeric else {
+            try? FileManager.default.removeItem(at: partial)
+            throw EditExportFailure.failed(writer.error)
+        }
+        try? FileManager.default.removeItem(at: url)
+        try FileManager.default.moveItem(at: partial, to: url)
+    }
+
+    func abandon() {
+        guard !isDone else { return }
+        isDone = true
+        if writer.status == .writing { writer.cancelWriting() }
+        try? FileManager.default.removeItem(at: partial)
+    }
+}
+
+extension CGImagePropertyOrientation {
+    /// Width and height swap when it is applied.
+    var turnsSides: Bool {
+        switch self {
+        case .left, .right, .leftMirrored, .rightMirrored: return true
+        default: return false
+        }
+    }
+}
+
+// MARK: - Feeds
+
+/// The recording's frames that the edit keeps, decoded, on the edit's clock and in its order.
+///
+/// Read from the recording itself, section by section: every frame's own time is then known, and
+/// the frame that is already on screen when a section starts (a screen that stands still keeps one
+/// frame up for seconds) starts exactly at the cut.
+private final class FrameFeed {
+    private let plan: EditExportPlan
+    private let track: AVAssetTrack
+    private let sections: [EditCompositionBuilder.Placement]
+    /// Sections read by one reader: closer together than this, skipping is quicker than starting.
+    private static let joins = 2.0
+    private var nextSection = 0
+    private var groupEnd = 0
+    private var index = 0
+    private var hasStarted = false
+    private var latest: CVPixelBuffer?
+    private var reader: AVAssetReader?
+    private var output: AVAssetReaderTrackOutput?
+    private var ready: [(buffer: CVPixelBuffer, time: CMTime)] = []
+
+    init(plan: EditExportPlan, from start: CMTime) throws {
+        guard let track = plan.source.videoTrack else { throw EditExportFailure.failed(nil) }
+        self.plan = plan
+        self.track = track
+        sections = EditCompositionBuilder.placements(recipe: plan.recipe, source: plan.source).compactMap { section in
+            let end = section.at + section.length
+            guard end > start else { return nil }
+            guard section.at < start else { return section }
+            // Carrying on in the middle of a section.
+            let from = section.source(start)
+            return EditCompositionBuilder.Placement(range: CMTimeRange(start: from, end: section.range.end), at: start,
+                                                    length: end - start, stretches: section.stretches)
+        }
+    }
+
+    func stop() {
+        reader?.cancelReading()
+        reader = nil
+        output = nil
+    }
+
+    func next() throws -> (buffer: CVPixelBuffer, time: CMTime)? {
+        while true {
+            if !ready.isEmpty { return ready.removeFirst() }
+            if output == nil {
+                guard nextSection < sections.count else { return nil }
+                try startGroup()
+            }
+            guard let output else { continue }
+            if let sample = output.copyNextSampleBuffer() {
+                guard let buffer = CMSampleBufferGetImageBuffer(sample) else { continue }
+                let time = CMSampleBufferGetPresentationTimeStamp(sample)
+                guard time.isNumeric else { continue }
+                take(buffer, at: time)
+            } else {
+                if reader?.status == .failed { throw EditExportFailure.failed(reader?.error) }
+                // What is left of the group is under the last frame.
+                while index <= groupEnd {
+                    if !hasStarted, let latest { ready.append((latest, sections[index].at)) }
+                    index += 1
+                    hasStarted = false
+                }
+                reader = nil
+                self.output = nil
+            }
+        }
+    }
+
+    private func take(_ buffer: CVPixelBuffer, at time: CMTime) {
+        while index <= groupEnd, time >= sections[index].range.end {
+            if !hasStarted { ready.append((latest ?? buffer, sections[index].at)) }
+            index += 1
+            hasStarted = false
+        }
+        defer { latest = buffer }
+        guard index <= groupEnd else { return }
+        let section = sections[index]
+        // On screen before the section starts: it may be the one up at its start.
+        if time <= section.range.start { return }
+        if !hasStarted {
+            hasStarted = true
+            guard let before = latest else {
+                // The picture starts late: its first frame stands from the section's start.
+                ready.append((buffer, section.at))
+                return
+            }
+            ready.append((before, section.at))
+        }
+        ready.append((buffer, section.output(time)))
+    }
+
+    private func startGroup() throws {
+        index = nextSection
+        groupEnd = nextSection
+        while groupEnd + 1 < sections.count,
+              (sections[groupEnd + 1].range.start - sections[groupEnd].range.end).seconds < Self.joins {
+            groupEnd += 1
+        }
+        nextSection = groupEnd + 1
+        hasStarted = false
+        latest = nil
+        let reader = try AVAssetReader(asset: plan.source.asset)
+        let from = frameStart(sections[index].range.start)
+        reader.timeRange = CMTimeRange(start: from, end: CMTimeMaximum(sections[groupEnd].range.end, from + CMTime(value: 1, timescale: 30)))
+        let format = plan.source.isHDR ? kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange
+            : kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange
+        let output = AVAssetReaderTrackOutput(track: track, outputSettings: [
+            kCVPixelBufferPixelFormatTypeKey as String: format,
+            kCVPixelBufferIOSurfacePropertiesKey as String: [String: Any](),
+            kCVPixelBufferMetalCompatibilityKey as String: true,
+        ])
+        output.alwaysCopiesSampleData = false
+        guard reader.canAdd(output) else { throw EditExportFailure.failed(nil) }
+        reader.add(output)
+        guard reader.startReading() else { throw EditExportFailure.failed(reader.error) }
+        self.reader = reader
+        self.output = output
+    }
+
+    /// Where the frame that is on screen at `time` starts.
+    private func frameStart(_ time: CMTime) -> CMTime {
+        guard time > .zero else { return .zero }
+        // Past the end of the picture its last frame stands.
+        let time = CMTimeMinimum(time, CMTimeMaximum(.zero, plan.source.videoRange.end - CMTime(value: 1, timescale: 120)))
+        if let cursor = track.makeSampleCursor(presentationTimeStamp: time) {
+            if cursor.presentationTimeStamp > time { _ = cursor.stepInPresentationOrder(byCount: -1) }
+            if cursor.presentationTimeStamp <= time { return CMTimeMaximum(.zero, cursor.presentationTimeStamp) }
+        }
+        return CMTimeMaximum(.zero, time - CMTime(value: 3, timescale: 1))
+    }
+}
+
+/// The encoded frames of the pieces, in order, on the edit's clock.
+private final class PieceFeed {
+    private let pieces: [(url: URL, start: CMTime, end: CMTime)]
+    private var index = -1
+    private var reader: AVAssetReader?
+    private var output: AVAssetReaderTrackOutput?
+    private var pending: CMSampleBuffer?
+    private var queued: [CMSampleBuffer] = []
+    private var asset: AVAsset?
+    /// How far the piece's own clock is from the edit's: its first frame is at its start.
+    private var shift: CMTime?
+    /// The last frame time handed out. Frames are kept at least `gap` apart: a repeat placed right
+    /// before a frame at a piece's edge would otherwise last a tick, which iOS 16's file writer
+    /// refuses when it finishes the file.
+    private var lastTime: CMTime?
+    private static let gap = CMTime(value: 150, timescale: 90_000)
+    private var moved = 0
+    private var closest = Double.infinity
+    private var backwards = 0
+
+    var timingNote: String {
+        "frames moved \(moved), back in time \(backwards), closest \(closest.isFinite ? String(format: "%.4f", closest) : "-") s, "
+            + "pieces with another format \(otherFormats)"
+    }
+    private var seenFormat: CMFormatDescription?
+    private var otherFormats = 0
+
+    init(pieces: [(url: URL, start: CMTime, end: CMTime)]) {
+        self.pieces = pieces
+    }
+
+    func firstFormat() throws -> CMFormatDescription? {
+        guard let first = pieces.first else { return nil }
+        let asset = AVURLAsset(url: first.url)
+        let format = asset.tracks(withMediaType: .video).first?.formatDescriptions.first.map { $0 as! CMFormatDescription }
+        return withExtendedLifetime(asset) { format }
+    }
+
+    /// The next frame, with its time moved to where its piece starts and its length reaching to
+    /// the next frame (the file would otherwise guess the last length of each piece).
+    func next() throws -> CMSampleBuffer? {
+        while true {
+            if let sample = try raw() {
+                if let ready = pending {
+                    pending = sample
+                    return try timed(ready, until: CMSampleBufferGetPresentationTimeStamp(sample))
+                }
+                pending = sample
+                continue
+            }
+            guard let ready = pending else { return nil }
+            pending = nil
+            return try timed(ready, until: pieces[pieces.count - 1].end)
+        }
+    }
+
+    private func raw() throws -> CMSampleBuffer? {
+        while true {
+            if !queued.isEmpty { return queued.removeFirst() }
+            if let output {
+                if let sample = output.copyNextSampleBuffer() {
+                    let count = CMSampleBufferGetNumSamples(sample)
+                    guard count > 0, CMSampleBufferGetDataBuffer(sample) != nil else { continue }
+                    if self.shift == nil, let format = CMSampleBufferGetFormatDescription(sample) {
+                        if let seenFormat {
+                            if !CMFormatDescriptionEqual(seenFormat, otherFormatDescription: format) { otherFormats += 1 }
+                        } else {
+                            seenFormat = format
+                        }
+                    }
+                    let shift = self.shift ?? pieces[index].start - CMSampleBufferGetPresentationTimeStamp(sample)
+                    self.shift = shift
+                    if count == 1 { return try spaced(try shifted(sample, by: shift)) }
+                    for position in 0..<count {
+                        var one: CMSampleBuffer?
+                        CMSampleBufferCopySampleBufferForRange(allocator: nil, sampleBuffer: sample,
+                                                               sampleRange: CFRange(location: position, length: 1),
+                                                               sampleBufferOut: &one)
+                        guard let one else { throw EditExportFailure.failed(nil) }
+                        queued.append(try spaced(try shifted(one, by: shift)))
+                    }
+                    continue
+                }
+                if reader?.status == .failed { throw EditExportFailure.failed(reader?.error) }
+                reader = nil
+                self.output = nil
+            }
+            index += 1
+            shift = nil
+            guard index < pieces.count else { return nil }
+            let asset = AVURLAsset(url: pieces[index].url)
+            guard let track = asset.tracks(withMediaType: .video).first else { throw EditExportFailure.failed(nil) }
+            let reader = try AVAssetReader(asset: asset)
+            let output = AVAssetReaderTrackOutput(track: track, outputSettings: nil)
+            output.alwaysCopiesSampleData = false
+            guard reader.canAdd(output) else { throw EditExportFailure.failed(nil) }
+            reader.add(output)
+            guard reader.startReading() else { throw EditExportFailure.failed(reader.error) }
+            self.asset = asset
+            self.reader = reader
+            self.output = output
+        }
+    }
+
+    /// At least `gap` after the frame before it.
+    private func spaced(_ sample: CMSampleBuffer) throws -> CMSampleBuffer {
+        let time = CMSampleBufferGetPresentationTimeStamp(sample)
+        guard let last = lastTime else {
+            lastTime = time
+            return sample
+        }
+        let distance = (time - last).seconds
+        closest = min(closest, distance)
+        if distance <= 0 { backwards += 1 }
+        guard time < last + Self.gap else {
+            lastTime = time
+            return sample
+        }
+        moved += 1
+        lastTime = last + Self.gap
+        return try copy(sample, at: last + Self.gap, duration: CMSampleBufferGetDuration(sample))
+    }
+
+    private func shifted(_ sample: CMSampleBuffer, by offset: CMTime) throws -> CMSampleBuffer {
+        try copy(sample, at: CMSampleBufferGetPresentationTimeStamp(sample) + offset, duration: CMSampleBufferGetDuration(sample))
+    }
+
+    private func timed(_ sample: CMSampleBuffer, until end: CMTime) throws -> CMSampleBuffer {
+        let time = CMSampleBufferGetPresentationTimeStamp(sample)
+        return try copy(sample, at: time, duration: CMTimeMaximum(end - time, CMTime(value: 1, timescale: 90_000)))
+    }
+
+    private func copy(_ sample: CMSampleBuffer, at time: CMTime, duration: CMTime) throws -> CMSampleBuffer {
+        var timing = CMSampleTimingInfo(duration: duration, presentationTimeStamp: time, decodeTimeStamp: .invalid)
+        var result: CMSampleBuffer?
+        let status = CMSampleBufferCreateCopyWithNewTiming(allocator: nil, sampleBuffer: sample, sampleTimingEntryCount: 1,
+                                                           sampleTimingArray: &timing, sampleBufferOut: &result)
+        guard status == noErr, let result else { throw EditExportFailure.failed(nil) }
+        return result
+    }
+}
+
+/// The edit's sound, mixed, without gaps and exactly as long as the edit. Silence fills what the
+/// recording has no sound for, so every player keeps sound and picture together.
+private final class SoundFeed {
+    static let sampleRate = 44_100
+    private let reader: AVAssetReader
+    private let output: AVAssetReaderAudioMixOutput
+    private let totalFrames: Int
+    private var written = 0
+    private var ended = false
+    /// Samples read but not handed out yet (they start later than what is written).
+    private var waiting: (frame: Int, sample: CMSampleBuffer)?
+    private let format: CMAudioFormatDescription
+
+    init(plan: EditExportPlan) throws {
+        let composition = plan.build.composition
+        let tracks = (plan.build.audioTrackIDs + plan.build.voiceTrackIDs).compactMap { composition.track(withTrackID: $0) }
+        reader = try AVAssetReader(asset: composition)
+        reader.timeRange = CMTimeRange(start: .zero, duration: plan.build.duration)
+        output = AVAssetReaderAudioMixOutput(audioTracks: tracks, audioSettings: [
+            AVFormatIDKey: kAudioFormatLinearPCM,
+            AVSampleRateKey: Self.sampleRate,
+            AVNumberOfChannelsKey: 2,
+            AVLinearPCMBitDepthKey: 16,
+            AVLinearPCMIsFloatKey: false,
+            AVLinearPCMIsBigEndianKey: false,
+            AVLinearPCMIsNonInterleaved: false,
+        ])
+        output.alwaysCopiesSampleData = false
+        output.audioMix = EditCompositionBuilder.audioMix(recipe: plan.recipe, build: plan.build)
+        output.audioTimePitchAlgorithm = .spectral
+        guard reader.canAdd(output) else { throw EditExportFailure.failed(nil) }
+        reader.add(output)
+        guard reader.startReading() else { throw EditExportFailure.failed(reader.error) }
+        totalFrames = Int((plan.build.duration.seconds * Double(Self.sampleRate)).rounded())
+        var description = AudioStreamBasicDescription(mSampleRate: Float64(Self.sampleRate), mFormatID: kAudioFormatLinearPCM,
+                                                      mFormatFlags: kAudioFormatFlagIsSignedInteger | kAudioFormatFlagIsPacked,
+                                                      mBytesPerPacket: 4, mFramesPerPacket: 1, mBytesPerFrame: 4,
+                                                      mChannelsPerFrame: 2, mBitsPerChannel: 16, mReserved: 0)
+        var made: CMAudioFormatDescription?
+        CMAudioFormatDescriptionCreate(allocator: nil, asbd: &description, layoutSize: 0, layout: nil, magicCookieSize: 0,
+                                       magicCookie: nil, extensions: nil, formatDescriptionOut: &made)
+        guard let made else { throw EditExportFailure.failed(nil) }
+        format = made
+    }
+
+    func stop() { reader.cancelReading() }
+
+    func next() throws -> CMSampleBuffer? {
+        while written < totalFrames {
+            if waiting == nil, !ended {
+                if let sample = output.copyNextSampleBuffer() {
+                    let time = CMSampleBufferGetPresentationTimeStamp(sample).seconds
+                    let frame = time.isFinite ? Int((time * Double(Self.sampleRate)).rounded()) : written
+                    waiting = (frame, sample)
+                } else {
+                    if reader.status == .failed { throw EditExportFailure.failed(reader.error) }
+                    ended = true
+                }
+            }
+            guard let next = waiting else {
+                // Nothing more: silence to the end.
+                return try silence(min(Self.sampleRate / 2, totalFrames - written))
+            }
+            // A step of a frame or two is rounding; more is a real gap.
+            if next.frame > written + 2 {
+                return try silence(min(Self.sampleRate / 2, min(next.frame, totalFrames) - written))
+            }
+            waiting = nil
+            guard let data = bytes(of: next.sample) else { continue }
+            var samples = data
+            if next.frame < written - 2 {
+                let skip = min(samples.count / 4, written - next.frame)
+                samples = samples.dropFirst(skip * 4)
+            }
+            let count = min(samples.count / 4, totalFrames - written)
+            guard count > 0 else { continue }
+            return try buffer(Data(samples.prefix(count * 4)), frames: count)
+        }
+        return nil
+    }
+
+    private func bytes(of sample: CMSampleBuffer) -> Data? {
+        guard let block = CMSampleBufferGetDataBuffer(sample) else { return nil }
+        let length = CMBlockBufferGetDataLength(block)
+        guard length >= 4 else { return nil }
+        var data = Data(count: length)
+        let status = data.withUnsafeMutableBytes { raw -> OSStatus in
+            guard let base = raw.baseAddress else { return -1 }
+            return CMBlockBufferCopyDataBytes(block, atOffset: 0, dataLength: length, destination: base)
+        }
+        return status == noErr ? data : nil
+    }
+
+    private func silence(_ frames: Int) throws -> CMSampleBuffer? {
+        guard frames > 0 else { return nil }
+        return try buffer(Data(count: frames * 4), frames: frames)
+    }
+
+    private func buffer(_ data: Data, frames: Int) throws -> CMSampleBuffer {
+        var block: CMBlockBuffer?
+        CMBlockBufferCreateWithMemoryBlock(allocator: nil, memoryBlock: nil, blockLength: data.count, blockAllocator: nil,
+                                           customBlockSource: nil, offsetToData: 0, dataLength: data.count,
+                                           flags: kCMBlockBufferAssureMemoryNowFlag, blockBufferOut: &block)
+        guard let block else { throw EditExportFailure.failed(nil) }
+        data.withUnsafeBytes { raw in
+            if let base = raw.baseAddress {
+                _ = CMBlockBufferReplaceDataBytes(with: base, blockBuffer: block, offsetIntoDestination: 0, dataLength: data.count)
+            }
+        }
+        var sample: CMSampleBuffer?
+        CMAudioSampleBufferCreateReadyWithPacketDescriptions(
+            allocator: nil, dataBuffer: block, formatDescription: format, sampleCount: frames,
+            presentationTimeStamp: CMTime(value: CMTimeValue(written), timescale: CMTimeScale(Self.sampleRate)),
+            packetDescriptions: nil, sampleBufferOut: &sample)
+        guard let sample else { throw EditExportFailure.failed(nil) }
+        written += frames
+        return sample
+    }
+}

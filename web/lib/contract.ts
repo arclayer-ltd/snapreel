@@ -122,6 +122,8 @@ export interface VideoDetail extends VideoSummary {
 export interface UpdateVideoRequest {
   title?: string;
   status?: VideoStatus;
+  /** With `status: "ready"`: the size of the video the app sent. A stored file of another size is refused (409). */
+  sizeBytes?: number;
   uploadedBytes?: number;
   access?: Access;
   password?: string;

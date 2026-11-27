@@ -14,6 +14,8 @@ enum CloudError: Error, Equatable {
     case auth(String)
     /// 404 or 410: the link was deleted or expired.
     case notFound
+    /// 409: the server doesn't have all of the upload's files.
+    case incomplete([String])
     /// Any other HTTP error.
     case server(status: Int, message: String?)
     /// A response that doesn't match the contract.
@@ -29,7 +31,16 @@ enum CloudError: Error, Equatable {
         case .limit(.proFeature): return "That's part of Snapreel Pro."
         case .auth(let text): return text
         case .notFound: return "This link no longer exists."
-        case .server(_, let text): return text ?? "snapreel.video didn't answer properly. Try again in a moment."
+        case .incomplete: return "The upload isn't complete yet."
+        case .server(let status, let text):
+            // A server fault's own words ("Something went wrong.") don't help; say what's known and what to do.
+            if status >= 500 {
+                return "snapreel.video is having a problem right now (error \(status)). It isn't your connection. Try again in a few minutes."
+            }
+            if let text, !text.isEmpty { return text }
+            return status > 0
+                ? "snapreel.video didn't accept that (error \(status)). Try again in a moment."
+                : "snapreel.video didn't answer properly. Try again in a moment."
         case .unreadable: return "snapreel.video sent something Snapreel couldn't read. Try again in a moment."
         }
     }
@@ -83,6 +94,12 @@ final class APIClient {
         try await sendEmpty("POST", "account/delete")
     }
 
+    /// A one-time link that opens the web dashboard signed in as this account.
+    func webSignInLink() async throws -> URL {
+        let response: WebSignInLinkResponse = try await send("POST", "auth/handoff")
+        return response.url
+    }
+
     // MARK: Videos
 
     func createVideo(_ request: CreateVideoRequest) async throws -> CreateVideoResponse {
@@ -100,6 +117,17 @@ final class APIClient {
     @discardableResult
     func updateVideo(_ id: String, _ change: UpdateVideoRequest) async throws -> VideoDetail {
         try await send("PATCH", "videos/\(id)", body: change)
+    }
+
+    /// All files are up: the link can be watched. The server checks the video is stored, with this size.
+    func finishUpload(_ id: String, size: Int64) async throws -> VideoDetail {
+        try await updateVideo(id, UpdateVideoRequest(status: .ready, sizeBytes: size > 0 ? size : nil))
+    }
+
+    /// How far an upload is, for the watch page. Nothing depends on it, so failures are ignored (a server from before
+    /// this call answers 404).
+    func reportUpload(_ id: String, sent: Int64, total: Int64) async {
+        try? await sendEmpty("POST", "videos/\(id)/progress", body: UploadProgressRequest(uploadedBytes: sent, totalBytes: total))
     }
 
     /// Stops sharing: the server deletes the files and keeps nothing.
@@ -205,7 +233,7 @@ final class APIClient {
                 token = try await auth.refresh().accessToken
                 continue
             case 401:
-                auth.clearLocal()
+                auth.clearLocal(keepsUploads: true)
                 throw CloudError.signedOut
             case 402:
                 let details = try? CloudJSON.decoder.decode(APIErrorBody.self, from: data)
@@ -214,6 +242,9 @@ final class APIClient {
                 throw CloudError.notFound
             default:
                 let details = try? CloudJSON.decoder.decode(APIErrorBody.self, from: data)
+                if status == 409, details?.error == "upload_incomplete" {
+                    throw CloudError.incomplete(details?.missing ?? ["video.mp4"])
+                }
                 throw CloudError.server(status: status, message: details?.message)
             }
         }
