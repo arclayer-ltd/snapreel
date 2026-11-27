@@ -32,6 +32,8 @@ final class EditRenderer: ObservableObject {
     private final class Job {
         var exporter: EditExporter?
         var isCancelled = false
+        /// Before the exporter exists: what it waits for.
+        var step = "waiting for its turn"
     }
 
     private var jobs: [UUID: Job] = [:]
@@ -94,6 +96,13 @@ final class EditRenderer: ObservableObject {
 
     func isRendering(_ id: UUID) -> Bool { jobs[id] != nil }
 
+    /// What a save is doing now, for a test that sees it stand still.
+    func status(_ id: UUID) -> String {
+        guard let job = jobs[id] else { return "no save running" }
+        let what = job.exporter?.status ?? job.step
+        return what + (isInBackground ? ", app in the background" : "") + " (saves running \(jobs.count), waiting \(waiting.count))"
+    }
+
     static func workFolder(_ id: UUID, in editFolder: URL) -> URL {
         editFolder.appendingPathComponent("saving-\(id.uuidString)", isDirectory: true)
     }
@@ -106,6 +115,7 @@ final class EditRenderer: ObservableObject {
         observe()
         keepAwake()
         await takeTurn()
+        job.step = "preparing"
         let background = BackgroundTime("Saving an edit") {}
         defer {
             jobs[id] = nil
@@ -132,7 +142,9 @@ final class EditRenderer: ObservableObject {
         guard let source = library.video(recipe.sourceID), source.state.isReady else { throw EditRenderError.missingSource }
         // A screen recording's file is swapped for one with a single sound track shortly after it
         // is recorded; wait for that, so the file doesn't change underneath.
+        job.step = "waiting for the recording itself to finish saving"
         await RecordingSaver.shared.waitUntilFinished(source.id)
+        job.step = "reading the recording"
         try check(job)
         let sourceURL = library.fileURL(for: source)
         guard FileManager.default.fileExists(atPath: sourceURL.path) else { throw EditRenderError.missingSource }
@@ -152,11 +164,13 @@ final class EditRenderer: ObservableObject {
         let folder = library.media.editFolder(source.id)
         let cleaned = folder.appendingPathComponent("clean-sound.m4a")
         if recipe.audio.reducesNoise && !FileManager.default.fileExists(atPath: cleaned.path) {
+            job.step = "cleaning the sound"
             try? await NoiseReducer.clean(source: sourceURL, to: cleaned) { _ in }
             try check(job)
         }
         setProgress(id, 0.03, library: library)
 
+        job.step = "building the edit"
         let build: EditBuild
         do {
             build = try await EditCompositionBuilder.build(recipe: recipe, source: info, editFolder: folder,

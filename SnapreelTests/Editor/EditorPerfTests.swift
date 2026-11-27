@@ -201,7 +201,7 @@ final class EditorPerfTests: XCTestCase {
         let exportPeak = MemoryPeak()
         let exportBase = memoryMB()
         let exportStart = CACurrentMediaTime()
-        let (video, file) = try await TestMedia.export(recipe, library: library, timeout: 4_500)
+        let (video, file) = try await TestMedia.export(recipe, library: library, timeout: min(4_500, Double(minutes) * 150 + 600))
         let seconds = CACurrentMediaTime() - exportStart
         perf(name, "export time", seconds, "s")
         perf(name, "export speed", video.duration / seconds, "x")

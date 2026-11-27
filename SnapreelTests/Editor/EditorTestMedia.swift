@@ -440,15 +440,41 @@ enum TestMedia {
         return (library, id)
     }
 
-    /// Saves `recipe` as a new recording and returns its file.
+    /// Saves `recipe` as a new recording and returns its file. Fails when the save stops moving
+    /// (no progress and no new step) for `stall` seconds, saying where it stood, and cancels it so
+    /// the next test's save isn't left waiting for its turn behind it.
     @MainActor
-    static func export(_ recipe: EditRecipe, library: Library, timeout: Double = 3_000) async throws -> (Video, URL) {
+    static func export(_ recipe: EditRecipe, library: Library, timeout: Double = 3_000,
+                       stall: Double = 300) async throws -> (Video, URL) {
         let source = library.video(recipe.sourceID)!
         let id = EditRenderer.shared.begin(recipe: recipe, source: source, library: library)
         let started = Date()
-        while Date().timeIntervalSince(started) < timeout {
+        var lastMove = Date()
+        var lastSeen = ""
+        var lastNote = Date()
+        func giveUp(_ why: String) async -> NSError {
+            let status = EditRenderer.shared.status(id)
+            let progress = library.video(id).map { "\($0.state)" } ?? "gone"
+            print("NOTE|save \(why) after \(Int(Date().timeIntervalSince(started))) s: \(progress), \(status)")
+            EditRenderer.shared.cancel(id)
+            for _ in 0..<300 where EditRenderer.shared.isRendering(id) { try? await Task.sleep(nanoseconds: 100_000_000) }
+            if EditRenderer.shared.isRendering(id) { print("NOTE|the save didn't stop when cancelled") }
+            return NSError(domain: "Export", code: 2, userInfo: [NSLocalizedDescriptionKey: "\(why): \(status)"])
+        }
+        while true {
             try await Task.sleep(nanoseconds: 50_000_000)
             guard let video = library.video(id) else { throw CocoaError(.fileNoSuchFile) }
+            let seen = "\(video.state) \(EditRenderer.shared.status(id))"
+            if seen != lastSeen {
+                lastSeen = seen
+                lastMove = Date()
+            }
+            if Date().timeIntervalSince(lastNote) > 60 {
+                lastNote = Date()
+                print("NOTE|saving for \(Int(Date().timeIntervalSince(started))) s: \(seen)")
+            }
+            if Date().timeIntervalSince(lastMove) > stall { throw await giveUp("stalled") }
+            if Date().timeIntervalSince(started) > timeout { throw await giveUp("timed out") }
             switch video.state {
             case .ready:
                 await RecordingSaver.shared.waitUntilFinished(id)
@@ -461,7 +487,6 @@ enum TestMedia {
                 continue
             }
         }
-        throw NSError(domain: "Export", code: 2, userInfo: [NSLocalizedDescriptionKey: "timed out"])
     }
 }
 

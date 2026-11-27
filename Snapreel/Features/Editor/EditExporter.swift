@@ -156,8 +156,13 @@ final class EditExporter: @unchecked Sendable {
     private var isWorking = false
     private var exportSession: AVAssetExportSession?
     private let report: (Double) -> Void
-    /// What the save was doing, for the log when it fails.
-    private var stage = "starting"
+    /// What the save was doing, for the log when it fails (and for a test that sees it stall).
+    private var stage: String {
+        get { stageLock.lock(); defer { stageLock.unlock() }; return stageText }
+        set { stageLock.lock(); stageText = newValue; stageLock.unlock() }
+    }
+    private var stageText = "starting"
+    private let stageLock = NSLock()
     /// While joining: where the join is, worked out only when it is needed.
     private var joinStage: (() -> String)?
     /// Why the last attempt failed, for tests and the log.
@@ -166,6 +171,14 @@ final class EditExporter: @unchecked Sendable {
     init(plan: EditExportPlan, report: @escaping (Double) -> Void) {
         self.plan = plan
         self.report = report
+    }
+
+    /// What it is doing now, safe to read from any thread: "encoding piece 3 of 46", "joining".
+    var status: String {
+        state.lock()
+        let paused = isSuspended, cancelled = isCancelled
+        state.unlock()
+        return stage + (paused ? ", paused" : "") + (cancelled ? ", cancelled" : "")
     }
 
     // MARK: - Control
@@ -423,16 +436,19 @@ final class EditExporter: @unchecked Sendable {
         func emit(_ buffer: CVPixelBuffer, at time: CMTime) throws {
             try checkStop()
             while time >= pieces[pieceIndex].end, pieceIndex + 1 < pieces.count {
+                stage = "finishing piece \(pieceIndex + 1) of \(pieces.count)"
                 try writer?.finish()
                 writer = nil
                 pieceIndex += 1
             }
             if writer == nil {
-                stage = "encoding piece \(pieceIndex + 1) of \(pieces.count)"
+                stage = "starting piece \(pieceIndex + 1) of \(pieces.count)"
                 writer = try PieceWriter(piece: pieces[pieceIndex].url, start: pieces[pieceIndex].start,
                                          end: pieces[pieceIndex].end, plan: plan)
                 let range = pieces[pieceIndex].start.seconds...pieces[pieceIndex].end.seconds
+                stage = "drawing texts and captions for piece \(pieceIndex + 1) of \(pieces.count)"
                 writer?.overlays = overlays(in: range)
+                stage = "encoding piece \(pieceIndex + 1) of \(pieces.count)"
             }
             guard let writer else { return }
             try working { try writer.append(buffer, at: time) }
@@ -533,6 +549,7 @@ final class EditExporter: @unchecked Sendable {
     /// The pieces, one after another without encoding them again, with the sound.
     private func join(_ pieces: [Piece], fastStart: Bool = true) throws {
         try working {}
+        stage = "joining \(pieces.count) pieces"
         try? FileManager.default.removeItem(at: plan.output)
         let writer = try AVAssetWriter(outputURL: plan.output, fileType: pieces.isEmpty ? .m4a : .mp4)
         writer.shouldOptimizeForNetworkUse = fastStart
@@ -640,6 +657,7 @@ final class EditExporter: @unchecked Sendable {
             }
         }
         joinStage = { "finishing the file, " + where_() }
+        stage = "finishing the joined file"
         writer.endSession(atSourceTime: total)
         let done = DispatchSemaphore(value: 0)
         writer.finishWriting { done.signal() }
