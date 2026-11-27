@@ -1,0 +1,1 @@
+{"id": "f958e54de081410ab2247b62fc848edb", "steps": ["launch sample", "wait 2", "tap Settings", "wait 2", "tap 'Snapreel Pro, Try it free'", "wait 2", "swipe up", "wait 1"], "opts": {"shots": "last", "tree": true, "carry_on": false}, "sent": 1795770210.5139287}
